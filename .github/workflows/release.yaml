@@ -10,16 +10,24 @@ on:
         description: "Version to validate for manual runs; defaults to package version when omitted"
         required: false
         type: string
-      publish_pypi:
-        description: "Publish built artifacts to PyPI"
+      pypi_target:
+        description: "Python package publish target for manual runs"
         required: false
-        default: false
-        type: boolean
+        default: none
+        type: choice
+        options:
+          - none
+          - testpypi
+          - pypi
       publish_ghcr:
-        description: "Push container image tags to GHCR"
+        description: "Push a container image tag to GHCR"
         required: false
         default: false
         type: boolean
+      ghcr_tag:
+        description: "Custom GHCR tag for manual runs, for example dev"
+        required: false
+        type: string
 
 jobs:
   verify-version:
@@ -27,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.vars.outputs.version }}
+      pypi_target: ${{ steps.vars.outputs.pypi_target }}
+      ghcr_tag: ${{ steps.vars.outputs.ghcr_tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -42,6 +52,10 @@ jobs:
           set -euo pipefail
           pyproject_version="$(python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])")"
           module_version="$(python -c "from pathlib import Path; namespace = {}; exec(Path('src/genomatch/_version.py').read_text(encoding='utf-8'), namespace); print(namespace['__version__'])")"
+          manual_release_version="${{ github.event.inputs.release_version || '' }}"
+          manual_pypi_target="${{ github.event.inputs.pypi_target || 'none' }}"
+          manual_publish_ghcr="${{ github.event.inputs.publish_ghcr || 'false' }}"
+          manual_ghcr_tag="${{ github.event.inputs.ghcr_tag || '' }}"
 
           if [ "$pyproject_version" != "$module_version" ]; then
             echo "pyproject.toml version $pyproject_version does not match src/genomatch/_version.py version $module_version" >&2
@@ -49,6 +63,8 @@ jobs:
           fi
 
           release_version="$pyproject_version"
+          pypi_target="none"
+          ghcr_tag=""
 
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
             tag_version="${GITHUB_REF_NAME#v}"
@@ -57,16 +73,39 @@ jobs:
               exit 1
             fi
             release_version="$tag_version"
-          elif [ -n "${{ github.event.inputs.release_version || '' }}" ]; then
-            input_version="${{ github.event.inputs.release_version || '' }}"
-            if [ "$input_version" != "$pyproject_version" ]; then
-              echo "Manual input version $input_version does not match package version $pyproject_version" >&2
+            pypi_target="pypi"
+            ghcr_tag="$tag_version"
+          elif [ -n "$manual_release_version" ]; then
+            if [ "$manual_release_version" != "$pyproject_version" ]; then
+              echo "Manual input version $manual_release_version does not match package version $pyproject_version" >&2
               exit 1
             fi
-            release_version="$input_version"
+            release_version="$manual_release_version"
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            pypi_target="$manual_pypi_target"
+
+            if [ "$manual_publish_ghcr" = "true" ]; then
+              if [ -z "$manual_ghcr_tag" ]; then
+                echo "Manual GHCR publish requires ghcr_tag to be set" >&2
+                exit 1
+              fi
+
+              case "$manual_ghcr_tag" in
+                *[!A-Za-z0-9._-]*)
+                  echo "Manual GHCR tag $manual_ghcr_tag contains unsupported characters" >&2
+                  exit 1
+                  ;;
+              esac
+
+              ghcr_tag="$manual_ghcr_tag"
+            fi
           fi
 
           echo "version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "pypi_target=$pypi_target" >> "$GITHUB_OUTPUT"
+          echo "ghcr_tag=$ghcr_tag" >> "$GITHUB_OUTPUT"
 
   test:
     name: Test Release Build
@@ -88,6 +127,8 @@ jobs:
             bcftools
             bcftools-liftover-plugin
             samtools
+            plink
+            plink2
             numpy
             pandas
             pysam
@@ -156,8 +197,9 @@ jobs:
   publish-pypi:
     name: Publish PyPI Package
     needs:
+      - verify-version
       - build-python-artifacts
-    if: github.event_name == 'push' || github.event.inputs.publish_pypi == 'true'
+    if: needs.verify-version.outputs.pypi_target == 'pypi'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -175,13 +217,37 @@ jobs:
         with:
           packages-dir: dist
 
-  publish-ghcr:
+  publish-testpypi:
+    name: Publish TestPyPI Package
+    needs:
+      - verify-version
+      - build-python-artifacts
+    if: needs.verify-version.outputs.pypi_target == 'testpypi'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment:
+      name: testpypi
+    steps:
+      - name: Download Python artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-ghcr-release:
     name: Publish GHCR Image
     needs:
       - verify-version
       - test
       - build-container
-    if: github.event_name == 'push' || github.event.inputs.publish_ghcr == 'true'
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -205,3 +271,32 @@ jobs:
           tags: |
             ghcr.io/precimed/genomatch:${{ needs.verify-version.outputs.version }}
             ghcr.io/precimed/genomatch:latest
+
+  publish-ghcr-manual:
+    name: Publish GHCR Manual Tag
+    needs:
+      - verify-version
+      - test
+      - build-container
+    if: needs.verify-version.outputs.ghcr_tag != '' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push manual image tag
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/precimed/genomatch:${{ needs.verify-version.outputs.ghcr_tag }}

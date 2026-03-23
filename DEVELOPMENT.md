@@ -17,7 +17,7 @@ Create and activate the environment:
 
 ```bash
 conda create -n match-liftover -c conda-forge -c bioconda \
-  python=3.12 bcftools bcftools-liftover-plugin samtools numpy pandas pysam pytest pyyaml pgenlib python-build twine
+  python=3.12 bcftools bcftools-liftover-plugin samtools plink plink2 numpy pandas pysam pytest pyyaml pgenlib python-build twine
 
 conda activate match-liftover
 python -m pip install -e .
@@ -28,6 +28,8 @@ Validate the core toolchain:
 ```bash
 bcftools --version
 samtools --version
+plink --version
+plink2 --version
 pytest --version
 python -c "import yaml; print('PyYAML OK')"
 prepare_variants.py --help
@@ -127,6 +129,8 @@ Before the workflow can publish `0.1.0`, configure:
 - a PyPI trusted publisher for the `genomatch` project pointing at `precimed/genomatch`
 - workflow name set to `release.yaml`
 - environment name set to `pypi`
+- a separate TestPyPI trusted publisher for the `genomatch` project with workflow `release.yaml`
+- environment name set to `testpypi`
 - GitHub Actions enabled for this repository
 - GHCR package publishing enabled for this repository
 
@@ -135,6 +139,11 @@ The workflow publishes:
 1. `genomatch==<version>` to PyPI
 2. `ghcr.io/precimed/genomatch:<version>` to GHCR
 3. `ghcr.io/precimed/genomatch:latest` to GHCR
+
+For manual runs, the same workflow can also publish:
+
+1. `genomatch==<version>` to TestPyPI
+2. `ghcr.io/precimed/genomatch:<custom-tag>` to GHCR, for example `dev`
 
 The workflow will:
 
@@ -150,7 +159,7 @@ You can test the workflow without publishing anything from the GitHub Actions UI
 
 1. open the `Release` workflow
 2. choose `Run workflow`
-3. leave `publish_pypi` unchecked
+3. leave `pypi_target` as `none`
 4. leave `publish_ghcr` unchecked
 5. optionally leave `release_version` empty to validate the version already declared in the repository
 
@@ -165,6 +174,30 @@ but it will skip:
 
 - PyPI publication
 - GHCR pushes
+
+### Manual workflow publish targets
+
+Use manual dispatch when you want to test publication without cutting a release tag.
+
+To publish to TestPyPI:
+
+1. open the `Release` workflow
+2. choose `Run workflow`
+3. set `pypi_target` to `testpypi`
+4. leave `publish_ghcr` unchecked unless you also want a container push
+5. optionally set `release_version` if you want the workflow to confirm an explicit version string
+
+To publish a `dev` container tag to GHCR:
+
+1. open the `Release` workflow
+2. choose `Run workflow`
+3. leave `pypi_target` as `none`, or set it to `testpypi` if you also want a package publish
+4. check `publish_ghcr`
+5. set `ghcr_tag` to `dev`
+
+Manual GHCR runs push only the custom tag you request. They do not push `latest`.
+
+If you expect to upload multiple test package builds, use a PEP 440 development version such as `0.1.0.dev1`, `0.1.0.dev2`, and so on. TestPyPI, like PyPI, does not let you overwrite an existing version.
 
 ### Preferred release flow
 
