@@ -10,7 +10,7 @@ from utils import REPO_ROOT, read_tsv, run_py, write_json, write_lines
 from vtable_utils import classify_allele_operation
 
 
-REGRESSION_DIR = REPO_ROOT / "match-test" / "data" / "regressions"
+REGRESSION_DIR = REPO_ROOT / "tests" / "data" / "regressions"
 
 CASE_CONFIGS = {
     "test_regression_280": {

@@ -37,7 +37,7 @@ COUNTS = {
 
 @pytest.fixture(params=["GRCh37", "GRCh38"])
 def haploid_variants(request) -> tuple[str, list[HaploidVariant]]:
-    bim_path = REPO_ROOT / "match-test" / "data" / "generated_reference" / "haploid_regions_target_500.bim"
+    bim_path = REPO_ROOT / "tests" / "data" / "generated_reference" / "haploid_regions_target_500.bim"
     build_name = request.param
     return build_name, load_haploid_variants(bim_path, build_name=build_name, counts=COUNTS)
 

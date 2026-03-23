@@ -1,7 +1,8 @@
 import sys
-from pathlib import Path
 
-MATCH_DIR = Path(__file__).resolve().parents[1] / "match"
+from utils import MATCH_SCRIPT_DIR
+
+MATCH_DIR = MATCH_SCRIPT_DIR
 if str(MATCH_DIR) not in sys.path:
     sys.path.insert(0, str(MATCH_DIR))
 

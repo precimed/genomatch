@@ -30,4 +30,5 @@ config.yaml
 dev/variant_lists/*
 !dev/variant_lists/SCRIPTS.md
 
-ref/
+ref/*
+!ref/INSTALL.sh

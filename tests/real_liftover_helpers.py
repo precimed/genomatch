@@ -12,12 +12,12 @@ pysam = pytest.importorskip("pysam")
 from utils import REPO_ROOT, run_cmd, write_match_config
 
 
-REF_DIR = REPO_ROOT / "match" / "ref"
+REF_DIR = REPO_ROOT / "ref"
 GRCH37_UCSC_SOURCE_FASTA = REF_DIR / "ucsc" / "GRCh37" / "hg19.p13.plusMT.no_alt_analysis_set.fa"
 GRCH38_UCSC_SOURCE_FASTA = REF_DIR / "ucsc" / "GRCh38" / "GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
 CHAIN_37_TO_38 = REF_DIR / "chain" / "hg19ToHg38.over.chain.gz"
 CHAIN_38_TO_37 = REF_DIR / "chain" / "hg38ToHg19.over.chain.gz"
-MAPPING_PATH = REPO_ROOT / "match-test" / "data" / "generated_reference" / "dbsnp_cleansumstat_reference_GRCh38_GRCh37.txt"
+MAPPING_PATH = REPO_ROOT / "tests" / "data" / "generated_reference" / "dbsnp_cleansumstat_reference_GRCh38_GRCh37.txt"
 
 ALLOWED_BASES = {"A", "C", "G", "T"}
 

@@ -400,7 +400,7 @@ def test_project_payload_skips_match_when_target_vmap_used_directly_without_sour
 
     assert result.returncode == 0, result.stderr
     assert "--source-vmap omitted and --target is a .vmap; skipping match_vmap_to_target.py" in result.stderr
-    assert "+ " + str((Path(__file__).resolve().parents[1] / "match" / "match_vmap_to_target.py")) not in result.stderr
+    assert "+ " + str((Path(__file__).resolve().parents[1] / "src" / "genomatch" / "match_vmap_to_target.py")) not in result.stderr
     assert "apply_vmap_to_sumstats.py" in result.stderr
     assert not (tmp_path / "aligned.tsv.vmap").exists()
     assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"

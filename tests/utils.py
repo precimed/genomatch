@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Iterable, List, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MATCH_SCRIPT_DIR = REPO_ROOT / "match"
-MATCH_TEST_DIR = REPO_ROOT / "match-test"
+MATCH_SCRIPT_DIR = REPO_ROOT / "src" / "genomatch"
+MATCH_TEST_DIR = REPO_ROOT / "tests"
 SYNTHETIC_DIR = MATCH_TEST_DIR / "synthetic"
 BASE_PREFIX = SYNTHETIC_DIR / "base"
 BASE_VCF = SYNTHETIC_DIR / "base.vcf"
