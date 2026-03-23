@@ -11,6 +11,7 @@ UNKNOWN_CONTIG = "unknown"
 
 CHROM_SYNONYMS = {
     "x": "X",
+    "xy": "X",
     "y": "Y",
     "m": "MT",
     "mt": "MT",

@@ -16,6 +16,7 @@ Normalization rules retained from the old toolkit:
 - optional `chr` prefix
 - `M` / `chrM` -> `MT`
 - `par`, `par1`, `par2`, `x_par1`, `x_par2`, `x_nonpar` -> `X`
+- `XY` / `chrXY` -> `X`
 - PLINK codes `23 -> X`, `24 -> Y`, `25 -> X`, `26 -> MT`
 
 ## Metadata and contigs

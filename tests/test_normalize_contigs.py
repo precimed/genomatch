@@ -58,6 +58,20 @@ def test_normalize_contigs_aliases_par1_and_par2_to_x(tmp_path):
     assert read_tsv(out) == [["X", "100", "rs1", "A", "G"], ["X", "200", "rs2", "C", "T"], ["X", "300", "rs3", "G", "A"]]
 
 
+def test_normalize_contigs_aliases_xy_labels_to_x(tmp_path):
+    source = tmp_path / "in.vtable"
+    out = tmp_path / "out.vtable"
+    write_lines(source, ["XY\t100\trs1\tA\tG", "chrXY\t200\trs2\tC\tT"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37"},
+    )
+
+    result = run_py("normalize_contigs.py", "--input", source, "--output", out, "--to", "ncbi")
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["X", "100", "rs1", "A", "G"], ["X", "200", "rs2", "C", "T"]]
+
+
 def test_normalize_contigs_vtable_ncbi_to_plink_splitx_uses_grch37_par_boundaries(tmp_path):
     source = tmp_path / "in.vtable"
     out = tmp_path / "out.vtable"
