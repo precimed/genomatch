@@ -7,9 +7,10 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
-from sumstats_clean import harmonize_clean_sumstats, resolve_clean_metadata_columns
-from sumstats_utils import (
+from ._cli_utils import run_cli
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .sumstats_clean import harmonize_clean_sumstats, resolve_clean_metadata_columns
+from .sumstats_utils import (
     find_metadata_value,
     join_line,
     load_metadata,
@@ -20,7 +21,7 @@ from sumstats_utils import (
     rewrite_variant_fields,
     split_line,
 )
-from vtable_utils import (
+from .vtable_utils import (
     load_metadata as load_variant_metadata,
     read_vmap,
     require_contig_naming,
@@ -666,8 +667,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(run_cli(main))

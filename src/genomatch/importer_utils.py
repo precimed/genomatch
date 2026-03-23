@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
-from contig_utils import (
+from .contig_utils import (
     canonical_contig_from_any_supported_label,
     canonical_contig_from_label,
     SUPPORTED_CONTIG_NAMINGS,
     supported_exact_contig_tokens,
 )
-from vtable_utils import (
+from .vtable_utils import (
     COMPLEMENT,
     ensure_parent_dir,
     MISSING_SOURCE_SHARD,

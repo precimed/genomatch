@@ -1,13 +1,6 @@
 import pytest
 
-from utils import MATCH_SCRIPT_DIR
-
-import sys
-
-if str(MATCH_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(MATCH_SCRIPT_DIR))
-
-from vtable_utils import VariantRow, read_vtable, write_vtable
+from genomatch.vtable_utils import VariantRow, read_vtable, write_vtable
 
 
 def test_read_vtable_rejects_invalid_pos(tmp_path):

@@ -5,13 +5,14 @@ import argparse
 import sys
 from pathlib import Path
 
-from contig_cleanup_utils import (
+from ._cli_utils import run_cli
+from .contig_cleanup_utils import (
     load_target_variant_object,
     normalize_target_rows,
     normalized_output_metadata,
     write_variant_object_like_input,
 )
-from vtable_utils import SUPPORTED_CONTIG_NAMINGS, duplicate_target_row_keys, target_row_key, write_vmap_status_qc
+from .vtable_utils import SUPPORTED_CONTIG_NAMINGS, duplicate_target_row_keys, target_row_key, write_vmap_status_qc
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,9 +63,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

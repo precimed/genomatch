@@ -8,13 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from utils import MATCH_SCRIPT_DIR, read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config
-
-MATCH_DIR = MATCH_SCRIPT_DIR
-if str(MATCH_DIR) not in sys.path:
-    sys.path.insert(0, str(MATCH_DIR))
-
-from vmap_restrict_build_compatible import run_bcftools_norm_check_ref_x_workaround
+from genomatch.vmap_restrict_build_compatible import run_bcftools_norm_check_ref_x_workaround
+from utils import read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config
 
 
 def write_fake_norm_bcftools(path, behavior_path, log_path):

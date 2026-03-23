@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 from typing import List
 
-from importer_utils import (
+from ._cli_utils import run_cli
+from .importer_utils import (
     filter_import_rows_by_chr2use,
     finalize_imported_vmap,
     ImportQcRow,
@@ -15,7 +16,7 @@ from importer_utils import (
     is_valid_import_position,
     resolve_import_input_paths,
 )
-from vtable_utils import VariantRow
+from .vtable_utils import VariantRow
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,9 +74,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

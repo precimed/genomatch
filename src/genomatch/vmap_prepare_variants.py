@@ -5,8 +5,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from vtable_utils import SUPPORTED_CONTIG_NAMINGS
-from workflow_wrapper_utils import (
+from ._cli_utils import run_cli
+from .vtable_utils import SUPPORTED_CONTIG_NAMINGS
+from .workflow_wrapper_utils import (
     copy_variant_object,
     planned_existing_variant_outputs,
     print_skip_resolved_build,
@@ -15,13 +16,12 @@ from workflow_wrapper_utils import (
     require_resume_no_hole,
     run_command,
     run_command_if_needed,
+    tool_command,
     variant_object_exists,
     variant_object_path,
     delete_variant_object,
 )
 
-
-SCRIPT_DIR = Path(__file__).resolve().parent
 WRAPPER_NAME = "prepare_variants.py"
 
 
@@ -83,7 +83,7 @@ def parse_args() -> argparse.Namespace:
 
 def importer_command(args: argparse.Namespace, output_path: Path) -> list[str]:
     importer = IMPORTER_BY_FORMAT[args.input_format]
-    cmd = [sys.executable, str(SCRIPT_DIR / importer), "--input", args.input, "--output", str(output_path)]
+    cmd = tool_command(importer, "--input", args.input, "--output", str(output_path))
     if args.input_format == "sumstats":
         if not args.sumstats_metadata:
             raise ValueError("--sumstats-metadata is required for --input-format=sumstats")
@@ -100,7 +100,7 @@ def importer_command(args: argparse.Namespace, output_path: Path) -> list[str]:
 
 def transform_command(script_name: str, input_path: Path, output_path: Path, extra_args: list[str] | None = None) -> list[str]:
     input_flag = "--source" if script_name == "restrict_build_compatible.py" else "--input"
-    cmd = [sys.executable, str(SCRIPT_DIR / script_name), input_flag, str(input_path), "--output", str(output_path)]
+    cmd = tool_command(script_name, input_flag, str(input_path), "--output", str(output_path))
     if extra_args:
         cmd.extend(extra_args)
     return cmd
@@ -218,7 +218,7 @@ def main() -> int:
     if args.resume and read_target_build(current_path) != "unknown":
         print_skip_resolved_build(WRAPPER_NAME, current_path)
     else:
-        run_command([sys.executable, str(SCRIPT_DIR / "guess_build.py"), "--input", str(current_path), "--write"])
+        run_command(tool_command("guess_build.py", "--input", str(current_path), "--write"))
 
     restricted_later_outputs = [
         lifted_path,
@@ -252,16 +252,15 @@ def main() -> int:
     ]
     if current_build != args.dst_build:
         ensure_stage_ready_for_resume(lifted_path, stage_after_build_outputs, resume=args.resume)
-        liftover_cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "liftover_build.py"),
+        liftover_cmd = tool_command(
+            "liftover_build.py",
             "--input",
             str(current_path),
             "--output",
             str(lifted_path),
             "--target-build",
             args.dst_build,
-        ]
+        )
         if args.resume:
             liftover_cmd.append("--resume")
         run_command_if_needed(liftover_cmd, lifted_path, resume=args.resume, wrapper_name=WRAPPER_NAME)
@@ -308,9 +307,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

@@ -11,13 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, Set, Tuple
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
-
-from reference_utils import fetch_reference_base, resolve_bcftools_binary, resolve_internal_reference_fasta
-from haploid_utils import expected_ploidy_pair
-from vtable_utils import (
+from .reference_utils import fetch_reference_base, resolve_bcftools_binary, resolve_internal_reference_fasta
+from .haploid_utils import expected_ploidy_pair
+from .vtable_utils import (
     VMapRow,
     VariantRow,
     complement_allele,

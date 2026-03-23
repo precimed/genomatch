@@ -5,8 +5,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from contig_cleanup_utils import load_target_variant_object, write_variant_object_like_input
-from vtable_utils import require_contig_naming, sort_target_rows_by_declared_coordinate
+from .contig_cleanup_utils import load_target_variant_object, write_variant_object_like_input
+from .vtable_utils import require_contig_naming, sort_target_rows_by_declared_coordinate
 
 
 def parse_args() -> argparse.Namespace:

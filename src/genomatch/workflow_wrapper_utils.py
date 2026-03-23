@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from vtable_utils import load_variant_object, metadata_path_for
+from .vtable_utils import load_variant_object, metadata_path_for
 
 
 def variant_object_path(prefix: Path, suffix: str = "") -> Path:
@@ -28,8 +28,24 @@ def sidecar_output_path(prefix: Path, suffix: str) -> Path:
 
 
 def print_command(cmd: list[str]) -> None:
-    rendered = " ".join(str(part) for part in cmd)
+    if len(cmd) >= 3 and cmd[1] == "-m":
+        rendered = " ".join([command_label(cmd), *[str(part) for part in cmd[3:]]])
+    else:
+        rendered = " ".join(str(part) for part in cmd)
     print(f"+ {rendered}", file=sys.stderr)
+
+
+def command_label(cmd: list[str]) -> str:
+    if len(cmd) >= 3 and cmd[1] == "-m":
+        return f"{cmd[2].rsplit('.', 1)[-1]}.py"
+    if len(cmd) >= 2:
+        return Path(cmd[1]).name
+    return Path(cmd[0]).name
+
+
+def tool_command(tool_name: str, *args: str) -> list[str]:
+    module_name = Path(tool_name).stem
+    return [sys.executable, "-m", f"genomatch.{module_name}", *args]
 
 
 def run_command(cmd: list[str]) -> None:
@@ -40,7 +56,7 @@ def run_command(cmd: list[str]) -> None:
     if result.stderr:
         print(result.stderr, end="", file=sys.stderr)
     if result.returncode != 0:
-        raise ValueError(f"{Path(cmd[1]).name} failed with exit code {result.returncode}")
+        raise ValueError(f"{command_label(cmd)} failed with exit code {result.returncode}")
 
 
 def variant_object_exists(path: Path) -> bool:
@@ -101,7 +117,7 @@ def print_skip_resolved_build(wrapper_name: str, path: Path) -> None:
 
 def run_command_if_needed(cmd: list[str], output_path: Path, *, resume: bool, wrapper_name: str) -> None:
     if resume and variant_object_exists(output_path):
-        print_skip(wrapper_name, Path(cmd[1]).name, output_path)
+        print_skip(wrapper_name, command_label(cmd), output_path)
         return
     run_command(cmd)
 

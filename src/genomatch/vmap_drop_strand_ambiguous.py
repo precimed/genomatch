@@ -5,8 +5,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from contig_cleanup_utils import load_target_variant_object, write_variant_object_like_input
-from vtable_utils import (
+from .contig_cleanup_utils import load_target_variant_object, write_variant_object_like_input
+from .vtable_utils import (
     complement_allele,
     require_contig_naming,
     require_rows_match_contig_naming,

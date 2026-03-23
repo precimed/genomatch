@@ -17,6 +17,7 @@ The normative files for the `match/` contract are:
 - [README.md](README.md)
 - [INSTALL.md](INSTALL.md)
 - [DOWNLOADS.md](DOWNLOADS.md)
+- [DEVELOPMENT.md](DEVELOPMENT.md)
 - [TESTS.md](TESTS.md)
 - [SPEC.md](SPEC.md)
 - [core-objects.md](spec/core-objects.md)
@@ -83,7 +84,9 @@ Wrapper behavior for `prepare_variants.py` and `project_payload.py` is defined i
 
 ## Reference model
 
-Software/runtime setup for the `match/` toolkit is defined in [INSTALL.md](INSTALL.md).
+End-user software/runtime setup for the `match/` toolkit is defined in [INSTALL.md](INSTALL.md).
+
+Development/source-checkout workflows for the `match/` toolkit are documented in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 The reference/config model for the `match/` toolkit is defined in [DOWNLOADS.md](DOWNLOADS.md).
 

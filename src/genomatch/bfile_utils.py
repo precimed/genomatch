@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
-from haploid_utils import HAPLOID_SCHEMA_PATH as HAPLOID_SCHEMA
-from haploid_utils import HAPLOID_CHROMS, expected_ploidy_pair, is_sex_dependent_ploidy
+from .haploid_utils import HAPLOID_SCHEMA_PATH as HAPLOID_SCHEMA
+from .haploid_utils import HAPLOID_CHROMS, expected_ploidy_pair, is_sex_dependent_ploidy
 
 
 ALLOWED_BASES = {"A", "C", "G", "T"}

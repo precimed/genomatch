@@ -1,13 +1,5 @@
-import sys
-
-from utils import MATCH_SCRIPT_DIR
-
-MATCH_DIR = MATCH_SCRIPT_DIR
-if str(MATCH_DIR) not in sys.path:
-    sys.path.insert(0, str(MATCH_DIR))
-
-from contig_cleanup_utils import normalize_target_rows
-from vtable_utils import VariantRow
+from genomatch.contig_cleanup_utils import normalize_target_rows
+from genomatch.vtable_utils import VariantRow
 
 
 def test_shared_contig_cleanup_helpers_align_unknown_marking_and_restriction():

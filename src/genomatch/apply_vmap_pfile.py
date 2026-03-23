@@ -12,14 +12,11 @@ from typing import Dict, Iterable, List, Sequence, Set, Tuple
 import numpy as np
 import pgenlib
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
-
-from apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
-from contig_utils import supported_exact_contig_tokens
-from haploid_utils import expected_ploidy_pair, is_sex_dependent_ploidy
-from sample_axis_utils import (
+from ._cli_utils import run_cli
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .contig_utils import supported_exact_contig_tokens
+from .haploid_utils import expected_ploidy_pair, is_sex_dependent_ploidy
+from .sample_axis_utils import (
     SAMPLE_ID_MODE_CHOICES,
     SAMPLE_ID_MODE_FID_IID,
     build_sample_axis_plan,
@@ -28,7 +25,7 @@ from sample_axis_utils import (
     require_identical_sample_signatures,
     require_psam_fid_presence_consistent,
 )
-from vtable_utils import (
+from .vtable_utils import (
     MISSING_SOURCE_SHARD,
     VariantRow,
     load_metadata,
@@ -755,8 +752,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(run_cli(main))

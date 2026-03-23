@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, TextIO, Tuple
 
-from vtable_utils import open_text
+from .vtable_utils import open_text
 
 
 def detect_delimiter(line: str) -> Optional[str]:

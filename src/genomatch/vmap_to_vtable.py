@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from vtable_utils import (
+from .vtable_utils import (
     load_metadata,
     make_vtable_metadata,
     read_vmap,

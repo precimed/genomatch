@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, Union
 
-from vtable_utils import (
+from .vtable_utils import (
     LoadedVariantObject,
     UNKNOWN_CONTIG,
     VMapRow,

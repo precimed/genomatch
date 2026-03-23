@@ -9,7 +9,7 @@ from typing import Callable, Dict, Iterable, List, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from sumstats_utils import find_metadata_value
+from .sumstats_utils import find_metadata_value
 
 
 VARIANT_METADATA_KEYS = (

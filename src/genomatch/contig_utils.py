@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from haploid_utils import load_haploid_schema, x_par_intervals_for_build
+from .haploid_utils import load_haploid_schema, x_par_intervals_for_build
 
 
 SUPPORTED_CONTIG_NAMINGS = {"ncbi", "ucsc", "plink", "plink_splitx"}

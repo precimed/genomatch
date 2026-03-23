@@ -10,16 +10,17 @@ from pathlib import Path
 from typing import Iterable, List, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
 MATCH_SCRIPT_DIR = REPO_ROOT / "src" / "genomatch"
 MATCH_TEST_DIR = REPO_ROOT / "tests"
 SYNTHETIC_DIR = MATCH_TEST_DIR / "synthetic"
 BASE_PREFIX = SYNTHETIC_DIR / "base"
 BASE_VCF = SYNTHETIC_DIR / "base.vcf"
 
-if str(MATCH_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(MATCH_SCRIPT_DIR))
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
-from bfile_utils import read_bed_selected, write_bed_matrix
+from genomatch.bfile_utils import read_bed_selected, write_bed_matrix
 
 PLINK_BIN = os.environ.get("PLINK_BIN", "plink")
 PLINK2_BIN = os.environ.get("PLINK2_BIN", "plink2")
@@ -64,14 +65,25 @@ def run_cmd(cmd: Iterable[str], cwd: Path | None = None) -> subprocess.Completed
 
 
 def run_py(script_name: str, *args: str) -> subprocess.CompletedProcess:
-    return run_cmd([sys.executable, str(MATCH_SCRIPT_DIR / script_name), *map(str, args)])
+    module_name = Path(script_name).stem
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(SRC_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    return subprocess.run(
+        [sys.executable, "-m", f"genomatch.{module_name}", *map(str, args)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
 
 
 def run_py_with_env(script_name: str, env: dict[str, str], *args: str) -> subprocess.CompletedProcess:
     full_env = os.environ.copy()
     full_env.update(env)
+    module_name = Path(script_name).stem
+    full_env["PYTHONPATH"] = str(SRC_ROOT) + os.pathsep + full_env.get("PYTHONPATH", "")
     return subprocess.run(
-        [sys.executable, str(MATCH_SCRIPT_DIR / script_name), *map(str, args)],
+        [sys.executable, "-m", f"genomatch.{module_name}", *map(str, args)],
         capture_output=True,
         text=True,
         check=False,

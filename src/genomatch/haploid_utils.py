@@ -109,7 +109,7 @@ def haploid_regions_for_build(build_name: str) -> Dict[str, List[RegionDef]]:
 
 
 def expected_ploidy_pair(chrom: str, pos_raw: str, *, genome_build: str) -> Tuple[int, int]:
-    from vtable_utils import normalize_chrom_label
+    from .vtable_utils import normalize_chrom_label
 
     canonical = normalize_chrom_label(chrom)
     if canonical not in HAPLOID_CHROMS:

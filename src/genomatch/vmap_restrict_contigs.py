@@ -5,13 +5,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from contig_cleanup_utils import (
+from .contig_cleanup_utils import (
     build_target_restriction_selection_for_contigs,
     load_target_variant_object,
     restriction_output_metadata,
     write_variant_object_like_input,
 )
-from vtable_utils import parse_chr2use
+from .vtable_utils import parse_chr2use
 
 
 def parse_args() -> argparse.Namespace:

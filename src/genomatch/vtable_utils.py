@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from contig_utils import (
+from .contig_utils import (
     CANONICAL_CONTIG_ORDER,
     NUMERIC_CONTIG_NAMINGS,
     SUPPORTED_CONTIG_NAMINGS,

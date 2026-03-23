@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from importer_utils import (
+from ._cli_utils import run_cli
+from .importer_utils import (
     filter_import_rows_by_chr2use,
     finalize_imported_vmap,
     ImportQcRow,
@@ -15,7 +16,7 @@ from importer_utils import (
     is_valid_import_position,
     reject_template_argument,
 )
-from sumstats_utils import (
+from .sumstats_utils import (
     extract_variant_field,
     find_metadata_value,
     load_metadata,
@@ -24,7 +25,7 @@ from sumstats_utils import (
     resolve_variant_columns,
     split_line,
 )
-from vtable_utils import (
+from .vtable_utils import (
     load_metadata as load_variant_metadata,
     open_text,
     validate_vtable_metadata,
@@ -220,9 +221,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

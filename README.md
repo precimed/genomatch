@@ -17,11 +17,11 @@ This README is organized from concepts to workflows to reference details. It sta
 
 Before running the reference-aware tools and wrappers:
 
-1. Ensure `bcftools` with the `+liftover` plugin is available, either through your local environment or the provided `Dockerfile`.
+1. Install the runtime either with `pip install genomatch` on top of local `bcftools` plus `+liftover`, or via the published Apptainer image.
 2. Download the required reference data and place your own `config.yaml` next to that reference tree.
 3. Set `MATCH_CONFIG=/path/to/config.yaml`.
 
-`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. The provided container image packages the runtime only; users must still supply reference assets and `config.yaml` separately. See [INSTALL.md](INSTALL.md) for software setup and [DOWNLOADS.md](DOWNLOADS.md) for the reference layout and config details.
+`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. The published container image packages the runtime only; users must still supply reference assets and `config.yaml` separately. See [INSTALL.md](INSTALL.md) for end-user installation, [DEVELOPMENT.md](DEVELOPMENT.md) for editable-install development workflows, and [DOWNLOADS.md](DOWNLOADS.md) for the reference layout and config details.
 
 ## Core mental model
 
@@ -47,7 +47,7 @@ The toolkit provides a set of tools for transforming tables of variants: importi
 Intersection and matching of variants is performed on `chr:bp:a1:a2`, ignoring variant `id`. A `prepare_variants.py` pipeline combines operations that standardize `chr:bp:a1:a2`, making it into a unique variant identifier.
 Intersection and matching support biallelic SNPs and non-SNPs, while reference-aware restriction and liftover are narrower and are specified in the spec docs.
 
-For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](spec/core-objects.md), [contigs-and-metadata.md](spec/contigs-and-metadata.md), [shard-discovery.md](spec/shard-discovery.md), [importers.md](spec/importers.md), [variant-transforms.md](spec/variant-transforms.md), [mapping.md](spec/mapping.md), [payload-application.md](spec/payload-application.md), and [workflow.md](spec/workflow.md). Software setup is described in [INSTALL.md](INSTALL.md), and reference-aware assets/config are described in [DOWNLOADS.md](DOWNLOADS.md).
+For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](spec/core-objects.md), [contigs-and-metadata.md](spec/contigs-and-metadata.md), [shard-discovery.md](spec/shard-discovery.md), [importers.md](spec/importers.md), [variant-transforms.md](spec/variant-transforms.md), [mapping.md](spec/mapping.md), [payload-application.md](spec/payload-application.md), and [workflow.md](spec/workflow.md). End-user installation is described in [INSTALL.md](INSTALL.md), source-checkout development in [DEVELOPMENT.md](DEVELOPMENT.md), and reference-aware assets/config in [DOWNLOADS.md](DOWNLOADS.md).
 
 ## Canonical tools vs workflow tools
 
@@ -105,7 +105,7 @@ Use the tables below as a quick wrapper reference. The authoritative canonical-t
 Prepare a cohort `.bim` payload:
 
 ```bash
-python3 match/prepare_variants.py \
+prepare_variants.py \
   --input cohort.bim \
   --input-format bim \
   --output work/cohort.prepared
@@ -114,7 +114,7 @@ python3 match/prepare_variants.py \
 Prepare a sharded reference `.bim` payload, split across multiple inputs:
 
 ```bash
-python3 match/prepare_variants.py \
+prepare_variants.py \
   --input reference.@.bim \
   --input-format bim \
   --output work/reference.prepared
@@ -123,7 +123,7 @@ python3 match/prepare_variants.py \
 Prepare a summary-statistics payload:
 
 ```bash
-python3 match/prepare_variants.py \
+prepare_variants.py \
   --input study.tsv.gz \
   --input-format sumstats \
   --sumstats-metadata study.yaml \
@@ -141,7 +141,7 @@ Here `--output` is a stem, so these commands retain stage-specific `.vmap` outpu
 Once the inputs are prepared, intersect the prepared cohort and reference `.vmap` outputs:
 
 ```bash
-python3 match/intersect_variants.py \
+intersect_variants.py \
   --inputs work/cohort.prepared.vmap work/reference.prepared.vmap \
   --output work/shared.vtable
 ```
@@ -154,7 +154,7 @@ If you want a merged target set instead of an exact intersection, use `union_var
 Project the summary-statistics payload:
 
 ```bash
-python3 match/project_payload.py \
+project_payload.py \
   --input study.tsv.gz \
   --input-format sumstats-clean \
   --sumstats-metadata study.yaml \
@@ -172,7 +172,7 @@ This clean harmonization step is a missing-value and missing-column completion p
 Project the PLINK payload:
 
 ```bash
-python3 match/project_payload.py \
+project_payload.py \
   --input cohort.bim \
   --input-format bfile \
   --source-vmap work/cohort.prepared.vmap \
@@ -183,7 +183,7 @@ python3 match/project_payload.py \
 Project the sharded reference payload:
 
 ```bash
-python3 match/project_payload.py \
+project_payload.py \
   --input reference.@.bim \
   --input-format bfile \
   --source-vmap work/reference.prepared.vmap \
@@ -255,30 +255,30 @@ Downstream transforms other than `normalize_contigs.py` require declared `contig
 Use case: liftover a summary-statistics file to `GRCh38` before downstream matching or application.
 
 ```bash
-python3 match/import_sumstats.py \
+import_sumstats.py \
   --input study.tsv.gz \
   --sumstats-metadata study_meta.yaml \
   --output study.raw.vmap
 
-python3 match/normalize_contigs.py --to ncbi \
+normalize_contigs.py --to ncbi \
   --input study.raw.vmap \
   --output study.clean.vmap
 
-python3 match/guess_build.py \
+guess_build.py \
   --input study.clean.vmap \
   --write
 
-python3 match/restrict_build_compatible.py \
+restrict_build_compatible.py \
   --source study.clean.vmap \
   --allow-strand-flips \
   --norm-indels \
   --output study.validated.vmap
 
-python3 match/liftover_build.py --target-build GRCh38 \
+liftover_build.py --target-build GRCh38 \
   --input study.validated.vmap \
   --output study.grch38.vmap
 
-python3 match/apply_vmap_to_sumstats.py \
+apply_vmap_to_sumstats.py \
   --input study.tsv.gz \
   --sumstats-metadata study_meta.yaml \
   --vmap study.grch38.vmap \
@@ -288,58 +288,58 @@ python3 match/apply_vmap_to_sumstats.py \
 Use case: build one shared `GRCh38` variant universe for chromosome-sharded cohort genotypes, a target reference panel such as 1000 Genomes, and the lifted summary statistics from the first workflow, then emit a constrained cohort PLINK dataset plus aligned summary statistics in that same universe.
 
 ```bash
-python3 match/import_vcf.py \
+import_vcf.py \
   --input kgp.vcf.gz \
   --output kgp.raw.vmap \
   --genome-build GRCh37
 
-python3 match/normalize_contigs.py --to ncbi \
+normalize_contigs.py --to ncbi \
   --input kgp.raw.vmap \
   --output kgp.clean.vmap
 
-python3 match/restrict_build_compatible.py \
+restrict_build_compatible.py \
   --source kgp.clean.vmap \
   --allow-strand-flips \
   --norm-indels \
   --output kgp.validated.vmap
 
-python3 match/liftover_build.py --target-build GRCh38 \
+liftover_build.py --target-build GRCh38 \
   --input kgp.validated.vmap \
   --output kgp.grch38.vmap
 
-python3 match/convert_vmap_to_target.py \
+convert_vmap_to_target.py \
   --source kgp.grch38.vmap \
   --output kgp.grch38.vtable
 
-python3 match/import_bim.py \
+import_bim.py \
   --input cohort.@.bim \
   --output cohort.raw.vmap \
   --genome-build GRCh38
 
-python3 match/normalize_contigs.py --to ncbi \
+normalize_contigs.py --to ncbi \
   --input cohort.raw.vmap \
   --output cohort.clean.vmap
 
-python3 match/intersect_variants.py \
+intersect_variants.py \
   --inputs cohort.clean.vmap kgp.grch38.vtable \
   --output shared.grch38.vtable
 
-python3 match/match_vmap_to_target.py \
+match_vmap_to_target.py \
   --source cohort.clean.vmap \
   --target shared.grch38.vtable \
   --output cohort.shared.vmap
 
-python3 match/apply_vmap_to_bfile.py \
+apply_vmap_to_bfile.py \
   --source-prefix cohort.@ \
   --vmap cohort.shared.vmap \
   --output-prefix cohort.shared.@
 
-python3 match/match_vmap_to_target.py \
+match_vmap_to_target.py \
   --source study.grch38.vmap \
   --target shared.grch38.vtable \
   --output study.shared.vmap
 
-python3 match/apply_vmap_to_sumstats.py \
+apply_vmap_to_sumstats.py \
   --input study.tsv.gz \
   --sumstats-metadata study_meta.yaml \
   --vmap study.shared.vmap \

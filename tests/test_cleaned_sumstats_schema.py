@@ -1,12 +1,7 @@
 import re
-import sys
 
 import yaml
 from utils import MATCH_SCRIPT_DIR
-
-MATCH_DIR = MATCH_SCRIPT_DIR
-if str(MATCH_DIR) not in sys.path:
-    sys.path.insert(0, str(MATCH_DIR))
 
 
 def _schema_allows(schema: dict, value: object) -> bool:
@@ -33,7 +28,7 @@ def _schema_allows(schema: dict, value: object) -> bool:
     raise AssertionError(f"unsupported schema fragment in test: {schema}")
 
 
-SCHEMA = yaml.safe_load((MATCH_DIR / "schemas" / "cleaned-sumstats.yaml").read_text(encoding="utf-8"))
+SCHEMA = yaml.safe_load((MATCH_SCRIPT_DIR / "schemas" / "cleaned-sumstats.yaml").read_text(encoding="utf-8"))
 CHR_SCHEMA = SCHEMA["items"]["properties"]["CHR"]
 
 

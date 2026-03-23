@@ -22,10 +22,7 @@ RUN micromamba install -y -n base -c conda-forge -c bioconda \
 
 RUN python -m pip install --no-deps .
 
-RUN chmod +x /opt/genomatch/src/genomatch/*.py
-
-ENV PATH="/opt/genomatch/src/genomatch:${PATH}" \
-    PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /work
 

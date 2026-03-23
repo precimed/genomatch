@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 from typing import Tuple
 
-from vtable_utils import (
+from ._cli_utils import run_cli
+from .vtable_utils import (
     VariantRow,
     load_metadata,
     read_vmap,
@@ -125,9 +126,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

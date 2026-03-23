@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
-from vtable_utils import (
+from .vtable_utils import (
     MISSING_SOURCE_SHARD,
     VMapRow,
     VariantRow,

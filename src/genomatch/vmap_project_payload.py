@@ -5,9 +5,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
-from contig_utils import supported_exact_contig_tokens
-from sample_axis_utils import (
+from ._cli_utils import run_cli
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .contig_utils import supported_exact_contig_tokens
+from .sample_axis_utils import (
     SAMPLE_ID_MODE_CHOICES,
     SAMPLE_ID_MODE_FID_IID,
     parse_fam_table,
@@ -15,8 +16,8 @@ from sample_axis_utils import (
     require_psam_fid_presence_consistent,
     sex_to_label,
 )
-from vtable_utils import read_vmap
-from workflow_wrapper_utils import (
+from .vtable_utils import read_vmap
+from .workflow_wrapper_utils import (
     delete_bfile_outputs,
     delete_pfile_outputs,
     delete_variant_object,
@@ -25,11 +26,10 @@ from workflow_wrapper_utils import (
     existing_variant_object_artifacts,
     run_command,
     sidecar_output_path,
+    tool_command,
     variant_object_path,
 )
 
-
-SCRIPT_DIR = Path(__file__).resolve().parent
 WRAPPER_NAME = "project_payload.py"
 AUTO_PREFIX_TOKEN = "all_targets"
 
@@ -168,23 +168,21 @@ def use_target_vmap_directly(args: argparse.Namespace) -> bool:
 
 
 def target_match_command(source_path: str, target_path: str, output_path: Path) -> list[str]:
-    return [
-        sys.executable,
-        str(SCRIPT_DIR / "match_vmap_to_target.py"),
+    return tool_command(
+        "match_vmap_to_target.py",
         "--source",
         source_path,
         "--target",
         target_path,
         "--output",
         str(output_path),
-    ]
+    )
 
 
 def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
     if args.input_format in {"sumstats", "sumstats-clean"}:
-        cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "apply_vmap_to_sumstats.py"),
+        cmd = tool_command(
+            "apply_vmap_to_sumstats.py",
             "--input",
             args.input,
             "--sumstats-metadata",
@@ -193,36 +191,34 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             str(matched_path),
             "--output",
             args.output,
-        ]
+        )
         if args.input_format == "sumstats-clean":
             cmd.extend(["--clean", "--fill-mode", args.fill_mode])
             if args.use_af_inference:
                 cmd.append("--use-af-inference")
     elif args.input_format == "bfile":
-        cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "apply_vmap_to_bfile.py"),
+        cmd = tool_command(
+            "apply_vmap_to_bfile.py",
             "--source-prefix",
             bfile_source_prefix(args.input),
             "--vmap",
             str(matched_path),
             "--output-prefix",
             args.output,
-        ]
+        )
         cmd.extend(["--sample-id-mode", args.sample_id_mode])
         if args.target_fam:
             cmd.extend(["--target-fam", args.target_fam])
     else:
-        cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "apply_vmap_to_pfile.py"),
+        cmd = tool_command(
+            "apply_vmap_to_pfile.py",
             "--source-prefix",
             pfile_source_prefix(args.input),
             "--vmap",
             str(matched_path),
             "--output-prefix",
             args.output,
-        ]
+        )
         cmd.extend(["--sample-id-mode", args.sample_id_mode])
         if args.target_psam:
             cmd.extend(["--target-psam", args.target_psam])
@@ -457,9 +453,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

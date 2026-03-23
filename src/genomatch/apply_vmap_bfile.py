@@ -9,12 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Set, Tuple
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
-
-from apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
-from bfile_utils import (
+from ._cli_utils import run_cli
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .bfile_utils import (
     HAPLOID_SCHEMA,
     BimRow,
     count_target_ploidy_genotype_issues,
@@ -25,16 +22,16 @@ from bfile_utils import (
     write_bed_matrix,
     write_bim,
 )
-from haploid_utils import expected_ploidy_pair, has_non_diploid_ploidy
-from contig_utils import supported_exact_contig_tokens
-from sample_axis_utils import (
+from .haploid_utils import expected_ploidy_pair, has_non_diploid_ploidy
+from .contig_utils import supported_exact_contig_tokens
+from .sample_axis_utils import (
     SAMPLE_ID_MODE_CHOICES,
     build_sample_axis_plan,
     compute_reconciliation_missingness_summary,
     parse_fam_table,
     require_identical_sample_signatures,
 )
-from vtable_utils import (
+from .vtable_utils import (
     load_metadata,
     MISSING_SOURCE_SHARD,
     normalize_chrom_label,
@@ -432,8 +429,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(run_cli(main))

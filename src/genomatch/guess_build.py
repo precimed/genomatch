@@ -7,12 +7,9 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
-
-from reference_utils import fetch_reference_base, resolve_internal_reference_fasta
-from vtable_utils import (
+from ._cli_utils import run_cli
+from .reference_utils import fetch_reference_base, resolve_internal_reference_fasta
+from .vtable_utils import (
     VariantRow,
     load_variant_object,
     normalize_contig_for_reference,
@@ -143,9 +140,9 @@ def main() -> int:
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())
