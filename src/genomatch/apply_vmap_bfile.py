@@ -150,6 +150,12 @@ def chunk_count(total_items: int, chunk_size: int) -> int:
     return (total_items + chunk_size - 1) // chunk_size
 
 
+def has_identity_sample_axis_remap(local_to_output: Sequence[int], output_sample_count: int) -> bool:
+    return len(local_to_output) == output_sample_count and all(
+        output_idx == local_idx for local_idx, output_idx in enumerate(local_to_output)
+    )
+
+
 def prepare_source_payloads(
     args: argparse.Namespace,
     needed_by_shard: Dict[str, Set[int]],
@@ -312,11 +318,17 @@ def main() -> int:
     output_bytes_per_snp = bytes_per_bed_row(n_samples)
     chunk_size = resolve_chunk_size()
     identity_sample_axis = not sample_axis_plan.reconciliation_active
+    identity_remap_by_shard: Dict[str, bool] = {}
     packed_sample_axis_plans: Dict[str, PackedBedRemapPlan] = {}
     if not identity_sample_axis:
+        identity_remap_by_shard = {
+            shard: has_identity_sample_axis_remap(local_to_output, n_samples)
+            for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
+        }
         packed_sample_axis_plans = {
             shard: build_packed_bed_remap_plan(local_to_output, n_samples)
             for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
+            if not identity_remap_by_shard[shard]
         }
 
     ploidy_rows = resolve_target_ploidy_rows(
@@ -354,7 +366,7 @@ def main() -> int:
                     swapped_packed = swap_bed_chunk(packed_chunk)
                     swapped_packed_cache[key] = swapped_packed
                 packed_chunk = swapped_packed
-            if not identity_sample_axis:
+            if not identity_sample_axis and not identity_remap_by_shard[row.source_shard]:
                 remapped_key = (row.source_shard, row.source_index, needs_swap)
                 remapped_chunk = remapped_packed_cache.get(remapped_key)
                 if remapped_chunk is None:

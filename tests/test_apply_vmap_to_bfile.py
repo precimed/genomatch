@@ -1,6 +1,14 @@
 import os
 
+from genomatch.apply_vmap_bfile import has_identity_sample_axis_remap
 from utils import read_bed_matrix, read_bim, read_fam_sample_count, run_py, run_py_with_env, write_bfile, write_json, write_lines
+
+
+def test_has_identity_sample_axis_remap_requires_full_identity_mapping():
+    assert has_identity_sample_axis_remap((0, 1, 2), 3) is True
+    assert has_identity_sample_axis_remap((1, 2, 0), 3) is False
+    assert has_identity_sample_axis_remap((0, 1), 3) is False
+    assert has_identity_sample_axis_remap((0, -1, 2), 3) is False
 
 
 def test_apply_vmap_to_bfile_preserves_target_order_and_missing_fill_for_single_file_provenance(tmp_path):
