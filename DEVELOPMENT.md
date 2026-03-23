@@ -199,6 +199,34 @@ Manual GHCR runs push only the custom tag you request. They do not push `latest`
 
 If you expect to upload multiple test package builds, use a PEP 440 development version such as `0.1.0.dev1`, `0.1.0.dev2`, and so on. TestPyPI, like PyPI, does not let you overwrite an existing version.
 
+### Validate manual publish outputs
+
+After a successful manual workflow run, validate each release surface separately.
+
+To validate a TestPyPI package in a clean environment:
+
+```bash
+conda create -n genomatch-testpypi -c conda-forge -c bioconda \
+  python=3.12 bcftools bcftools-liftover-plugin samtools pip
+
+conda activate genomatch-testpypi
+python -m pip install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple \
+  genomatch==<version>
+
+prepare_variants.py --help
+```
+
+If you published a development version such as `0.1.0.dev1`, install that exact version string.
+
+To validate a manual GHCR `dev` tag with Apptainer:
+
+```bash
+apptainer pull genomatch-dev.sif docker://ghcr.io/precimed/genomatch:dev
+apptainer exec genomatch-dev.sif prepare_variants.py --help
+```
+
 ### Preferred release flow
 
 1. Make sure the release commit is already on GitHub and includes `.github/workflows/release.yaml`.
@@ -291,16 +319,16 @@ docker push ghcr.io/precimed/genomatch:0.1.0
 docker push ghcr.io/precimed/genomatch:latest
 ```
 
-The published image is the artifact Apptainer users will consume via:
+The published GHCR image can be converted locally into a SIF with Apptainer via:
 
 ```bash
-apptainer pull genomatch.sif oras://ghcr.io/precimed/genomatch:0.1.0
+apptainer pull genomatch.sif docker://ghcr.io/precimed/genomatch:0.1.0
 ```
 
 or:
 
 ```bash
-apptainer pull genomatch.sif oras://ghcr.io/precimed/genomatch:latest
+apptainer pull genomatch.sif docker://ghcr.io/precimed/genomatch:latest
 ```
 
 ### 5. Verify the published release
@@ -313,7 +341,7 @@ prepare_variants.py --help
 ```
 
 ```bash
-apptainer pull genomatch.sif oras://ghcr.io/precimed/genomatch:<version>
+apptainer pull genomatch.sif docker://ghcr.io/precimed/genomatch:<version>
 apptainer exec genomatch.sif prepare_variants.py --help
 ```
 

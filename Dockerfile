@@ -23,6 +23,7 @@ RUN micromamba install -y -n base -c conda-forge -c bioconda \
 RUN python -m pip install --no-deps .
 
 ENV PYTHONUNBUFFERED=1
+ENV PATH=/opt/conda/bin:${PATH}
 
 WORKDIR /work
 

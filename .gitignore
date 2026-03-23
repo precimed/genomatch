@@ -31,3 +31,5 @@ dev/variant_lists/*
 !dev/variant_lists/SCRIPTS.md
 
 ref/*
+
+*.sif

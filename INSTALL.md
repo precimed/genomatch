@@ -42,14 +42,14 @@ python -m pip install --upgrade genomatch
 
 For reference-aware commands, also configure your reference tree and `MATCH_CONFIG` as described in [DOWNLOADS.md](DOWNLOADS.md).
 
-## Option 2: prebuilt Singularity / Apptainer image via ORAS
+## Option 2: prebuilt Singularity / Apptainer image from GHCR
 
-Pull the published image from GHCR via its release-specific ORAS reference, then run the toolkit inside that image with your `config.yaml` and reference tree mounted in.
+Pull the published GHCR container image with Apptainer via its `docker://` reference, then run the toolkit inside that image with your `config.yaml` and reference tree mounted in.
 
 Typical use looks like:
 
 ```bash
-apptainer pull genomatch.sif oras://ghcr.io/<publisher>/<package>:<tag>
+apptainer pull genomatch.sif docker://ghcr.io/<publisher>/<package>:<tag>
 
 apptainer exec \
   --bind "$PWD":/work \
