@@ -21,7 +21,7 @@ Before running the reference-aware tools and wrappers:
 2. Download the required reference data and place your own `config.yaml` next to that reference tree.
 3. Set `MATCH_CONFIG=/path/to/config.yaml`.
 
-`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. The provided container image packages the runtime only; users must still supply reference assets and `config.yaml` separately. See [INSTALL.md](INSTALL.md) for the reference layout and full setup details.
+`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. The provided container image packages the runtime only; users must still supply reference assets and `config.yaml` separately. See [INSTALL.md](INSTALL.md) for software setup and [DOWNLOADS.md](DOWNLOADS.md) for the reference layout and config details.
 
 ## Core mental model
 
@@ -47,7 +47,7 @@ The toolkit provides a set of tools for transforming tables of variants: importi
 Intersection and matching of variants is performed on `chr:bp:a1:a2`, ignoring variant `id`. A `prepare_variants.py` pipeline combines operations that standardize `chr:bp:a1:a2`, making it into a unique variant identifier.
 Intersection and matching support biallelic SNPs and non-SNPs, while reference-aware restriction and liftover are narrower and are specified in the spec docs.
 
-For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](spec/core-objects.md), [contigs-and-metadata.md](spec/contigs-and-metadata.md), [shard-discovery.md](spec/shard-discovery.md), [importers.md](spec/importers.md), [variant-transforms.md](spec/variant-transforms.md), [mapping.md](spec/mapping.md), [payload-application.md](spec/payload-application.md), and [workflow.md](spec/workflow.md). Reference-aware setup and assets are described in [INSTALL.md](INSTALL.md).
+For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](spec/core-objects.md), [contigs-and-metadata.md](spec/contigs-and-metadata.md), [shard-discovery.md](spec/shard-discovery.md), [importers.md](spec/importers.md), [variant-transforms.md](spec/variant-transforms.md), [mapping.md](spec/mapping.md), [payload-application.md](spec/payload-application.md), and [workflow.md](spec/workflow.md). Software setup is described in [INSTALL.md](INSTALL.md), and reference-aware assets/config are described in [DOWNLOADS.md](DOWNLOADS.md).
 
 ## Canonical tools vs workflow tools
 

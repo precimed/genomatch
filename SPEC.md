@@ -16,6 +16,7 @@ The normative files for the `match/` contract are:
 
 - [README.md](README.md)
 - [INSTALL.md](INSTALL.md)
+- [DOWNLOADS.md](DOWNLOADS.md)
 - [TESTS.md](TESTS.md)
 - [SPEC.md](SPEC.md)
 - [core-objects.md](spec/core-objects.md)
@@ -82,9 +83,11 @@ Wrapper behavior for `prepare_variants.py` and `project_payload.py` is defined i
 
 ## Reference model
 
-The reference/config model for the `match/` toolkit is defined in [INSTALL.md](INSTALL.md).
+Software/runtime setup for the `match/` toolkit is defined in [INSTALL.md](INSTALL.md).
 
-`INSTALL.md` is the source of truth for:
+The reference/config model for the `match/` toolkit is defined in [DOWNLOADS.md](DOWNLOADS.md).
+
+`DOWNLOADS.md` is the source of truth for:
 
 - current UCSC-internal reference behavior
 - required reference assets

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REF_DIR="${SCRIPT_DIR}/ref"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REF_DIR="${REPO_ROOT}/ref"
 
 GRCH37_FASTA="${REF_DIR}/ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa"
 GRCH38_FASTA="${REF_DIR}/ucsc/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
@@ -84,7 +85,7 @@ main() {
   require_tool gzip
   require_tool samtools
   if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
-    log "Error: INSTALL.sh requires wget or curl"
+    log "Error: download_reference.sh requires wget or curl"
     exit 1
   fi
 
