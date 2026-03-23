@@ -164,7 +164,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: python -m pip install build twine
+        run: python -m pip install build twine setuptools wheel
 
       - name: Build wheel and sdist
         run: |
