@@ -35,8 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.vars.outputs.version }}
-      pypi_target: ${{ steps.vars.outputs.pypi_target }}
-      ghcr_tag: ${{ steps.vars.outputs.ghcr_tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -53,9 +51,6 @@ jobs:
           pyproject_version="$(python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])")"
           module_version="$(python -c "from pathlib import Path; namespace = {}; exec(Path('src/genomatch/_version.py').read_text(encoding='utf-8'), namespace); print(namespace['__version__'])")"
           manual_release_version="${{ github.event.inputs.release_version || '' }}"
-          manual_pypi_target="${{ github.event.inputs.pypi_target || 'none' }}"
-          manual_publish_ghcr="${{ github.event.inputs.publish_ghcr || 'false' }}"
-          manual_ghcr_tag="${{ github.event.inputs.ghcr_tag || '' }}"
 
           if [ "$pyproject_version" != "$module_version" ]; then
             echo "pyproject.toml version $pyproject_version does not match src/genomatch/_version.py version $module_version" >&2
@@ -63,8 +58,6 @@ jobs:
           fi
 
           release_version="$pyproject_version"
-          pypi_target="none"
-          ghcr_tag=""
 
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
             tag_version="${GITHUB_REF_NAME#v}"
@@ -73,8 +66,6 @@ jobs:
               exit 1
             fi
             release_version="$tag_version"
-            pypi_target="pypi"
-            ghcr_tag="$tag_version"
           elif [ -n "$manual_release_version" ]; then
             if [ "$manual_release_version" != "$pyproject_version" ]; then
               echo "Manual input version $manual_release_version does not match package version $pyproject_version" >&2
@@ -83,29 +74,7 @@ jobs:
             release_version="$manual_release_version"
           fi
 
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            pypi_target="$manual_pypi_target"
-
-            if [ "$manual_publish_ghcr" = "true" ]; then
-              if [ -z "$manual_ghcr_tag" ]; then
-                echo "Manual GHCR publish requires ghcr_tag to be set" >&2
-                exit 1
-              fi
-
-              case "$manual_ghcr_tag" in
-                *[!A-Za-z0-9._-]*)
-                  echo "Manual GHCR tag $manual_ghcr_tag contains unsupported characters" >&2
-                  exit 1
-                  ;;
-              esac
-
-              ghcr_tag="$manual_ghcr_tag"
-            fi
-          fi
-
           echo "version=$release_version" >> "$GITHUB_OUTPUT"
-          echo "pypi_target=$pypi_target" >> "$GITHUB_OUTPUT"
-          echo "ghcr_tag=$ghcr_tag" >> "$GITHUB_OUTPUT"
 
   test:
     name: Test Release Build
@@ -199,7 +168,7 @@ jobs:
     needs:
       - verify-version
       - build-python-artifacts
-    if: needs.verify-version.outputs.pypi_target == 'pypi'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.pypi_target == 'pypi')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -222,7 +191,7 @@ jobs:
     needs:
       - verify-version
       - build-python-artifacts
-    if: needs.verify-version.outputs.pypi_target == 'testpypi'
+    if: github.event_name == 'workflow_dispatch' && inputs.pypi_target == 'testpypi'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -278,7 +247,7 @@ jobs:
       - verify-version
       - test
       - build-container
-    if: needs.verify-version.outputs.ghcr_tag != '' && github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_ghcr && inputs.ghcr_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -294,9 +263,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate manual GHCR tag
+        run: |
+          set -euo pipefail
+          case "${{ inputs.ghcr_tag }}" in
+            *[!A-Za-z0-9._-]*)
+              echo "Manual GHCR tag contains unsupported characters: ${{ inputs.ghcr_tag }}" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Build and push manual image tag
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ghcr.io/precimed/genomatch:${{ needs.verify-version.outputs.ghcr_tag }}
+          tags: ghcr.io/precimed/genomatch:${{ inputs.ghcr_tag }}
