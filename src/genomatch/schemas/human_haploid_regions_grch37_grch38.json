@@ -1,0 +1,286 @@
+{
+  "schema_version": "1.0.0",
+  "title": "Human haploid regions (GRCh37/GRCh38)",
+  "coordinate_system": {
+    "basis": "1-based",
+    "intervals": "inclusive",
+    "notes": [
+      "Coordinates refer to the primary assembly for each build.",
+      "Typical karyotypes assumed: 46,XY (male) and 46,XX (female).",
+      "Does not model aneuploidy or mosaicism."
+    ]
+  },
+  "sex_definitions": {
+    "male": "Typical 46,XY",
+    "female": "Typical 46,XX"
+  },
+  "plink_chromosome_codes_plink1": {
+    "autosomes": {
+      "min": 1,
+      "max": 22
+    },
+    "X": 23,
+    "Y": 24,
+    "XY_PAR": 25,
+    "MT": 26
+  },
+  "builds": {
+    "GRCh37": {
+      "aliases": [
+        "hg19"
+      ],
+      "regions": [
+        {
+          "name": "PAR1",
+          "type": "pseudoautosomal",
+          "chromosomes": {
+            "X": {
+              "start": 60001,
+              "end": 2699520
+            },
+            "Y": {
+              "start": 10001,
+              "end": 2649520
+            }
+          },
+          "ploidy": {
+            "male": "diploid",
+            "female": "diploid"
+          }
+        },
+        {
+          "name": "PAR2",
+          "type": "pseudoautosomal",
+          "chromosomes": {
+            "X": {
+              "start": 154931044,
+              "end": 155260560
+            },
+            "Y": {
+              "start": 59034050,
+              "end": 59363566
+            }
+          },
+          "ploidy": {
+            "male": "diploid",
+            "female": "diploid"
+          }
+        },
+        {
+          "name": "X_nonPAR",
+          "type": "sex_chromosome_unique",
+          "chromosomes": {
+            "X": [
+              {
+                "start": 1,
+                "end": 60000
+              },
+              {
+                "start": 2699521,
+                "end": 154931043
+              },
+              {
+                "start": 155260561,
+                "end": null
+              }
+            ]
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "diploid"
+          },
+          "notes": [
+            "X_nonPAR is defined as all chrX sequence outside PAR1 and PAR2.",
+            "The final segment uses end=null because chrX length may be build/patch-set dependent in some pipelines; treat as 'to end of chromosome'."
+          ]
+        },
+        {
+          "name": "Y_MSY",
+          "type": "sex_chromosome_unique",
+          "chromosomes": {
+            "Y": [
+              {
+                "start": 1,
+                "end": 10000
+              },
+              {
+                "start": 2649521,
+                "end": 59034049
+              },
+              {
+                "start": 59363567,
+                "end": null
+              }
+            ]
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "absent"
+          },
+          "notes": [
+            "Y_MSY is defined as all chrY sequence outside PAR1 and PAR2.",
+            "The final segment uses end=null because chrY length may be build/patch-set dependent in some pipelines; treat as 'to end of chromosome'."
+          ]
+        },
+        {
+          "name": "MT",
+          "type": "mitochondrial",
+          "chromosomes": {
+            "MT": {
+              "start": 1,
+              "end": 16569
+            }
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "haploid"
+          },
+          "notes": [
+            "Mitochondrial genome is biologically multi-copy per cell; this specification is for genomic coordinate ploidy handling."
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "label": "UCSC hg19 (PAR on X)",
+          "url_hint": "UCSC Genome Browser hg19 unusual regions / PAR coordinates"
+        },
+        {
+          "label": "ThermoFisher Ion Reporter doc (Y PAR masked regions, GRCh37)",
+          "url_hint": "Ion Reporter: masked Y pseudoautosomal regions chrY:10001-2649520 and chrY:59034050-59363566"
+        },
+        {
+          "label": "Ensembl PARs overview",
+          "url_hint": "Ensembl human PARs information page"
+        }
+      ]
+    },
+    "GRCh38": {
+      "aliases": [
+        "hg38"
+      ],
+      "regions": [
+        {
+          "name": "PAR1",
+          "type": "pseudoautosomal",
+          "chromosomes": {
+            "X": {
+              "start": 10001,
+              "end": 2781479
+            },
+            "Y": {
+              "start": 10001,
+              "end": 2781479
+            }
+          },
+          "ploidy": {
+            "male": "diploid",
+            "female": "diploid"
+          }
+        },
+        {
+          "name": "PAR2",
+          "type": "pseudoautosomal",
+          "chromosomes": {
+            "X": {
+              "start": 155701383,
+              "end": 156030895
+            },
+            "Y": {
+              "start": 56887903,
+              "end": 57217415
+            }
+          },
+          "ploidy": {
+            "male": "diploid",
+            "female": "diploid"
+          }
+        },
+        {
+          "name": "X_nonPAR",
+          "type": "sex_chromosome_unique",
+          "chromosomes": {
+            "X": [
+              {
+                "start": 1,
+                "end": 10000
+              },
+              {
+                "start": 2781480,
+                "end": 155701382
+              },
+              {
+                "start": 156030896,
+                "end": null
+              }
+            ]
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "diploid"
+          },
+          "notes": [
+            "X_nonPAR is defined as all chrX sequence outside PAR1 and PAR2.",
+            "The final segment uses end=null because chrX length may be build/patch-set dependent in some pipelines; treat as 'to end of chromosome'."
+          ]
+        },
+        {
+          "name": "Y_MSY",
+          "type": "sex_chromosome_unique",
+          "chromosomes": {
+            "Y": [
+              {
+                "start": 1,
+                "end": 10000
+              },
+              {
+                "start": 2781480,
+                "end": 56887902
+              },
+              {
+                "start": 57217416,
+                "end": null
+              }
+            ]
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "absent"
+          },
+          "notes": [
+            "Y_MSY is defined as all chrY sequence outside PAR1 and PAR2.",
+            "The final segment uses end=null because chrY length may be build/patch-set dependent in some pipelines; treat as 'to end of chromosome'."
+          ]
+        },
+        {
+          "name": "MT",
+          "type": "mitochondrial",
+          "chromosomes": {
+            "MT": {
+              "start": 1,
+              "end": 16569
+            }
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "haploid"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "label": "UCSC hg38 (PAR1 on X)",
+          "url_hint": "UCSC Genome Browser hg38 unusual regions / PAR coordinates"
+        },
+        {
+          "label": "VarSome reference genomes page (Y PAR coordinates, GRCh38)",
+          "url_hint": "VarSome: GRCh38 Y PAR coordinates"
+        },
+        {
+          "label": "Ensembl PARs overview",
+          "url_hint": "Ensembl human PARs information page"
+        }
+      ]
+    }
+  }
+}

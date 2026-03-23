@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genomatch"
+version = "0.1.0"
+description = "A Python toolkit for auditable harmonization, liftover, intersection, and projection of genetic variant tables and payloads."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Precimed" }
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+genomatch = [
+  "schemas/*.yaml",
+  "schemas/*.json",
+]

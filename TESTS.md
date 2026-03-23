@@ -1,0 +1,502 @@
+# TESTS.md
+
+This file is the authoritative migration-aware test specification for `match/`.
+
+## Test environment
+
+- Canonical test execution for this toolkit should run under the `match-liftover` conda environment.
+- Use that environment for both `pytest tests` and full `pytest` validation when reviewing `match/` changes.
+- This keeps the real liftover integration coverage active instead of relying on skipped-test behavior in a lighter environment.
+
+Active migrated modules currently include:
+
+- `tests/test_contig_cleanup_utils.py`
+- `tests/test_importers.py`
+- `tests/test_normalize_contigs.py`
+- `tests/test_restrict_contigs.py`
+- `tests/test_drop_strand_ambiguous.py`
+- `tests/test_vmap_match_target.py`
+- `tests/test_vmap_composition.py`
+- `tests/test_guess_build.py`
+- `tests/test_restrict_build_compatible.py`
+- `tests/test_liftover_build.py`
+- `tests/test_sort_variants.py`
+- `tests/test_convert_vmap_to_target.py`
+- `tests/test_intersect_variants.py`
+- `tests/test_union_variants.py`
+- `tests/test_apply_vmap_to_sumstats.py`
+- `tests/test_apply_vmap_to_bfile.py`
+- `tests/test_prepare_variants.py`
+- `tests/integration/test_liftover_build_bcftools_real.py`
+- `tests/integration/test_end_to_end_sumstats_bcftools_real.py`
+- `tests/integration/test_apply_vmap_to_bfile_vcf_roundtrip.py`
+- `tests/integration/test_apply_vmap_to_bfile_haploid_roundtrip.py`
+- `tests/integration/test_apply_vmap_to_sumstats_regressions.py`
+
+Historical legacy coverage is preserved in the migration changelog under `match/changelog/TEST_2026_03_10.md`, but the active canonical suite is now `.vtable` / `.vmap` only.
+
+## Preserved behavior
+
+The migrated suite must keep coverage for:
+
+- exact target-ordered matching
+- allele swap handling
+- missing target rows encoded as `source_shard=.` `source_index=-1` and `allele_op=missing`
+- duplicate target exact rows failing
+- rsID ignored for matching
+- importer `--chr2use` / `--contigs` filtering and `restrict_contigs.py` target-row filtering
+- summary-stat effect inversion for swapped alleles
+- first-input order preservation in intersections
+
+## Required migration tests
+
+### Importers
+
+- `import_bim.py`, `import_pvar.py`, `import_vcf.py`, and `import_sumstats.py` write `.vmap` and metadata
+- importer-emitted `.vmap` target rows are the retained canonical imported rows
+- importer-emitted `.vmap` source provenance is exact `(source_shard, source_index)`
+- importer-emitted `.vmap` uses `source_shard=.` for single-file imports
+- `import_bim.py`, `import_pvar.py`, and `import_vcf.py` support raw-input `@` discovery
+- for `@` imports, `source_shard` stores the exact discovered filename substitution token verbatim
+- raw-input `@` discovery accepts PLINK split-X PAR shard filename aliases `XY` and `chrXY`
+- importers support `--chr2use` / `--contigs` as an import-time target-row filter
+- importers preserve input contig labels exactly on retained rows; they do not normalize or repair rows
+- importers may drop unsupported source rows instead of failing the whole import
+- importers infer the first compatible supported naming in priority order `ncbi`, `ucsc`, `plink`, `plink_splitx`
+- importers emit a warning only when retained contigs are mixed or invalid
+- dropped importer rows must be auditable in `<output>.qc.tsv`
+- importer QC rows are keyed by `source_shard` and `source_index` and include a reason code
+- importer QC must cover at least representative dropped-row reasons such as `multiallelic`, `non_actg_allele`, `malformed_row`, and `filtered_by_chr2use`
+- `import_sumstats.py` honors the cleansumstats metadata contract
+- `import_sumstats.py` rejects `@` input paths
+- `import_sumstats.py --id-vtable` is valid only when summary-stat metadata defines `SNP`, `EffectAllele`, and `OtherAllele`, and does not define `CHR` or `POS`
+- `import_sumstats.py --id-vtable` fills imported target-side `chrom` and `pos` from matched `.vtable.id` rows while keeping imported `a1/a2` from raw `EffectAllele` / `OtherAllele`
+- `import_sumstats.py --id-vtable` inherits imported `genome_build` and `contig_naming` from the lookup `.vtable` metadata
+- `import_sumstats.py --id-vtable` ignores lookup-table rows whose `id` is missing, empty, or `.`, and emits a warning
+- `import_sumstats.py --id-vtable` drops source rows whose `SNP` is missing, empty, or `.` with QC reason `invalid_id`
+- `import_sumstats.py --id-vtable` drops unmatched source rows with QC reason `id_not_found`
+- `import_sumstats.py --id-vtable` drops source rows with non-unique lookup matches with QC reason `ambiguous_id_match`
+
+### Metadata and contigs
+
+- metadata sidecars are required by transformation tools
+- metadata is authoritative once present; downstream tools reject target rows inconsistent with declared `contig_naming`
+- `guess_build.py` accepts `.vtable` and `.vmap`
+- `guess_build.py` emits the same type as the input
+- for `.vmap` input, `guess_build.py` updates target-side metadata only and does not change source provenance
+- `guess_build.py` requires declared `contig_naming`
+- `guess_build.py` writes inferred metadata only when `genome_build` is `unknown` or `--force` is used
+- `guess_build.py` guesses build from configured reference assets and reports evidence
+- `guess_build.py` accepts UCSC-named input without extra normalization
+- `guess_build.py` returns `genome_build=unknown` when evidence is ambiguous, below threshold, or unusable
+- malformed metadata sidecars fail clearly during `guess_build.py`
+- `guess_build.py` explicitly covers declared `plink` and `plink_splitx` inputs in addition to `ncbi` and `ucsc`
+- `restrict_build_compatible.py` explicitly covers declared `plink` and `plink_splitx` inputs in addition to `ncbi` and `ucsc`, except that `--norm-indels` rejects `plink_splitx`
+- `liftover_build.py` explicitly covers declared `plink` input in addition to `ncbi` and `ucsc`, and rejects `plink_splitx` clearly
+- `normalize_contigs.py` supports `ncbi <-> ucsc`
+- `normalize_contigs.py` supports `plink -> ncbi`
+- `normalize_contigs.py` supports `plink_splitx -> ncbi`
+- `normalize_contigs.py` may repair mixed or inconsistent target rows and must preserve row order
+- `normalize_contigs.py` must not rewrite `source_shard`
+- `normalize_contigs.py` drops unresolved target rows and reports normalized vs unresolved-drop counts
+- for `.vmap` input, `normalize_contigs.py` drops rows that collapse to duplicate target `chrom:pos:a1:a2` after normalization and audits them in `<output>.qc.tsv` with status `duplicate_target`
+- `restrict_contigs.py` filters retained target rows and preserves retained target order
+- `restrict_contigs.py` emits the same type as the input
+- `restrict_contigs.py` emits target-side-only metadata and preserves original provenance only when restricting an input `.vmap`
+- reference-aware tools must accept UCSC-named input rows
+- reference-aware tools must accept NCBI-style (`ncbi`) input rows
+- reference-aware tools must accept PLINK-style (`plink`) input rows
+- `guess_build.py` must accept PLINK split-X (`plink_splitx`) input rows
+- `restrict_build_compatible.py` must accept PLINK split-X (`plink_splitx`) input rows when `--norm-indels` is off, and reject them clearly when `--norm-indels` is on
+- `liftover_build.py` must reject PLINK split-X (`plink_splitx`) input rows clearly
+- tests for `guess_build.py` and `restrict_build_compatible.py` must verify internal normalization to UCSC reference naming for each supported non-UCSC declared input naming mode (`ncbi`, `plink`, and `plink_splitx`) within their supported modes
+- tests for `liftover_build.py` must verify internal normalization to UCSC reference naming for supported non-UCSC declared input naming modes (`ncbi` and `plink`)
+
+### Mapping
+
+- `match_vmap_to_target.py` default mode emits only `identity`, `swap`, or `missing`
+- `match_vmap_to_target.py` has no `--allow-strand-flips` surface in the intended contract
+- `match_vmap_to_target.py` supports both SNP and non-SNP biallelic exact matching, with `swap` defined by allele ordering rather than allele length
+- for multi-base alleles, any `flip` / `flip_swap` semantics exercised by reference-aware tools use reverse-complement per allele string rather than basewise complementation without reversing order
+- `match_vmap_to_target.py` rejects `@` template paths and has no `--chr2use` surface
+- `match_vmap_to_target.py` requires the source input to be a `.vmap`
+- `match_vmap_to_target.py` accepts the target input as a `.vtable` or `.vmap`
+- `match_vmap_to_target.py` emits `.vmap`
+- matching uses the target side of the source `.vmap` only and output must preserve provenance from the incoming `.vmap`
+- if the target input is a `.vmap`, matching uses only its target side, ignores its provenance entirely, and emits a warning
+- `match_vmap_to_target.py` rejects unknown target contigs and target rows inconsistent with declared `contig_naming`
+- duplicate target-side rows in the source `.vmap` are invalid before matching
+- `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
+- `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles
+- `drop_strand_ambiguous.py` emits the same type as the input and preserves original provenance only when filtering an input `.vmap`
+- `sort_variants.py` sorts target rows into declared coordinate order, emits the same type as the input, and preserves provenance on `.vmap` input
+- declared coordinate order is declared contig order, then numeric position, with stable input order for ties
+- `.vmap` rows carry `source_shard + source_index` provenance
+- `.vmap` preserves original `source_shard` and shard-local `source_index`
+- `.vmap` metadata carries target-side metadata only
+- `convert_vmap_to_target.py` materializes target rows and breaks provenance intentionally
+- `liftover_build.py` resolves chain and FASTA assets from config + metadata only
+- `liftover_build.py` accepts declared `ncbi`, `ucsc`, and `plink` input contig naming while using UCSC internal reference assets
+- `liftover_build.py` rejects declared `plink_splitx` input clearly
+- `liftover_build.py` supports `--resume` for reparsing retained bcftools liftover output without rerunning bcftools
+- `liftover_build.py` supports SNVs and source-build reference-anchored non-SNV rows where exactly one allele is the single-base source reference allele and the other allele is any non-empty `A` / `C` / `G` / `T` string
+- `liftover_build.py` may drop unsupported non-SNV rows with auditable QC
+- `liftover_build.py` may drop lifted rows that land on unsupported non-primary target contigs with auditable QC
+- `liftover_build.py` must drop rows with QC status `ploidy_class_changed` when lifted `chrom` or `pos` changes the expected `(male_ploidy, female_ploidy)` pair under the shared ploidy model
+- for `ploidy_class_changed`, the comparison is against the final candidate row that would otherwise be emitted, immediately before final output/QC accounting
+- `liftover_build.py` may drop lifted rows that collapse to duplicate target `chrom:pos:a1:a2` rows with auditable QC
+- `liftover_build.py` writes QC rows for mapped and unmapped source variants using original `(source_shard, source_index)` provenance
+- `liftover_build.py` emits the same type as the input and preserves original source provenance only when the input is `.vmap`
+- `liftover_build.py` accepts UCSC-named input without changing declared output naming
+- `liftover_build.py` fails clearly on missing chain config, missing bcftools, missing FASTA indexes, and wrong-strand input that was not repaired before liftover
+- `liftover_build.py` fails clearly on unsupported chain swap annotations and unsupported contig labels
+- `liftover_build.py` covers the degenerate all-dropped unsupported non-SNV case with QC output
+- tests for `liftover_build.py` must cover lifted one-side-multibase rows being retained as canonical `a1=non-reference`, `a2=reference`
+- tests for `liftover_build.py` must still cover unsupported non-SNV rows that are not reference-anchored and lifted outputs where both final alleles remain multi-base
+- `restrict_build_compatible.py` resolves reference FASTA from config + metadata only
+- `restrict_build_compatible.py` accepts declared `ncbi`, `ucsc`, `plink`, and `plink_splitx` input contig naming while using UCSC internal reference FASTA
+- `restrict_build_compatible.py --norm-indels` rejects declared `plink_splitx` input clearly
+- `restrict_build_compatible.py` supports SNP and reference-anchored non-SNV rows when at least one allele is a single-base `A` / `C` / `G` / `T` allele matching the reference base and the other allele is any non-empty `A` / `C` / `G` / `T` string
+- `restrict_build_compatible.py --allow-strand-flips` applies that same rule after strand complementation as well
+- `restrict_build_compatible.py` keeps only same-build reference-compatible rows
+- `restrict_build_compatible.py` canonicalizes retained rows to reference-second target ordering with `a1=non-reference` and `a2=reference`
+- `restrict_build_compatible.py` accepts optional `--sort`
+- `restrict_build_compatible.py --sort` sorts retained output rows into declared coordinate order using the same contract as `sort_variants.py`
+- `restrict_build_compatible.py` swaps rows when the reference allele is originally in `a1`
+- `restrict_build_compatible.py --allow-strand-flips` may emit local `flip_swap` when strand complementation and allele swap are both required
+- `restrict_build_compatible.py` accepts optional `--norm-indels`
+- without `--norm-indels`, `restrict_build_compatible.py` remains a same-build reference-aware filter and canonicalizer only
+- with `--norm-indels`, `restrict_build_compatible.py` partitions rows into three allele-length branches after input validation
+- with `--norm-indels`, pure SNVs with both alleles length 1 do not go through `bcftools norm`
+- with `--norm-indels`, rows with exactly one allele longer than one base still use the toolkit's same-build compatibility decision, optional strand-flip handling, and explicit `allele_op` swap or flip tracking before invoking one bulk `bcftools norm` call for that branch
+- with `--norm-indels`, rows with both alleles longer than one base are handled in a separate conservative branch
+- with `--norm-indels`, `restrict_build_compatible.py` must not rely on `bcftools norm` to detect strand flips, to repair REF/ALT orientation, or to decide `.vmap allele_op`
+- with `--norm-indels`, in the both-multi-base branch, `--allow-strand-flips` does not apply
+- with `--norm-indels`, in the both-multi-base branch, `restrict_build_compatible.py` must construct exactly two temporary VCF candidates per input row, unswapped and swapped
+- with `--norm-indels`, branch 2 uses one bulk `bcftools norm -c e` call
+- with `--norm-indels`, branch 3 implements strict `bcftools norm -c x` filtering semantics
+- with `--norm-indels`, branch 3 may realize those semantics via the documented workaround for upstream `bcftools` issue #2427: first `bcftools norm -c w`, then exclude exactly the warned `REF_MISMATCH` records and rerun
+- with `--norm-indels`, rows whose normalized `chrom` or `pos` changes the expected `(male_ploidy, female_ploidy)` pair under the shared ploidy model are dropped with QC status `ploidy_class_changed`
+- with `--norm-indels`, `restrict_build_compatible.py` retains normalization VCFs beside `--output` using deterministic names `<output>.bcftools_norm_input_e.vcf`, `<output>.bcftools_norm_output_e.vcf`, `<output>.bcftools_norm_input_x.vcf`, and `<output>.bcftools_norm_output_x.vcf`
+- with `--norm-indels`, `restrict_build_compatible.py` retains deterministic `bcftools norm` logs beside `--output` as `<output>.bcftools_norm_output_e.log` and `<output>.bcftools_norm_output_x.log`
+- with `--norm-indels`, `restrict_build_compatible.py` always reruns normalization from scratch and deletes any pre-existing retained normalization VCFs before invoking `bcftools norm`
+- with `--norm-indels`, `restrict_build_compatible.py` deletes any pre-existing retained normalization log files before invoking `bcftools norm`
+- with `--norm-indels`, in the both-multi-base branch, exactly one candidate must survive as one valid normalized biallelic row; zero-survivor and two-survivor cases are dropped with auditable QC
+- with `--norm-indels`, in the both-multi-base branch, unswapped-candidate survival maps to local `identity` and swapped-candidate survival maps to local `swap`
+- with `--norm-indels`, `restrict_build_compatible.py` internally round-trips through temporary VCF rows with `REF=reference` and `ALT=non-reference`, then converts normalized rows back to canonical target ordering `a1=non-reference` and `a2=reference`
+- with `--norm-indels`, `restrict_build_compatible.py` uses `bcftools norm` only for normalization against the configured same-build reference FASTA
+- with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` multiallelic split or join modes
+- with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` atomization
+- with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm -c s`
+- with `--norm-indels`, unresolved REF mismatch after the toolkit's own compatibility repair must fail clearly rather than being silently fixed by `bcftools`
+- with `--norm-indels`, normalized representation changes to `chrom`, `pos`, `a1`, or `a2` do not create new `allele_op` values beyond the toolkit's own pre-normalization `identity` / `swap` / `flip` / `flip_swap`
+- with `--norm-indels`, retained output must remain one canonical biallelic row per retained input row; normalized rows must not be split into multiple output rows
+- with `--norm-indels`, if `bcftools norm` emits multiallelic output for a row, that row must be filtered out from canonical output with status `norm_multiallelic`
+- with `--norm-indels`, if normalized output contains missing, symbolic, empty, or non-`A/C/G/T` alleles, that row must be filtered out with status `norm_not_atcg_alleles`
+- with `--norm-indels`, if one input row yields multiple normalized output records, that row must be filtered out with status `norm_multiple_output_records`
+- with `--norm-indels`, if normalized `REF` and `ALT` are identical, that row must be filtered out with status `norm_identical_ref_alt_alleles`
+- with `--norm-indels`, if normalized output remains biallelic but both final canonical alleles are longer than one base, that row must be filtered out with status `norm_unsupported_complex_indel`
+- with `--norm-indels`, if both both-multi-base candidates survive, that row must be filtered out with status `norm_ambiguous_orientation`
+- with `--norm-indels`, if no valid normalized candidate survives because normalization-only reference anchoring fails, that row must be filtered out with status `norm_ref_mismatch`
+- with `--norm-indels`, if normalized output has unsupported output contig labels, that row must be filtered out with status `unsupported_target_contig`
+- with `--norm-indels`, if normalized output has invalid position values, that row must be filtered out with status `norm_invalid_position`
+- with `--norm-indels`, duplicate-target detection still applies after normalization on final canonical `chrom:pos:a1:a2`
+- with `--norm-indels`, tests must cover indel left-normalization or trimming that changes target `pos` and allele strings while preserving canonical final `a1=non-reference`, `a2=reference`
+- with `--norm-indels`, tests must cover the case where no normalization change is needed and the retained output remains otherwise identical to the non-`--norm-indels` path
+- with `--norm-indels`, tests must cover pure SNP rows remaining on the non-`bcftools norm` path
+- with `--norm-indels`, tests must cover one-side multi-base rows going through the branch-2 `bcftools norm -c e` path
+- with `--norm-indels`, tests must cover retained branch-2 normalization VCFs under the output prefix
+- with `--norm-indels`, tests must cover retained branch-3 normalization VCFs under the output prefix
+- with `--norm-indels`, tests must cover retained branch-specific normalization log files under the output prefix
+- with `--norm-indels`, tests must cover stale retained normalization VCFs being deleted before rerun
+- with `--norm-indels`, tests must cover stale retained normalization log files being deleted before rerun
+- tests must include a sentinel reproduction of upstream `bcftools` issue #2427 where `bcftools norm -c x` segfaults on a tiny fixture; that sentinel should fail once the upstream bug is fixed so the workaround can be removed
+- tests must cover the `#2427` workaround path producing output equivalent to strict `check-ref x` filtering on the same class of fixture
+- with `--norm-indels`, tests must cover `--allow-strand-flips` together with normalization, where strand complementation is resolved before normalization
+- with `--norm-indels`, tests must cover the both-multi-base branch where only the unswapped candidate survives and local `identity` is emitted
+- with `--norm-indels`, tests must cover the both-multi-base branch where only the swapped candidate survives and local `swap` is emitted
+- with `--norm-indels`, tests must cover the both-multi-base branch where neither candidate survives and `norm_ref_mismatch` is audited
+- with `--norm-indels`, tests must cover the both-multi-base branch where both candidates survive and `norm_ambiguous_orientation` is audited
+- with `--norm-indels`, tests must cover the unsupported normalized complex-indel case where both final canonical alleles remain longer than one base and `norm_unsupported_complex_indel` is audited
+- with `--norm-indels`, tests must cover `.vmap` provenance preservation and correct composition of pre-normalization local `allele_op`
+- `restrict_build_compatible.py` drops `.vmap` rows that collapse to duplicate target `chrom:pos:a1:a2` after canonicalization and audits them in `<output>.qc.tsv` with status `duplicate_target`
+- `restrict_build_compatible.py` emits filtered output of the same type as the input and preserves original source provenance only when the input is `.vmap`
+- `restrict_build_compatible.py` emits JSON telemetry to stdout with input/output paths, declared metadata, normalization path, and retained/dropped row counts
+- `restrict_build_compatible.py` accepts UCSC-named input without extra normalization
+- `restrict_build_compatible.py` rejects unknown target contigs and rows inconsistent with declared `contig_naming`
+- `restrict_build_compatible.py` fails clearly on missing reference config sections and missing FASTA indexes
+- `restrict_build_compatible.py` fails clearly on bad relative reference paths and on explicit non-ACGT alleles
+- without `--sort`, output order follows the first input and is not re-sorted by declared coordinate order
+- with `--sort`, output order is declared contig order, then numeric position, with stable input order for ties
+- with `--norm-indels`, tests should verify clear failure on missing `bcftools`, failed `bcftools norm`, and missing FASTA indexes
+
+### Intersections
+
+- `intersect_variants.py` intersects exact `chrom:pos:a1:a2`
+- `intersect_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
+- `intersect_variants.py` fails cleanly when input metadata omits `contig_naming`
+- `intersect_variants.py` performs no implicit normalization
+- mismatched build or contig naming fails clearly
+- output IDs come from the first input
+- output order follows the first input and does not sort by declared coordinate order
+- `intersect_variants.py` emits `.vtable`
+
+### Unions
+
+- `union_variants.py` unions exact `chrom:pos:a1:a2`
+- `union_variants.py` requires at least two inputs
+- `union_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
+- `union_variants.py` fails cleanly when input metadata omits `contig_naming`
+- `union_variants.py` performs no implicit normalization
+- mismatched build or contig naming fails clearly
+- duplicate exact rows are deduplicated by first occurrence across all inputs, with output IDs taken from that first retained row
+- `union_variants.py` re-sorts the deduplicated output into declared coordinate order using the same ordering contract as `sort_variants.py`
+- ties under declared coordinate order preserve first-occurrence order
+- `union_variants.py` emits `.vtable`
+
+### Payload application
+
+- `apply_vmap_to_sumstats.py` preserves full target-row order by default
+- `apply_vmap_to_sumstats.py` resolves source rows by exact `source_shard + source_index`
+- for imported single-file sumstats payloads, `source_shard` is `.`
+- `apply_vmap_to_sumstats.py` supports single-file payloads only
+- `apply_vmap_to_sumstats.py` fails cleanly on out-of-range shard-local provenance
+- `apply_vmap_to_sumstats.py` keeps unmatched target rows in output by default and drops them only when `--only-mapped-target` is supplied
+- `apply_vmap_to_sumstats.py` defines output variant columns, including `CHR`, from target `.vmap` rows
+- `apply_vmap_to_sumstats.py` does not require source-side POS / SNP / effect-allele / other-allele payload columns
+- without `--clean`, `apply_vmap_to_sumstats.py` preserves the input delimiter in output
+- `apply_vmap_to_sumstats.py` writes gzip-compressed output when `--output` ends with `.gz`
+- `apply_vmap_to_sumstats.py` supports joined source variant fields and joined in-place target-field rewrites
+- `apply_vmap_to_sumstats.py` swaps odds-ratio confidence bounds when inverting a swapped interval
+- `apply_vmap_to_sumstats.py` applies swap-style numeric transforms for both `swap` and `flip_swap`
+- `apply_vmap_to_sumstats.py` rejects `@` template paths in both `--input` and `--output`
+- `apply_vmap_to_sumstats.py` fails clearly on payload rows with fewer columns than required by metadata
+- `apply_vmap_to_sumstats.py` warns and writes `n/a` when swapped numeric effect transforms cannot be applied because the payload value is non-numeric, non-finite, or non-invertible
+- without `--clean`, `apply_vmap_to_sumstats.py` preserves legacy missing-value formatting, including `n/a` for synthetic numeric missing values
+- swapped alleles negate signed effects
+- swapped alleles invert odds ratios
+- swapped alleles complement effect frequencies
+- `apply_vmap_to_sumstats.py --clean` normalizes metadata-declared payload headers with the cleaned-header rules before canonical stat selection
+- `apply_vmap_to_sumstats.py --clean` renames recognized payload columns to cleaned canonical names, drops unrecognized payload columns, and drops all-missing payload columns
+- `apply_vmap_to_sumstats.py --clean` converts `stats_neglog10P` and `stats_log10P` payloads to plain `P` and then enforces the numeric and range validation rules
+- `apply_vmap_to_sumstats.py --clean` supports both `--fill-mode column` and `--fill-mode row` with the spec-defined derivation order
+- `apply_vmap_to_sumstats.py --clean` derives `EAF` from `OAF` when needed and drops `OAF`-family columns afterward
+- `apply_vmap_to_sumstats.py --clean` applies the second validation pass after derivation so invalid derived values are cleared back to missing
+- `apply_vmap_to_sumstats.py --clean` applies swap / flip_swap transforms to cleaned numeric effect columns while preserving `Direction` unchanged
+- `apply_vmap_to_sumstats.py --clean` must still keep retained unmatched target rows all-missing rather than letting harmonization fill metadata-derived values onto them
+- `apply_vmap_to_sumstats.py --clean --only-mapped-target` additionally drops retained mapped rows whose `P` value is still missing after harmonization
+- `apply_vmap_to_sumstats.py --clean` writes tab-delimited output with canonical cleaned payload column ordering and serializes missing values as empty fields
+- `apply_vmap_to_sumstats.py --clean` covers cleaned-schema fields such as `StudyN` only as explicitly defined by the current cleaned-sumstats spec
+- genotype-payload `apply_vmap_*` tools (`apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`) preserve full target-row order by default
+- genotype-payload `apply_vmap_*` tools resolve source rows by exact `source_shard + source_index`
+- for genotype-payload `apply_vmap_*` tools, `source_shard` lookup is exact stored provenance and not chromosome interpretation
+- genotype-payload `apply_vmap_*` tools support single-file and `@` source-prefix discovery plus optional target-contig `@` output sharding
+- genotype-payload `apply_vmap_*` tools replace output `@` with the retained target-side contig label exactly as it appears in `.vmap chrom`
+- genotype-payload `apply_vmap_*` tools do not emit empty `@` output shards for contigs with no retained rows
+- genotype-payload `apply_vmap_*` tools reject missing required source shards and out-of-range shard-local provenance
+- genotype-payload `apply_vmap_*` tools fail cleanly when `--only-mapped-target` leaves zero retained rows rather than emitting an empty payload
+- genotype-payload `apply_vmap_*` tools do not apply smart label resolution at lookup time
+- genotype-payload `apply_vmap_*` tools use the shared abstract allele-op contract: `identity` and `flip` keep the mapped row in the same genotype orientation, `swap` and `flip_swap` perform allele-order genotype rewrites, and `missing` emits a retained unmatched/all-missing row unless dropped by `--only-mapped-target`
+- for `@`-sharded PLINK payloads, lookup is by exact imported `source_shard`, not by chromosome interpretation
+- `apply_vmap_to_bfile.py` `@` shard discovery accepts PLINK split-X PAR shard filename aliases `XY` and `chrXY`
+- `apply_vmap_to_bfile.py` fails cleanly when every retained target row is unmatched rather than emitting an all-missing PLINK payload
+- `apply_vmap_to_bfile.py` defines output `.bim` rows entirely from target `.vmap` rows with genetic position / cM fixed to `0`
+- `apply_vmap_to_bfile.py` propagates the payload `.fam` to every emitted output when `--target-fam` is not supplied
+- `apply_vmap_to_bfile.py` accepts optional `--target-fam`
+- with `--target-fam`, `apply_vmap_to_bfile.py` copies that target `.fam` exactly to every emitted output and uses it as the output sample axis
+- with `--target-fam`, output sample order follows the target `.fam` exactly and subjects absent from a referenced source shard are emitted as missing for rows sourced from that shard
+- without `--target-fam`, for sharded source payloads `apply_vmap_to_bfile.py` requires identical `.fam` contents across all referenced source shards in one invocation
+- `apply_vmap_to_bfile.py` accepts `--sample-id-mode {fid_iid,iid}` and defaults to `fid_iid`
+- under `--sample-id-mode=fid_iid`, BFILE subject keys are `(FID, IID)`; under `--sample-id-mode=iid`, BFILE subject keys are `IID`
+- `apply_vmap_to_bfile.py` fails on duplicate subject keys within one source shard
+- `apply_vmap_to_bfile.py` fails on duplicate subject keys in `--target-fam`
+- with an explicit `--target-fam`, `apply_vmap_to_bfile.py` always summarizes reconciliation-added missingness on retained mapped rows
+- with an explicit `--target-fam`, `apply_vmap_to_bfile.py` warns when any retained output subject or retained output variant exceeds 50% reconciliation-added missingness
+- `apply_vmap_to_bfile.py` treats `identity` and `flip` as unchanged genotype encoding
+- `apply_vmap_to_bfile.py` treats `swap` and `flip_swap` as genotype-swapping operations
+- `apply_vmap_to_bfile.py` follows the shared ploidy model for expected target-side ploidy and validation
+- with `--target-fam`, BFILE ploidy validation uses the sex column from the target `.fam`
+- `apply_vmap_to_bfile.py` validates ploidy subject by subject when sex is known, without disabling validation for all subjects when some output subjects have unknown sex
+- for BFILE, target diploid accepts observed `hom-ref (0)`, `het (1)`, `hom-alt (2)`, and missing
+- for BFILE, target haploid accepts observed `hom-ref (0)`, `hom-alt (2)`, and missing, while observed `het (1)` is incompatible
+- for BFILE, target absent accepts only missing and treats any nonmissing observed state as incompatible
+- `apply_vmap_to_bfile.py` does not rewrite offending genotype content to missing as part of ploidy validation
+- `apply_vmap_to_bfile.py` emits aggregate auditable ploidy-validation warnings rather than one warning per offending genotype
+- `apply_vmap_to_bfile.py` emits `.ploidy` whenever retained target rows include any row that is non-diploid in at least one sex; `.ploidy` stores one `(male_ploidy, female_ploidy)` pair per emitted row and is not a per-sample validation report
+- for `@`-sharded BFILE output, `.ploidy` emission is decided per emitted shard; shards with at least one non-diploid row emit `.ploidy`, while shards containing only `(2, 2)` rows do not
+- `apply_vmap_to_bfile.py` supports non-sharded output prefixes that already contain dots
+- `apply_vmap_to_bfile.py` covers shard merge, shard split, and arbitrary cross-contig relocation between `@`-sharded source input and `@`-sharded output, validating that the emitted genotype calls land in the correct target shard and row
+- `apply_vmap_to_bfile.py` reads and writes genotype data in bounded chunks rather than loading the full genotype matrix for all variants into memory
+- bounded-chunk behavior must hold for both single-file and `@`-sharded PLINK payloads without changing output semantics, including cases where target order interleaves rows from multiple source shards
+- `apply_vmap_to_pfile.py` applies the same shared genotype-payload `apply_vmap_*` contract to PLINK 2 `.pgen/.pvar/.psam`
+- `apply_vmap_to_pfile.py` defines output `.pvar` rows and allele columns from retained target `.vmap` rows, not from source `.pvar`
+- `apply_vmap_to_pfile.py` propagates the payload `.psam` to every emitted output when `--target-psam` is not supplied
+- `apply_vmap_to_pfile.py` accepts optional `--target-psam`
+- with `--target-psam`, `apply_vmap_to_pfile.py` copies that target `.psam` exactly to every emitted output and uses it as the output sample axis
+- with `--target-psam`, output sample order follows the target `.psam` exactly and subjects absent from a referenced source shard are emitted as missing for rows sourced from that shard
+- without `--target-psam`, `apply_vmap_to_pfile.py` requires identical `.psam` contents across all referenced source shards
+- `apply_vmap_to_pfile.py` accepts `--sample-id-mode {fid_iid,iid}` and defaults to `fid_iid`
+- under `--sample-id-mode=iid`, PFILE subject keys are `IID`
+- under `--sample-id-mode=fid_iid`, PFILE subject keys are `(FID, IID)`
+- under `--sample-id-mode=fid_iid`, `apply_vmap_to_pfile.py` fails clearly if referenced source `.psam` files or `--target-psam` disagree on whether the header contains `FID`
+- under `--sample-id-mode=fid_iid`, empty `FID` values do not trigger fallback to `IID`
+- `apply_vmap_to_pfile.py` fails on duplicate subject keys within one source shard
+- `apply_vmap_to_pfile.py` fails on duplicate subject keys in `--target-psam`
+- with an explicit `--target-psam`, `apply_vmap_to_pfile.py` always summarizes reconciliation-added missingness on retained mapped rows
+- with an explicit `--target-psam`, `apply_vmap_to_pfile.py` warns when any retained output subject or retained output variant exceeds 50% reconciliation-added missingness
+- with `--target-psam`, `apply_vmap_to_pfile.py` copies the explicit target `.psam` exactly and does not heuristically merge arbitrary extra source `.psam` metadata columns
+- `apply_vmap_to_pfile.py` supports retained mapped biallelic hardcalls, hardcall phase information, unphased dosages, and haploid hardcalls or haploid dosages under PLINK/PGEN allele-count conventions
+- `apply_vmap_to_pfile.py` fails on unsupported retained mapped inputs, including non-biallelic retained rows, phased dosage preservation, and retained mapped content not representable through the chosen pgenlib read or write path
+- `apply_vmap_to_pfile.py` copies hardcalls, hardcall phase flags, and dosages unchanged for `identity` and `flip`
+- `apply_vmap_to_pfile.py` swaps biallelic hardcall allele codes and rewrites every nonmissing unphased dosage as `2 - dosage` for `swap` and `flip_swap`, while preserving missing values and phase flags
+- `apply_vmap_to_pfile.py` follows the shared ploidy model for expected target-side ploidy and validation
+- `apply_vmap_to_pfile.py` validates ploidy subject by subject when sex is known, without disabling validation for all subjects when some output subjects have unknown sex
+- for PFILE hardcalls, ploidy validation is based on emitted allele observations after sample-axis reconciliation and allele-op rewrite; hardcall phase flags do not affect ploidy compatibility
+- for PFILE hardcalls, emitted allele pairs are classified as: fully missing `(-9,-9)`, haploid-like (exactly one allele is `0` or `1` and the other is `-9`), diploid hom-ref `(0,0)`, diploid het `(0,1)` or `(1,0)`, diploid hom-alt `(1,1)`, or malformed partial state for any other partial/malformed pair
+- for PFILE hardcalls, target diploid accepts fully missing, haploid-like, diploid hom-ref, diploid het, and diploid hom-alt, while malformed partial states are incompatible
+- for PFILE hardcalls, target haploid accepts fully missing, haploid-like, diploid hom-ref, and diploid hom-alt, while diploid het and malformed partial states are incompatible
+- for PFILE hardcalls, target absent accepts only fully missing and treats all other states as incompatible
+- for PFILE dosages, unphased dosage representation is treated as `0..2` allele-count scale even on haploid chromosomes
+- for `restrict_build_compatible.py --norm-indels`, the `ploidy_class_changed` comparison is against the final normalized candidate row that would otherwise be emitted, immediately before final output/QC accounting
+- `apply_vmap_to_pfile.py` does not rewrite offending genotype content to missing as part of ploidy validation
+- `apply_vmap_to_pfile.py` emits aggregate auditable ploidy-validation warnings rather than one warning per offending genotype
+- `apply_vmap_to_pfile.py` emits all-missing retained unmatched rows when at least one retained mapped row remains, but fails cleanly if every retained row is unmatched
+- `apply_vmap_to_pfile.py` writes `.pgen` using one coherent file-wide output channel configuration that preserves hardcalls, hardcall phase information, and unphased dosages across all emitted rows, including inserted all-missing rows
+- inserted all-missing PFILE rows must emit every enabled channel and carry phase flags with no useful phase information
+- `apply_vmap_to_pfile.py` reads and writes genotype data in bounded chunks rather than loading the full genotype matrix for all variants into memory
+
+### Convenience wrapper
+
+- `prepare_variants.py` accepts optional `--prefix`, defaulting it to `--output`
+- `prepare_variants.py` requires one final `--output`
+- `prepare_variants.py` dispatches to the appropriate `import_*` tool for the selected input format
+- `prepare_variants.py` accepts optional `--id-vtable` only for `--input-format=sumstats` and passes it through unchanged to `import_sumstats.py`
+- `prepare_variants.py` defaults `--dst-build` to `GRCh38`
+- `prepare_variants.py` defaults `--dst-contig-naming` to `ncbi`
+- `prepare_variants.py` accepts `--allow-strand-flips` / `--no-allow-strand-flips` and defaults strand-flip allowance to on
+- `prepare_variants.py` accepts `--norm-indels` / `--no-norm-indels` and defaults indel normalization to on
+- `prepare_variants.py` skips `normalize_contigs.py` only when the current object already declares the requested `--dst-contig-naming`
+- `prepare_variants.py` runs `normalize_contigs.py` when importer-declared `contig_naming` differs from the requested `--dst-contig-naming`
+- if `prepare_variants.py --dst-contig-naming=plink_splitx` encounters `genome_build=unknown`, it defers final `plink_splitx` normalization until build is known
+- in that deferred `plink_splitx` case, if the current retained stage also omits `contig_naming`, `prepare_variants.py` first normalizes to interim build-independent `plink`
+- `prepare_variants.py` skips `liftover_build.py` when the source already matches `--dst-build`
+- `prepare_variants.py` runs `restrict_build_compatible.py` before any optional liftover
+- `prepare_variants.py` passes both `--allow-strand-flips` and `--norm-indels` through to `restrict_build_compatible.py` by default
+- `prepare_variants.py --no-allow-strand-flips` omits only `--allow-strand-flips` from the `restrict_build_compatible.py` invocation
+- `prepare_variants.py --no-norm-indels` omits only `--norm-indels` from the `restrict_build_compatible.py` invocation
+- `prepare_variants.py --no-allow-strand-flips --no-norm-indels` still runs `restrict_build_compatible.py` in its default same-build reference-compatible mode
+- `prepare_variants.py` passes `--sort` to `restrict_build_compatible.py` when the current retained stage already matches `--dst-build`
+- `prepare_variants.py` final output is in declared coordinate order, coming from same-build `restrict_build_compatible.py --sort` or from `liftover_build.py` when liftover runs
+- in the deferred `plink_splitx` case, `prepare_variants.py` runs one final `normalize_contigs.py --to plink_splitx` stage only after build is known and after any required liftover
+- in the deferred `plink_splitx` case, that final normalization happens before any optional `drop_strand_ambiguous.py` or `restrict_contigs.py`
+- `prepare_variants.py` retains the same `<prefix>.build_compatible.vmap` stage name regardless of whether `restrict_build_compatible.py` ran with neither flag, either flag, both flags, or `--sort`
+- under `--norm-indels`, `prepare_variants.py` still exposes one build-compatible retained stage even if `restrict_build_compatible.py` internally makes at most one `bcftools norm` call for branch 2 and at most one `bcftools norm` call for branch 3
+- `prepare_variants.py` retains `<prefix>.splitx.vmap` only for the deferred final `plink_splitx` normalization case
+- `prepare_variants.py` copies the last retained `current_path` to `<output>.vmap`
+- without `--resume` or `--force`, `prepare_variants.py` fails if any planned output or retained intermediate already exists
+- `prepare_variants.py` treats `--output` as a stem and writes the final prepared artifact exactly to `<output>.vmap`
+- `prepare_variants.py` defaults omitted `--prefix` to `--output`
+- `prepare_variants.py` runs `drop_strand_ambiguous.py` only when explicitly requested
+- `prepare_variants.py` runs `restrict_contigs.py` only when `--chr2use` / `--contigs` is supplied
+- `prepare_variants.py` prints the invoked subcommands
+- `prepare_variants.py` retains intermediate outputs by default
+- `prepare_variants.py` rejects `--resume` together with `--force`
+- with `--resume`, `prepare_variants.py` skips a planned stage only when that stage output already exists and never overwrites outputs
+- with `--resume`, `prepare_variants.py` fails on a retained stage-graph hole where a later planned stage output exists but an earlier required stage output is missing
+- with `--resume`, `prepare_variants.py` does nothing if final `<output>.vmap` already exists
+- with `--force`, `prepare_variants.py` deletes the full retained `<prefix>.*.vmap` stage namespace plus final `<output>.vmap` before rerunning cleanly from scratch
+- with `--resume`, `prepare_variants.py` propagates liftover resume so a missing final lifted object can be rebuilt from retained bcftools liftover output without rerunning bcftools
+- retained intermediate filenames are deterministic and derived from the chosen prefix, where omitted `--prefix` means `--output`, plus clear step-specific suffixes; same-build wrapper runs do not retain a separate `.sorted.vmap`
+- test that deferred `plink_splitx` normalization first uses interim `plink` when both contig naming and build are unresolved
+- test that deferred `plink_splitx` normalization runs after build resolution and after any required liftover
+- test that deferred `plink_splitx` normalization retains `<prefix>.splitx.vmap`
+- `prepare_variants.py` presents the final prepared output at `<output>.vmap`
+- test that `--output` is treated as a stem and that the final wrapper artifact is exactly `<output>.vmap`
+- test that omitted `--prefix` defaults to `--output`
+- test that the wrapper determines the full planned stage graph before execution and fails by default if any planned wrapper-managed output already exists
+- test that `--resume` and `--force` are mutually exclusive
+- test that `--resume` skips an existing stage output only when all earlier required planned stage outputs also exist
+- test that `--resume` fails on a hole in the retained stage chain, e.g. planned `a -> b -> c` with `a` and `c` present but `b` missing
+- test that `--resume` never overwrites outputs
+- test that if final `<output>.vmap` already exists in `--resume` mode, the wrapper performs no further work
+- test that `--force` deletes wrapper-managed outputs first and then reruns cleanly from scratch
+- test that `prepare_variants.py` invokes `restrict_build_compatible.py` with both `--allow-strand-flips` and `--norm-indels` by default
+- test that `prepare_variants.py --no-allow-strand-flips` omits only `--allow-strand-flips`
+- test that `prepare_variants.py --no-norm-indels` omits only `--norm-indels`
+- test that `prepare_variants.py --no-allow-strand-flips --no-norm-indels` omits both flags
+- test that `prepare_variants.py` passes `--sort` to `restrict_build_compatible.py` when liftover is skipped
+- test that `prepare_variants.py --input-format sumstats --id-vtable` passes `--id-vtable` through to `import_sumstats.py`
+- test that `prepare_variants.py` does not invoke `sort_variants.py` and does not retain `.sorted.vmap`
+- test that `prepare_variants.py` keeps the retained stage path `<prefix>.build_compatible.vmap` for all four flag combinations
+- test that `prepare_variants.py --norm-indels` still completes the wrapper with the single retained build-compatible stage when the retained rows are pure SNPs
+
+- `project_payload.py` requires raw `--input`
+- `project_payload.py` requires `--input-format`
+- `project_payload.py` requires `--target`
+- `project_payload.py --target` always defines the target row set
+- `project_payload.py --target` accepts `.vtable` or `.vmap`
+- `project_payload.py` accepts optional `--source-vmap`
+- if `project_payload.py --target` is a `.vtable`, `--source-vmap` is required
+- if `project_payload.py --target` is a `.vmap`, `--source-vmap` is optional
+- if `project_payload.py --source-vmap` is supplied, the wrapper runs exact `match_vmap_to_target.py` semantics first, with no extra normalization or relaxed allele handling
+- if `project_payload.py --target` is a `.vmap` and `--source-vmap` is supplied, target provenance is ignored with the underlying `match_vmap_to_target.py` warning
+- if `project_payload.py --target` is a `.vmap` and `--source-vmap` is omitted, provenance comes from `--target` and the wrapper skips `match_vmap_to_target.py`
+- `project_payload.py` requires final `--output`
+- `project_payload.py` accepts optional `--prefix`; it defaults to `--output`, except that for `bfile` and `pfile` output prefixes containing `@` it defaults to `--output` with each `@` replaced by `all_targets`
+- `project_payload.py` accepts optional `--full-target`
+- for `bfile` input, `project_payload.py` accepts optional `--target-fam` and rejects `--target-psam`
+- for `pfile` input, `project_payload.py` accepts optional `--target-psam` and rejects `--target-fam`
+- for `bfile` and `pfile` input, `project_payload.py` accepts optional `--sample-id-mode {fid_iid,iid}` and passes it through unchanged to the canonical apply tool
+- for `bfile` and `pfile` input, `project_payload.py` accepts optional `--sample-axis union`
+- `project_payload.py` rejects `--sample-axis union` for `sumstats` and `sumstats-clean`
+- `project_payload.py` rejects `--sample-axis union` together with an explicit `--target-fam` or `--target-psam`
+- for `project_payload.py --input-format sumstats-clean`, `--fill-mode` and `--use-af-inference` are accepted and passed through unchanged to `apply_vmap_to_sumstats.py --clean`
+- `project_payload.py` requires `--sumstats-metadata` for `sumstats` and `sumstats-clean` input and rejects it for `bfile` and `pfile`
+- `project_payload.py` supports `sumstats`, `sumstats-clean`, `bfile`, and `pfile` input
+- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, `project_payload.py` skips the match step and applies `--target` directly
+- `project_payload.py` retains the matched `.vmap` exactly at `<prefix>.vmap`
+- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, no retained matched `<prefix>.vmap` is written
+- if `project_payload.py --sample-axis union` synthesizes a target sample file, it retains that file exactly as `<prefix>.target_samples.fam` for `bfile` input or `<prefix>.target_samples.psam` for `pfile` input
+- `project_payload.py --sample-axis union` only unions subject keys across referenced retained mapped shards, after wrapper row-retention filtering: mapped-only by default, or full-target under `--full-target`
+- `project_payload.py --sample-axis union` excludes shards discovered on disk that contribute no retained mapped variants
+- `project_payload.py --sample-axis union` warns and is a no-op for non-`@` input or when only one referenced shard remains
+- `project_payload.py --sample-axis union` synthesizes deterministic first-occurrence subject order across participating shards in deterministic shard order
+- for `bfile` input, `project_payload.py --sample-axis union` synthesizes `.fam` rows as `FID IID 0 0 sex -9`
+- for `pfile` input, `project_payload.py --sample-axis union` synthesizes `.psam` with `IID`
+- for `pfile` input under `--sample-id-mode=fid_iid`, `project_payload.py --sample-axis union` also synthesizes `FID` and fails clearly if participating source `.psam` files disagree on whether the header contains `FID`
+- for `pfile` input, synthesized `.psam` may include `SEX`, but it must omit arbitrary other source `.psam` columns rather than heuristically merging them
+- in `project_payload.py --sample-axis union`, missing sex plus known sex for the same subject key warns and keeps the known sex
+- in `project_payload.py --sample-axis union`, conflicting known male and known female codes for the same subject key fail
+- in `project_payload.py --sample-axis union`, duplicate subject keys within one source shard fail
+- `project_payload.py --prefix` must not contain `@`
+- `project_payload.py` then runs the format-appropriate `apply_vmap_*` tool
+- `project_payload.py` dispatches `sumstats-clean` input to `apply_vmap_to_sumstats.py --clean`
+- `project_payload.py` rejects `--fill-mode` and `--use-af-inference` outside `--input-format=sumstats-clean`
+- `project_payload.py` does not support `--resume`
+- `project_payload.py` supports `--force`
+- by default, `project_payload.py` fails if any wrapper-managed output already exists
+- for `bfile` and `pfile` output prefixes containing `@`, `project_payload.py` determines wrapper-managed PLINK outputs by replacing `@` with target contigs from `--target`, without glob-based inference
+- `project_payload.py` passes `--only-mapped-target` to the format-appropriate `apply_vmap_*` tool by default
+- `project_payload.py --full-target` suppresses that wrapper-added `--only-mapped-target`
+- `project_payload.py --target-fam`, `--target-psam`, and `--sample-id-mode` are passed through unchanged to the format-appropriate canonical apply tool
+- `project_payload.py` prints the invoked subcommands
+- for `sumstats` and `sumstats-clean` input, `project_payload.py --output` is the exact rewritten payload path and must not contain `@`
+- for `bfile` and `pfile` input, `project_payload.py --output` is the PLINK output prefix, may contain `@`, and is passed through to the canonical apply tool
+- test that the wrapper retains the matched `.vmap` produced by `match_vmap_to_target.py`
+- test that the retained matched mapping is written as exactly `<prefix>.vmap`
+- test that omitted `--prefix` defaults to `--output` for non-sharded outputs
+- test that omitted `--prefix` for `bfile` and `pfile` output prefixes containing `@` defaults to the same value with each `@` replaced by `all_targets`
+- test that `project_payload.py --prefix` rejects `@`
+- test that for `sumstats` and `sumstats-clean` input, `--output` is treated as the exact rewritten payload path and `@` is rejected
+- test that for `bfile` and `pfile` input, `--output` is treated as the PLINK output prefix and `@` is allowed
+- test that `project_payload.py` does not accept `--resume`
+- test that by default `project_payload.py` fails if the retained matched `.vmap`, retained synthesized target sample file, or final projected payload output already exists
+- test that `--force` deletes wrapper-managed outputs first, including retained synthesized target sample files, and then reruns cleanly from scratch
+- test that `project_payload.py` prints the invoked subcommands
+
+## Fixture strategy
+
+- Prefer small hand-written `.vtable`, `.vmap`, and sumstats fixtures.
+- Keep external-tool integration out of the default unit suite unless the canonical tool requires it.
+- Canonical tests must not depend on `.match`, source-side `.vmap` metadata, dual-build BIM, or hidden cross-build behavior.
+- The canonical cleanup workflow is import -> normalize or repair target contigs -> `restrict_build_compatible.py` with optional `--allow-strand-flips`, optional `--norm-indels`, and optional `--sort` -> optional liftover -> optional explicit standalone `sort_variants.py` -> optional `restrict_contigs.py` -> downstream match, materialize, and apply.

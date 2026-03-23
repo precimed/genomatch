@@ -1,0 +1,36 @@
+cleansumstats_metafile_kind: library
+cleansumstats_metafile_user: webuser
+cleansumstats_metafile_date: '2021-10-29'
+path_sumStats: input.txt.gz
+study_includedCohorts:
+  - iPSYCH2012
+study_Title: e2e_test
+study_PMID: e2e_test_pmid
+study_Year: 2020
+study_PhenoDesc: Broad depression
+path_supplementary: []
+study_PhenoCode:
+  - EFO:0003761
+study_AccessDate: '2021-10-29'
+study_Use: restricted
+study_Ancestry: EUR
+study_Gender: mixed
+stats_Model: logistic
+stats_TraitType: case-control
+stats_TotalN: 12441
+stats_CaseN: 12441
+stats_ControlN: 12441
+stats_GCMethod: none
+stats_neglog10P: false
+stats_log10P: false
+col_BETA: EFFECT_A1
+col_CHR: CHR
+col_EffectAllele: A1
+col_OtherAllele: A2
+col_P: P
+col_POS: BP
+col_SNP: SNP
+col_CaseN: Ncase
+col_ControlN: Ncont
+col_CaseEAF: CaseAF
+col_ControlEAF: ControlAF

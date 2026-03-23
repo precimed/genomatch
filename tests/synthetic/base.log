@@ -1,0 +1,37 @@
+PLINK v1.9.0-b.7.11 64-bit (19 Aug 2025)
+Options in effect:
+  --double-id
+  --make-bed
+  --out /home/oleksanf/github/precimed/genotools/match-test/synthetic/base
+  --vcf /home/oleksanf/github/precimed/genotools/match-test/synthetic/base.vcf
+
+Hostname: oleksanf-ThinkPad-L16-Gen-1
+Working directory: /home/oleksanf/github/precimed/genotools
+Start time: Mon Mar  9 13:46:27 2026
+
+Random number seed: 1773060387
+31600 MB RAM detected; reserving 15800 MB for main workspace.
+--vcf:
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base-temporary.bed
++
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base-temporary.bim
++
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base-temporary.fam
+written.
+100 variants loaded from .bim file.
+50 people (0 males, 0 females, 50 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base.nosex .
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 50 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+Total genotyping rate is 0.9908.
+100 variants and 50 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base.bed +
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base.bim +
+/home/oleksanf/github/precimed/genotools/match-test/synthetic/base.fam ...
+done.
+
+End time: Mon Mar  9 13:46:27 2026

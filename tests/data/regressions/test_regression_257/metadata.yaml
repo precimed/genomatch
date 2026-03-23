@@ -1,0 +1,37 @@
+cleansumstats_metafile_date: '2020-12-31'
+cleansumstats_metafile_user: username
+cleansumstats_metafile_kind: library
+path_sumStats: input.txt.gz
+col_CHR: CHR
+col_SNP: SNP
+col_POS: BP
+col_EffectAllele: A1
+col_OtherAllele: A2
+col_INFO: INFO
+col_OR: OR
+col_SE: SE
+col_P: P
+col_Direction: Direction
+stats_TotalN: 1
+stats_GCMethod: none
+stats_Model: logistic
+stats_Notes: 'dummy description'
+stats_TraitType: quantitative
+stats_neglog10P: false
+study_AccessDate: '2020-12-31'
+study_Ancestry: EUR
+study_Array: meta
+study_FilePortal: http://website.org/dummydata
+study_FileURL: http://website.org/dummydata/file.txt.gz
+study_Gender: mixed
+study_ImputePanel: HapMap
+study_ImputeSoftware: meta
+study_PMID: 666
+study_PhasePanel: meta
+study_PhaseSoftware: meta
+study_PhenoCode:
+- EFO:0000000
+study_PhenoDesc: 'phenotype description'
+study_Title: dummy_title
+study_Use: open
+study_Year: 2020
