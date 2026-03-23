@@ -2,6 +2,15 @@
 
 This document covers local development, test execution, and maintainer-facing packaging notes. End-user installation is documented in [INSTALL.md](INSTALL.md). Reference assets and `MATCH_CONFIG` setup are documented in [DOWNLOADS.md](DOWNLOADS.md).
 
+## Table of contents
+
+- [Local development environment](#local-development-environment)
+- [Running local workflows](#running-local-workflows)
+- [Running tests](#running-tests)
+- [Building runtime images](#building-runtime-images)
+- [Pre-release validation](#pre-release-validation)
+- [Actual release](#actual-release)
+
 ## Local development environment
 
 The canonical developer workflow is:
@@ -81,129 +90,61 @@ docker build -t genomatch:latest .
 If you need a local Singularity/Apptainer image derived from that Docker image, build it outside the repository workflow using your site-standard tooling. A typical local pattern is:
 
 ```bash
-apptainer build genomatch.sif docker-daemon://genomatch:latest
+apptainer build genomatch.sif docker-daemon:genomatch:latest
 ```
 
-## Maintainer notes
+## Pre-release validation
 
-This file is the place to document maintainer workflows for:
+The supported release path is the GitHub Actions workflow in `.github/workflows/release.yaml`.
+Tag pushes matching `v*` publish:
 
-- building and publishing container artifacts
-- preparing and publishing PyPI releases
+- `genomatch==<version>` to PyPI
+- `ghcr.io/precimed/genomatch:<version>` to GHCR
+- `ghcr.io/precimed/genomatch:latest` to GHCR
 
-Keep end-user install instructions in [INSTALL.md](INSTALL.md). Keep reference setup in [DOWNLOADS.md](DOWNLOADS.md).
+Manual `workflow_dispatch` runs are used to test the release path before tagging. They can publish:
 
-## Releasing a version
+- `genomatch==<version>` to TestPyPI
+- `ghcr.io/precimed/genomatch:<custom-tag>` to GHCR, for example `dev`
 
-The primary release path is the tag-driven GitHub Actions workflow in `.github/workflows/release.yaml`.
+### Release readiness
 
-The current release targets are:
+Treat a release as ready when all of the following are true:
 
-- PyPI package: `genomatch==<version>`
-- GHCR container: `ghcr.io/precimed/genomatch:<version>`
-- GHCR moving tag: `ghcr.io/precimed/genomatch:latest`
+- the repository version is correct and consistent in `pyproject.toml` and `src/genomatch/_version.py`
+- repository settings are in place:
+  - PyPI trusted publisher for `precimed/genomatch`, workflow `release.yaml`, environment `pypi`
+  - TestPyPI trusted publisher for `precimed/genomatch`, workflow `release.yaml`, environment `testpypi`
+  - GitHub Actions enabled for the repository
+  - GHCR publishing enabled for the repository
+- a manual `workflow_dispatch` publish test succeeds for the release surfaces you care about
+- the published manual workflow outputs are validated locally
 
-### Release readiness for `0.1.0`
+An optional dry run with `pypi_target=none` and `publish_ghcr=false` is a useful first check, but it is not required once the publish test path succeeds.
 
-`0.1.0` is ready to release from the repository side:
+### Test the release workflow
 
-- package metadata and console scripts are present in `pyproject.toml`
-- local package build succeeds
-- `twine check` passes on the built wheel and sdist
-- the Docker image builds successfully
-- the test suite passes in `match-liftover`
+Use `Actions -> Release -> Run workflow`.
 
-What still depends on maintainer credentials outside the repo:
+To test the Python package path:
 
-- PyPI upload permission for the `genomatch` project
-- GHCR push permission for `ghcr.io/precimed/genomatch`
-- GitHub repository settings configured for the release workflow
+1. set `pypi_target` to `testpypi`
+2. leave `publish_ghcr` unchecked unless you also want a container test
+3. optionally set `release_version` if you want the workflow to confirm an explicit version string
 
-### Primary release path: GitHub Actions workflow
+To test the container path:
 
-The workflow filename is `release.yaml`. It triggers on pushed tags matching `v*`.
-It also supports manual `workflow_dispatch` runs.
-
-Before the workflow can publish `0.1.0`, configure:
-
-- a PyPI trusted publisher for the `genomatch` project pointing at `precimed/genomatch`
-- workflow name set to `release.yaml`
-- environment name set to `pypi`
-- a separate TestPyPI trusted publisher for the `genomatch` project with workflow `release.yaml`
-- environment name set to `testpypi`
-- GitHub Actions enabled for this repository
-- GHCR package publishing enabled for this repository
-
-The workflow publishes:
-
-1. `genomatch==<version>` to PyPI
-2. `ghcr.io/precimed/genomatch:<version>` to GHCR
-3. `ghcr.io/precimed/genomatch:latest` to GHCR
-
-For manual runs, the same workflow can also publish:
-
-1. `genomatch==<version>` to TestPyPI
-2. `ghcr.io/precimed/genomatch:<custom-tag>` to GHCR, for example `dev`
-
-The workflow will:
-
-1. verify that the tag version matches `pyproject.toml` and `src/genomatch/_version.py`
-2. run the full test suite in a `match-liftover`-like micromamba environment
-3. build and validate the PyPI wheel and sdist
-4. publish the package to PyPI
-5. build and push `ghcr.io/precimed/genomatch:<version>` and `ghcr.io/precimed/genomatch:latest`
-
-### Manual workflow dry run
-
-You can test the workflow without publishing anything from the GitHub Actions UI:
-
-1. open the `Release` workflow
-2. choose `Run workflow`
-3. leave `pypi_target` as `none`
-4. leave `publish_ghcr` unchecked
-5. optionally leave `release_version` empty to validate the version already declared in the repository
-
-In this mode the workflow will still:
-
-- verify the package version metadata
-- run the full test suite
-- build and validate the wheel and sdist
-- build the Docker image locally in CI
-
-but it will skip:
-
-- PyPI publication
-- GHCR pushes
-
-### Manual workflow publish targets
-
-Use manual dispatch when you want to test publication without cutting a release tag.
-
-To publish to TestPyPI:
-
-1. open the `Release` workflow
-2. choose `Run workflow`
-3. set `pypi_target` to `testpypi`
-4. leave `publish_ghcr` unchecked unless you also want a container push
-5. optionally set `release_version` if you want the workflow to confirm an explicit version string
-
-To publish a `dev` container tag to GHCR:
-
-1. open the `Release` workflow
-2. choose `Run workflow`
-3. leave `pypi_target` as `none`, or set it to `testpypi` if you also want a package publish
-4. check `publish_ghcr`
-5. set `ghcr_tag` to `dev`
+1. leave `pypi_target` as `none`, or set it to `testpypi` if you also want a package publish
+2. check `publish_ghcr`
+3. set `ghcr_tag` to `dev`
 
 Manual GHCR runs push only the custom tag you request. They do not push `latest`.
 
 If you expect to upload multiple test package builds, use a PEP 440 development version such as `0.1.0.dev1`, `0.1.0.dev2`, and so on. TestPyPI, like PyPI, does not let you overwrite an existing version.
 
-### Validate manual publish outputs
+After a successful manual publish, validate the outputs locally.
 
-After a successful manual workflow run, validate each release surface separately.
-
-To validate a TestPyPI package in a clean environment:
+For TestPyPI:
 
 ```bash
 conda create -n genomatch-testpypi -c conda-forge -c bioconda \
@@ -220,118 +161,30 @@ prepare_variants.py --help
 
 If you published a development version such as `0.1.0.dev1`, install that exact version string.
 
-To validate a manual GHCR `dev` tag with Apptainer:
+For GHCR:
 
 ```bash
 apptainer pull genomatch-dev.sif docker://ghcr.io/precimed/genomatch:dev
 apptainer exec genomatch-dev.sif prepare_variants.py --help
 ```
 
-### Preferred release flow
+## Actual release
 
-1. Make sure the release commit is already on GitHub and includes `.github/workflows/release.yaml`.
-2. Create and push the version tag:
+After release readiness is established:
+
+1. update the version in `pyproject.toml` and `src/genomatch/_version.py`
+2. push that release commit to GitHub
+3. create and push the version tag:
 
 ```bash
 git tag -a "v<version>" -m "genomatch <version>"
 git push origin "v<version>"
 ```
 
-3. Watch the `Release` workflow in GitHub Actions.
-4. After success, verify the published PyPI package and GHCR image.
+4. watch the `Release` workflow in GitHub Actions publish all artifacts
+5. verify the published release locally
 
-### Local fallback only
-
-The remaining sections describe the equivalent local fallback workflow for maintainers. Use it only when you need a manual release path outside GitHub Actions.
-
-### 1. Prepare the release commit
-
-If you are preparing a new release version, update both version declarations in the same commit:
-
-```bash
-$EDITOR pyproject.toml
-$EDITOR src/genomatch/_version.py
-git commit -am "Release genomatch <version>"
-git tag -a "v<version>" -m "genomatch <version>"
-```
-
-For `0.1.0`, both files should already say `0.1.0`.
-
-### 2. Build the PyPI artifacts
-
-Run the build from the repository root with `python -P` so the current working directory is not prepended to `sys.path`. This avoids local artifact directories such as `build/` shadowing the PyPA `build` package.
-
-Also use `--no-isolation`, because the default isolated build mode tries to download build dependencies from the network.
-
-```bash
-rm -rf build dist src/genomatch.egg-info
-python -P -m build --no-isolation .
-```
-
-Validate the artifacts:
-
-```bash
-python -m twine check dist/*
-```
-
-### 3. Upload the PyPI release
-
-Upload only after the test suite and artifact checks pass:
-
-```bash
-python -m twine upload dist/*
-```
-
-If you want to test the publication path first, upload to TestPyPI instead:
-
-```bash
-python -m twine upload --repository testpypi dist/*
-```
-
-### 4. Build and publish the GHCR container
-
-Build and tag the OCI image with both the release tag and `latest`:
-
-```bash
-docker build \
-  -t ghcr.io/precimed/genomatch:<version> \
-  -t ghcr.io/precimed/genomatch:latest \
-  .
-```
-
-Log in to GHCR and push both tags:
-
-```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
-docker push ghcr.io/precimed/genomatch:<version>
-docker push ghcr.io/precimed/genomatch:latest
-```
-
-For `0.1.0`, that becomes:
-
-```bash
-docker build \
-  -t ghcr.io/precimed/genomatch:0.1.0 \
-  -t ghcr.io/precimed/genomatch:latest \
-  .
-
-docker push ghcr.io/precimed/genomatch:0.1.0
-docker push ghcr.io/precimed/genomatch:latest
-```
-
-The published GHCR image can be converted locally into a SIF with Apptainer via:
-
-```bash
-apptainer pull genomatch.sif docker://ghcr.io/precimed/genomatch:0.1.0
-```
-
-or:
-
-```bash
-apptainer pull genomatch.sif docker://ghcr.io/precimed/genomatch:latest
-```
-
-### 5. Verify the published release
+### Verify the published release
 
 After publication, verify both release surfaces:
 
@@ -347,13 +200,8 @@ apptainer exec genomatch.sif prepare_variants.py --help
 
 ### Pre-release checklist
 
-Run this before uploading or pushing release tags:
+Run this before pushing the release tag:
 
-```bash
-conda activate match-liftover
-pytest tests
-docker build -t genomatch:test .
-rm -rf build dist src/genomatch.egg-info
-python -P -m build --no-isolation .
-python -m twine check dist/*
-```
+- confirm the intended version in `pyproject.toml` and `src/genomatch/_version.py`
+- run a successful manual `workflow_dispatch` publish test for TestPyPI and, if relevant, the GHCR `dev` tag
+- validate the published manual workflow outputs locally

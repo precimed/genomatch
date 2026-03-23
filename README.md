@@ -4,8 +4,9 @@ This toolkit harmonizes genetic variant data across common research formats and 
 
 ## Table of contents
 
-This README is organized from concepts to workflows to reference details. It starts with the core mental model, then shows the common `prepare_variants.py` / `intersect_variants.py` / `project_payload.py` workflow with a concrete usage example. After that it covers core objects, metadata, and canonical tools in more detail, and finishes with short wrapper overviews that point to [spec/workflow.md](spec/workflow.md) for authoritative wrapper semantics.
+This README starts with end-user setup pointers, then introduces the core mental model, the common `prepare_variants.py` / `intersect_variants.py` / `project_payload.py` workflow, and the canonical tool surface. It finishes with the detailed object and tool summaries that point to [spec/workflow.md](spec/workflow.md) and the rest of the spec for authoritative semantics.
 
+- [Getting started](#getting-started)
 - [Core mental model](#core-mental-model)
 - [Canonical tools vs common workflow](#canonical-tools-vs-common-workflow)
 - [Workflow tools](#workflow-tools)
