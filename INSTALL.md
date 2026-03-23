@@ -4,7 +4,16 @@ This document covers supported end-user installation paths. Development/source-c
 
 ## Option 1: `pip install genomatch`
 
-This path assumes the non-Python runtime dependencies are already available through your environment management channel:
+Create a user runtime environment with the external toolchain first:
+
+```bash
+conda create -n genomatch -c conda-forge -c bioconda \
+  python=3.12 bcftools bcftools-liftover-plugin samtools pip
+
+conda activate genomatch
+```
+
+This path assumes the following runtime dependencies come from that environment or another system package manager:
 
 - `bcftools`
 - `bcftools-liftover-plugin`
@@ -22,6 +31,13 @@ Validate the CLI tools:
 ```bash
 prepare_variants.py --help
 project_payload.py --help
+```
+
+To update an existing environment to the newest published package version:
+
+```bash
+conda activate genomatch
+python -m pip install --upgrade genomatch
 ```
 
 For reference-aware commands, also configure your reference tree and `MATCH_CONFIG` as described in [DOWNLOADS.md](DOWNLOADS.md).
