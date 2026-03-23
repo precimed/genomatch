@@ -14,13 +14,19 @@ from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
 from .bfile_utils import (
     HAPLOID_SCHEMA,
     BimRow,
+    PackedBedRemapPlan,
+    build_packed_bed_remap_plan,
+    bytes_per_bed_row,
     count_target_ploidy_genotype_issues,
+    decode_bed_chunk,
+    missing_bed_row,
     read_bim,
-    read_bed_selected,
-    swap_genotypes,
+    read_bed_selected_chunks,
+    remap_bed_chunk,
+    swap_bed_chunk,
     validate_alleles,
-    write_bed_matrix,
     write_bim,
+    write_bed_chunks,
 )
 from .haploid_utils import expected_ploidy_pair, has_non_diploid_ploidy
 from .contig_utils import supported_exact_contig_tokens
@@ -31,15 +37,7 @@ from .sample_axis_utils import (
     parse_fam_table,
     require_identical_sample_signatures,
 )
-from .vtable_utils import (
-    load_metadata,
-    MISSING_SOURCE_SHARD,
-    normalize_chrom_label,
-    read_vmap,
-    require_contig_naming,
-    require_rows_match_contig_naming,
-    validate_vmap_metadata,
-)
+from .vtable_utils import load_metadata, MISSING_SOURCE_SHARD, read_vmap, require_contig_naming, require_rows_match_contig_naming, validate_vmap_metadata
 
 
 @dataclass(frozen=True)
@@ -148,6 +146,10 @@ def chunked_indices(indices: Sequence[int], chunk_size: int) -> Iterable[Sequenc
         yield indices[start : start + chunk_size]
 
 
+def chunk_count(total_items: int, chunk_size: int) -> int:
+    return (total_items + chunk_size - 1) // chunk_size
+
+
 def prepare_source_payloads(
     args: argparse.Namespace,
     needed_by_shard: Dict[str, Set[int]],
@@ -226,7 +228,7 @@ def resolve_target_ploidy_rows(target_rows: Sequence[BimRow], *, target_build: s
     ]
 
 
-def load_chunk_source_genotypes(
+def load_chunk_source_bed_chunks(
     chunk_indices: Sequence[int],
     vmap_rows,
     prepared_sources: Dict[str, PreparedSourceShard],
@@ -237,7 +239,7 @@ def load_chunk_source_genotypes(
         if row.source_index == -1:
             continue
         needed.setdefault(row.source_shard, set()).add(row.source_index)
-    source_genos: Dict[Tuple[str, int], bytes] = {}
+    source_chunks: Dict[Tuple[str, int], bytes] = {}
     for source_shard, selected_indices in sorted(needed.items()):
         prepared = prepared_sources.get(source_shard)
         if prepared is None:
@@ -253,18 +255,10 @@ def load_chunk_source_genotypes(
                 f"vmap source provenance out of range for source_shard={source_shard!r}: "
                 f"first missing source_index={missing_indices[0]}"
             )
-        shard_genos = read_bed_selected(prepared.bed_path, prepared.n_samples, prepared.n_snps, selected_indices)
-        for source_index, genos in shard_genos.items():
-            source_genos[(source_shard, source_index)] = genos
-    return source_genos
-
-
-def scatter_genotypes(local_genos: bytes, local_to_output: Sequence[int], output_sample_count: int) -> bytes:
-    out = bytearray([1]) * output_sample_count
-    for local_idx, output_idx in enumerate(local_to_output):
-        if output_idx != -1:
-            out[output_idx] = local_genos[local_idx]
-    return bytes(out)
+        shard_chunks = read_bed_selected_chunks(prepared.bed_path, prepared.n_samples, prepared.n_snps, selected_indices)
+        for source_index, chunk in shard_chunks.items():
+            source_chunks[(source_shard, source_index)] = chunk
+    return source_chunks
 
 
 def main() -> int:
@@ -314,8 +308,16 @@ def main() -> int:
     )
     n_samples = sample_axis_plan.output_sample_count
     missing_count = sum(1 for row in vmap_rows if row.source_index == -1)
-    missing_row = bytes([1]) * n_samples
+    packed_missing_row = missing_bed_row(n_samples)
+    output_bytes_per_snp = bytes_per_bed_row(n_samples)
     chunk_size = resolve_chunk_size()
+    identity_sample_axis = not sample_axis_plan.reconciliation_active
+    packed_sample_axis_plans: Dict[str, PackedBedRemapPlan] = {}
+    if not identity_sample_axis:
+        packed_sample_axis_plans = {
+            shard: build_packed_bed_remap_plan(local_to_output, n_samples)
+            for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
+        }
 
     ploidy_rows = resolve_target_ploidy_rows(
         target_rows,
@@ -325,48 +327,73 @@ def main() -> int:
     absent_nonmissing_incompatible_count = 0
     unknown_sex_unvalidated_count = 0
 
-    def row_genotypes(idx: int, source_genos: Dict[Tuple[str, int], bytes], swapped_cache: Dict[Tuple[str, int], bytes]) -> bytes:
+    def row_bed_chunk(
+        idx: int,
+        source_chunks: Dict[Tuple[str, int], bytes],
+        swapped_packed_cache: Dict[Tuple[str, int], bytes],
+        remapped_packed_cache: Dict[Tuple[str, int, bool], bytes],
+    ) -> bytes:
         nonlocal haploid_het_incompatible_count, absent_nonmissing_incompatible_count, unknown_sex_unvalidated_count
         row = vmap_rows[idx]
+        ploidy_pair = ploidy_rows[idx]
+        needs_ploidy_validation = has_non_diploid_ploidy(ploidy_pair)
+        needs_swap = row.allele_op in {"swap", "flip_swap"}
         if row.source_index == -1:
-            genos = missing_row
+            packed_chunk = packed_missing_row
         else:
             key = (row.source_shard, row.source_index)
-            genos = source_genos.get(key)
-            if genos is None:
+            packed_chunk = source_chunks.get(key)
+            if packed_chunk is None:
                 raise ValueError(
                     f"missing source genotypes for requested SNP: "
                     f"source_shard={row.source_shard!r}, source_index={row.source_index}"
                 )
-            if row.allele_op in {"swap", "flip_swap"}:
-                swapped = swapped_cache.get(key)
-                if swapped is None:
-                    swapped = swap_genotypes(genos)
-                    swapped_cache[key] = swapped
-                genos = swapped
-            genos = scatter_genotypes(
-                genos,
-                sample_axis_plan.source_local_to_output[row.source_shard],
-                n_samples,
-            )
+            if needs_swap:
+                swapped_packed = swapped_packed_cache.get(key)
+                if swapped_packed is None:
+                    swapped_packed = swap_bed_chunk(packed_chunk)
+                    swapped_packed_cache[key] = swapped_packed
+                packed_chunk = swapped_packed
+            if not identity_sample_axis:
+                remapped_key = (row.source_shard, row.source_index, needs_swap)
+                remapped_chunk = remapped_packed_cache.get(remapped_key)
+                if remapped_chunk is None:
+                    remapped_chunk = remap_bed_chunk(packed_chunk, packed_sample_axis_plans[row.source_shard])
+                    remapped_packed_cache[remapped_key] = remapped_chunk
+                packed_chunk = remapped_chunk
+        if not needs_ploidy_validation:
+            return packed_chunk
+
+        genos = decode_bed_chunk(packed_chunk, n_samples)
         haploid_issues, absent_issues, unknown_sex_issues = count_target_ploidy_genotype_issues(
             genos,
             sample_axis_plan.output_sexes,
-            ploidy_rows[idx][0],
-            ploidy_rows[idx][1],
+            ploidy_pair[0],
+            ploidy_pair[1],
             target_rows[idx],
         )
         haploid_het_incompatible_count += haploid_issues
         absent_nonmissing_incompatible_count += absent_issues
         unknown_sex_unvalidated_count += unknown_sex_issues
-        return genos
+        return packed_chunk
 
-    def iter_output_rows(indices: Sequence[int]) -> Iterable[Sequence[int]]:
-        for chunk in chunked_indices(indices, chunk_size):
-            source_genos = load_chunk_source_genotypes(chunk, vmap_rows, prepared_sources)
-            swapped_cache: Dict[Tuple[str, int], bytes] = {}
+    def iter_output_rows(indices: Sequence[int], output_bed_path: Path) -> Iterable[bytes]:
+        total_chunks = chunk_count(len(indices), chunk_size)
+        for done_chunks, chunk in enumerate(chunked_indices(indices, chunk_size), start=1):
+            source_chunks = load_chunk_source_bed_chunks(chunk, vmap_rows, prepared_sources)
+            swapped_packed_cache: Dict[Tuple[str, int], bytes] = {}
+            remapped_packed_cache: Dict[Tuple[str, int, bool], bytes] = {}
             for idx in chunk:
-                yield row_genotypes(idx, source_genos, swapped_cache)
+                yield row_bed_chunk(
+                    idx,
+                    source_chunks,
+                    swapped_packed_cache,
+                    remapped_packed_cache,
+                )
+            print(
+                f"apply_vmap_to_bfile.py progress: {done_chunks}/{total_chunks} chunks -> {output_bed_path}",
+                file=sys.stderr,
+            )
 
     for shard_out_prefix, indices in grouped_output_indices(vmap_rows, args.output_prefix):
         out_bim = bfile_component(shard_out_prefix, ".bim")
@@ -381,7 +408,7 @@ def main() -> int:
             with open(out_ploidy, "w", encoding="utf-8", newline="\n") as handle:
                 for male, female in shard_ploidy_rows:
                     handle.write(f"{male}\t{female}\n")
-        write_bed_matrix(out_bed, iter_output_rows(indices), n_samples)
+        write_bed_chunks(out_bed, iter_output_rows(indices, out_bed), bytes_per_snp=output_bytes_per_snp)
     if haploid_het_incompatible_count or absent_nonmissing_incompatible_count:
         parts: List[str] = []
         if haploid_het_incompatible_count:

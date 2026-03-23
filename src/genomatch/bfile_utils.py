@@ -3,13 +3,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
+
+import numpy as np
 
 from .haploid_utils import HAPLOID_SCHEMA_PATH as HAPLOID_SCHEMA
 from .haploid_utils import HAPLOID_CHROMS, expected_ploidy_pair, is_sex_dependent_ploidy
 
 
 ALLOWED_BASES = {"A", "C", "G", "T"}
+BED_HEADER = b"\x6c\x1b\x01"
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,16 @@ class BimRow:
     bp: str
     a1: str
     a2: str
+
+
+@dataclass(frozen=True)
+class PackedBedRemapPlan:
+    output_sample_count: int
+    output_bytes_per_snp: int
+    base_missing_chunk: np.ndarray
+    output_byte_indices: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    source_byte_indices: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    source_shifts: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 
 
 def read_bim(path: Path) -> List[BimRow]:
@@ -113,6 +126,23 @@ def count_target_ploidy_genotype_issues(
     return haploid_het_incompatible, absent_nonmissing_incompatible, unknown_sex_unvalidated
 
 
+def bytes_per_bed_row(n_samples: int) -> int:
+    return (n_samples + 3) // 4
+
+
+def _validate_bed_header_and_size(handle, *, n_samples: int, n_snps: int) -> int:
+    bytes_per_snp = bytes_per_bed_row(n_samples)
+    header = handle.read(len(BED_HEADER))
+    if header != BED_HEADER:
+        raise ValueError("unsupported .bed format (expected SNP-major)")
+    handle.seek(0, 2)
+    file_size = handle.tell()
+    expected_size = len(BED_HEADER) + bytes_per_snp * n_snps
+    if file_size < expected_size:
+        raise ValueError(".bed file is shorter than expected")
+    return bytes_per_snp
+
+
 def decode_bed_chunk(chunk: bytes, n_samples: int) -> bytes:
     genos = bytearray(n_samples)
     idx = 0
@@ -125,6 +155,131 @@ def decode_bed_chunk(chunk: bytes, n_samples: int) -> bytes:
     return bytes(genos)
 
 
+def _swap_packed_bed_byte(value: int) -> int:
+    swapped = 0
+    for shift in range(0, 8, 2):
+        geno = (value >> shift) & 0b11
+        if geno == 0:
+            new_geno = 3
+        elif geno == 3:
+            new_geno = 0
+        else:
+            new_geno = geno
+        swapped |= new_geno << shift
+    return swapped
+
+
+SWAP_BED_CHUNK_TABLE = bytes(_swap_packed_bed_byte(value) for value in range(256))
+
+
+def swap_bed_chunk(chunk: bytes) -> bytes:
+    return chunk.translate(SWAP_BED_CHUNK_TABLE)
+
+
+def encode_bed_row(genos: Sequence[int], n_samples: int) -> bytes:
+    if len(genos) != n_samples:
+        raise ValueError("genotype row length does not match sample count")
+    out = bytearray()
+    for i in range(0, n_samples, 4):
+        byte = 0
+        for j in range(4):
+            idx = i + j
+            geno = 0 if idx >= n_samples else genos[idx]
+            if geno < 0 or geno > 3:
+                raise ValueError("genotype code out of range")
+            byte |= (geno & 0b11) << (2 * j)
+        out.append(byte)
+    if len(out) != bytes_per_bed_row(n_samples):
+        raise ValueError("unexpected .bed encoding length")
+    return bytes(out)
+
+
+def missing_bed_row(n_samples: int) -> bytes:
+    full_bytes, remainder = divmod(n_samples, 4)
+    out = bytearray([0b01010101]) * full_bytes
+    if remainder:
+        byte = 0
+        for shift in range(0, remainder * 2, 2):
+            byte |= 0b01 << shift
+        out.append(byte)
+    return bytes(out)
+
+
+def build_packed_bed_remap_plan(local_to_output: Sequence[int], output_sample_count: int) -> PackedBedRemapPlan:
+    output_to_local = [-1] * output_sample_count
+    for local_idx, output_idx in enumerate(local_to_output):
+        if output_idx == -1:
+            continue
+        if output_idx < 0 or output_idx >= output_sample_count:
+            raise ValueError(
+                f"sample-axis mapping output index out of range: {output_idx} for output_sample_count={output_sample_count}"
+            )
+        if output_to_local[output_idx] != -1:
+            raise ValueError(f"duplicate output sample index in sample-axis mapping: {output_idx}")
+        output_to_local[output_idx] = local_idx
+
+    slot_output_byte_indices: list[np.ndarray] = []
+    slot_source_byte_indices: list[np.ndarray] = []
+    slot_source_shifts: list[np.ndarray] = []
+    for slot in range(4):
+        output_byte_indices: list[int] = []
+        source_byte_indices: list[int] = []
+        source_shifts: list[int] = []
+        for output_idx, local_idx in enumerate(output_to_local):
+            if output_idx % 4 != slot or local_idx == -1:
+                continue
+            output_byte_indices.append(output_idx // 4)
+            source_byte_indices.append(local_idx // 4)
+            source_shifts.append((local_idx % 4) * 2)
+        slot_output_byte_indices.append(np.asarray(output_byte_indices, dtype=np.intp))
+        slot_source_byte_indices.append(np.asarray(source_byte_indices, dtype=np.intp))
+        slot_source_shifts.append(np.asarray(source_shifts, dtype=np.uint8))
+
+    return PackedBedRemapPlan(
+        output_sample_count=output_sample_count,
+        output_bytes_per_snp=bytes_per_bed_row(output_sample_count),
+        base_missing_chunk=np.frombuffer(missing_bed_row(output_sample_count), dtype=np.uint8).copy(),
+        output_byte_indices=tuple(slot_output_byte_indices),  # type: ignore[arg-type]
+        source_byte_indices=tuple(slot_source_byte_indices),  # type: ignore[arg-type]
+        source_shifts=tuple(slot_source_shifts),  # type: ignore[arg-type]
+    )
+
+
+def remap_bed_chunk(chunk: bytes, plan: PackedBedRemapPlan) -> bytes:
+    source = np.frombuffer(chunk, dtype=np.uint8)
+    out = plan.base_missing_chunk.copy()
+    for slot in range(4):
+        output_byte_indices = plan.output_byte_indices[slot]
+        if output_byte_indices.size == 0:
+            continue
+        source_values = source[plan.source_byte_indices[slot]]
+        source_values = (source_values >> plan.source_shifts[slot]) & np.uint8(0b11)
+        output_shift = np.uint8(slot * 2)
+        output_mask = np.uint8(0b11 << (slot * 2))
+        current = out[output_byte_indices]
+        out[output_byte_indices] = (current & np.uint8(~int(output_mask) & 0xFF)) | (source_values << output_shift)
+    return out.tobytes()
+
+
+def read_bed_selected_chunks(
+    bed_path: Path, n_samples: int, n_snps: int, selected_indices: Iterable[int]
+) -> Dict[int, bytes]:
+    indices = sorted(set(selected_indices))
+    if not indices:
+        return {}
+    with open(bed_path, "rb") as handle:
+        bytes_per_snp = _validate_bed_header_and_size(handle, n_samples=n_samples, n_snps=n_snps)
+        data: Dict[int, bytes] = {}
+        for idx in indices:
+            offset = len(BED_HEADER) + idx * bytes_per_snp
+            handle.seek(offset)
+            chunk = handle.read(bytes_per_snp)
+            if len(chunk) != bytes_per_snp:
+                raise ValueError(".bed file is shorter than expected")
+            data[idx] = chunk
+    return data
+
+
 def read_bed_selected(
     bed_path: Path, n_samples: int, n_snps: int, selected_indices: Iterable[int]
 ) -> Dict[int, bytes]:
@@ -133,17 +288,10 @@ def read_bed_selected(
         return {}
     bytes_per_snp = (n_samples + 3) // 4
     with open(bed_path, "rb") as handle:
-        header = handle.read(3)
-        if header != b"\x6c\x1b\x01":
-            raise ValueError("unsupported .bed format (expected SNP-major)")
-        handle.seek(0, 2)
-        file_size = handle.tell()
-        expected_size = 3 + bytes_per_snp * n_snps
-        if file_size < expected_size:
-            raise ValueError(".bed file is shorter than expected")
+        bytes_per_snp = _validate_bed_header_and_size(handle, n_samples=n_samples, n_snps=n_snps)
         data: Dict[int, bytes] = {}
         for idx in indices:
-            offset = 3 + idx * bytes_per_snp
+            offset = len(BED_HEADER) + idx * bytes_per_snp
             handle.seek(offset)
             chunk = handle.read(bytes_per_snp)
             if len(chunk) != bytes_per_snp:
@@ -152,26 +300,21 @@ def read_bed_selected(
     return data
 
 
-def write_bed_matrix(path: Path, matrix: Iterable[Sequence[int]], n_samples: int) -> None:
-    bytes_per_snp = (n_samples + 3) // 4
+def write_bed_chunks(path: Path, chunks: Iterable[bytes], *, bytes_per_snp: int) -> None:
     with open(path, "wb") as handle:
-        handle.write(b"\x6c\x1b\x01")
-        for genos in matrix:
-            if len(genos) != n_samples:
-                raise ValueError("genotype row length does not match sample count")
-            out = bytearray()
-            for i in range(0, n_samples, 4):
-                byte = 0
-                for j in range(4):
-                    idx = i + j
-                    geno = 0 if idx >= n_samples else genos[idx]
-                    if geno < 0 or geno > 3:
-                        raise ValueError("genotype code out of range")
-                    byte |= (geno & 0b11) << (2 * j)
-                out.append(byte)
-            if len(out) != bytes_per_snp:
-                raise ValueError("unexpected .bed encoding length")
-            handle.write(out)
+        handle.write(BED_HEADER)
+        for chunk in chunks:
+            if len(chunk) != bytes_per_snp:
+                raise ValueError("unexpected .bed chunk length")
+            handle.write(chunk)
+
+
+def write_bed_matrix(path: Path, matrix: Iterable[Sequence[int]], n_samples: int) -> None:
+    write_bed_chunks(
+        path,
+        (encode_bed_row(genos, n_samples) for genos in matrix),
+        bytes_per_snp=bytes_per_bed_row(n_samples),
+    )
 
 
 def swap_genotypes(genos: Sequence[int]) -> bytes:

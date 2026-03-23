@@ -112,6 +112,8 @@ Manual `workflow_dispatch` runs are used to test the release path before tagging
 Treat a release as ready when all of the following are true:
 
 - the repository version is correct and consistent in `pyproject.toml` and `src/genomatch/_version.py`
+- `CHANGELOG.md` follows the release convention:
+  ongoing work stays under `## [Unreleased]` on the development branch, and immediately before a release that heading is replaced by `## [<version>] - YYYY-MM-DD` for the release being tagged
 - repository settings are in place:
   - PyPI trusted publisher for `precimed/genomatch`, workflow `release.yaml`, environment `pypi`
   - TestPyPI trusted publisher for `precimed/genomatch`, workflow `release.yaml`, environment `testpypi`
@@ -173,16 +175,18 @@ apptainer exec genomatch-dev.sif prepare_variants.py --help
 After release readiness is established:
 
 1. update the version in `pyproject.toml` and `src/genomatch/_version.py`
-2. push that release commit to GitHub
-3. create and push the version tag:
+2. update `CHANGELOG.md` for the release:
+   replace `## [Unreleased]` with `## [<version>] - YYYY-MM-DD` and keep the pending changes under that new release heading
+3. push that release commit to GitHub
+4. create and push the version tag:
 
 ```bash
 git tag -a "v<version>" -m "genomatch <version>"
 git push origin "v<version>"
 ```
 
-4. watch the `Release` workflow in GitHub Actions publish all artifacts
-5. verify the published release locally
+5. watch the `Release` workflow in GitHub Actions publish all artifacts
+6. verify the published release locally
 
 ### Verify the published release
 
@@ -203,5 +207,6 @@ apptainer exec genomatch.sif prepare_variants.py --help
 Run this before pushing the release tag:
 
 - confirm the intended version in `pyproject.toml` and `src/genomatch/_version.py`
+- confirm `CHANGELOG.md` has been converted from `## [Unreleased]` to `## [<version>] - YYYY-MM-DD` for the release commit
 - run a successful manual `workflow_dispatch` publish test for TestPyPI and, if relevant, the GHCR `dev` tag
 - validate the published manual workflow outputs locally

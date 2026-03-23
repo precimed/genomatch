@@ -89,6 +89,40 @@ def test_apply_vmap_to_bfile_treats_flip_swap_as_genotype_swap(tmp_path):
     assert read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 1) == [[3, 0]]
 
 
+def test_apply_vmap_to_bfile_reports_chunk_progress(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_bfile(
+        source_prefix,
+        ["1\trs1\t0\t100\tA\tG", "1\trs2\t0\t200\tC\tT"],
+        ["S1 S1 0 0 0 -9"],
+        [[0], [3]],
+    )
+    write_lines(
+        vmap,
+        [
+            "1\t100\tt1\tA\tG\t.\t0\tidentity",
+            "1\t200\tt2\tC\tT\t.\t1\tidentity",
+        ],
+    )
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py_with_env(
+        "apply_vmap_to_bfile.py",
+        {"MATCH_BFILE_APPLY_CHUNK_SIZE": "1"},
+        "--source-prefix",
+        source_prefix,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "apply_vmap_to_bfile.py progress: 1/2 chunks" in result.stderr
+    assert "apply_vmap_to_bfile.py progress: 2/2 chunks" in result.stderr
+
+
 def test_apply_vmap_to_bfile_warns_about_unknown_sex_only_for_sex_dependent_rows(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
