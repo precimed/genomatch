@@ -94,7 +94,7 @@ jobs:
             pytest
             pyyaml
             pgenlib
-            build
+            python-build
             twine
           condarc: |
             channels:
