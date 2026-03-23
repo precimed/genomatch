@@ -135,31 +135,32 @@ The current config shape is:
 references:
   ucsc:
     GRCh37:
-      fasta: ref/ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
+      fasta: ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
     GRCh38:
-      fasta: ref/ucsc/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+      fasta: ucsc/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
   ncbi:
     GRCh37:
-      fasta: ref/ncbi/GRCh37/human_g1k_v37.fasta
+      fasta: ncbi/GRCh37/human_g1k_v37.fasta
     GRCh38:
-      fasta: ref/ncbi/GRCh38/GRCh38.primary.fa
+      fasta: ncbi/GRCh38/GRCh38.primary.fa
 chain:
-  hg19ToHg38: ref/chain/hg19ToHg38.over.chain.gz
-  hg38ToHg19: ref/chain/hg38ToHg19.over.chain.gz
+  hg19ToHg38: chain/hg19ToHg38.over.chain.gz
+  hg38ToHg19: chain/hg38ToHg19.over.chain.gz
 ```
 
 Notes:
 
 - Paths may be absolute or relative to the config file.
+- The recommended layout is to place `config.yaml` inside the root of the `ref/` tree, so relative paths like `ucsc/...` and `chain/...` resolve naturally.
 - `references.ucsc.*` is the active internal reference set for current reference-aware tools.
 - `references.ncbi.*` is optional and currently unused by the implementation.
 - `chain.*` is the active chain-file configuration block and matches the on-disk `ref/chain/` layout.
 - Current reference-aware tools do not treat UCSC and NCBI-style FASTA assets as interchangeable.
 
-Save this as `config.yaml` next to your `ref/` tree, then export:
+Save this as `ref/config.yaml`, then export:
 
 ```bash
-export MATCH_CONFIG=/path/to/config.yaml
+export MATCH_CONFIG=/path/to/ref/config.yaml
 ```
 
-`MATCH_CONFIG` is required for reference-aware tools.
+If `MATCH_CONFIG` is unset, reference-aware tools also fall back to `/ref/config.yaml`, which is convenient for container runs that bind the host reference tree to `/ref`.

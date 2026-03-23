@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Tuple
 
+DEFAULT_MATCH_CONFIG = Path("/ref/config.yaml")
+
 
 def _load_yaml(path: Path) -> Dict[str, object]:
     try:
@@ -22,8 +24,10 @@ def resolve_config_path() -> Path:
     override = os.environ.get("MATCH_CONFIG")
     if override:
         return Path(override)
+    if DEFAULT_MATCH_CONFIG.exists():
+        return DEFAULT_MATCH_CONFIG
     raise ValueError(
-        "MATCH_CONFIG is required; point it to a user-provided config.yaml placed next to your ref/ tree"
+        "MATCH_CONFIG is required unless /ref/config.yaml exists; point it to a user-provided config.yaml"
     )
 
 

@@ -49,13 +49,21 @@ Pull the published GHCR container image with Apptainer via its `docker://` refer
 Typical use looks like:
 
 ```bash
-apptainer pull genomatch.sif docker://ghcr.io/<publisher>/<package>:<tag>
+apptainer pull genomatch.sif docker://ghcr.io/precimed/genomatch:<tag>
 
 apptainer exec \
-  --bind "$PWD":/work \
-  --env MATCH_CONFIG=/work/config.yaml \
+  --home "$PWD":/work \
+  --pwd /work \
+  --bind /path/to/ref:/ref \
   genomatch.sif \
   prepare_variants.py --help
 ```
 
-Any paths referenced from `MATCH_CONFIG` must also be visible inside the container. See [DOWNLOADS.md](DOWNLOADS.md) for the required reference layout and config shape.
+This example assumes:
+
+- your current directory contains the input and output files you want to work with
+- the host reference tree lives at `/path/to/ref`
+- the reference tree includes `/path/to/ref/config.yaml`
+- that config uses paths relative to itself, such as `ucsc/...` and `chain/...`
+
+With that layout, the container finds `/ref/config.yaml` automatically and resolves the rest of the reference assets under `/ref/...`. If you use a different layout, set `MATCH_CONFIG` explicitly and make sure every path referenced from that config exists inside the container at the same path written in the file. See [DOWNLOADS.md](DOWNLOADS.md) for the required reference layout and config shape.

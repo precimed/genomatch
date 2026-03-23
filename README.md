@@ -15,13 +15,12 @@ This README is organized from concepts to workflows to reference details. It sta
 
 ## Getting started
 
-Before running the reference-aware tools and wrappers:
+For end-user setup:
 
-1. Install the runtime either with `pip install genomatch` on top of local `bcftools` plus `+liftover`, or via the published Apptainer image.
-2. Download the required reference data and place your own `config.yaml` next to that reference tree.
-3. Set `MATCH_CONFIG=/path/to/config.yaml`.
+1. Follow [INSTALL.md](INSTALL.md) to install the runtime, either with `pip install genomatch` on top of local `bcftools` plus `+liftover`, or via the published Apptainer image.
+2. Follow [DOWNLOADS.md](DOWNLOADS.md) to download the required reference data, place `config.yaml`, and set `MATCH_CONFIG`.
 
-`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. The published container image packages the runtime only; users must still supply reference assets and `config.yaml` separately. See [INSTALL.md](INSTALL.md) for end-user installation, [DEVELOPMENT.md](DEVELOPMENT.md) for editable-install development workflows, and [DOWNLOADS.md](DOWNLOADS.md) for the reference layout and config details.
+`MATCH_CONFIG` is required for reference-aware commands. Reference paths in the config are resolved relative to the config file location. The published container image packages the runtime only; users must still supply reference assets and `config.yaml` separately.
 
 ## Core mental model
 
@@ -47,7 +46,7 @@ The toolkit provides a set of tools for transforming tables of variants: importi
 Intersection and matching of variants is performed on `chr:bp:a1:a2`, ignoring variant `id`. A `prepare_variants.py` pipeline combines operations that standardize `chr:bp:a1:a2`, making it into a unique variant identifier.
 Intersection and matching support biallelic SNPs and non-SNPs, while reference-aware restriction and liftover are narrower and are specified in the spec docs.
 
-For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](spec/core-objects.md), [contigs-and-metadata.md](spec/contigs-and-metadata.md), [shard-discovery.md](spec/shard-discovery.md), [importers.md](spec/importers.md), [variant-transforms.md](spec/variant-transforms.md), [mapping.md](spec/mapping.md), [payload-application.md](spec/payload-application.md), and [workflow.md](spec/workflow.md). End-user installation is described in [INSTALL.md](INSTALL.md), source-checkout development in [DEVELOPMENT.md](DEVELOPMENT.md), and reference-aware assets/config in [DOWNLOADS.md](DOWNLOADS.md).
+For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](spec/core-objects.md), [contigs-and-metadata.md](spec/contigs-and-metadata.md), [shard-discovery.md](spec/shard-discovery.md), [importers.md](spec/importers.md), [variant-transforms.md](spec/variant-transforms.md), [mapping.md](spec/mapping.md), [payload-application.md](spec/payload-application.md), and [workflow.md](spec/workflow.md). End-user installation is described in [INSTALL.md](INSTALL.md), and reference-aware assets/config in [DOWNLOADS.md](DOWNLOADS.md).
 
 ## Canonical tools vs workflow tools
 
