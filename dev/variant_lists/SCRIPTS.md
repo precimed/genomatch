@@ -2,11 +2,10 @@
 
 Assumptions:
 
-- run from the repository root
-- activate the `match-liftover` conda environment first
-- install the local checkout into that environment with `python -m pip install -e .`
-- reference assets are configured as described in `DOWNLOADS.md`
-- examples write outputs under `variant_lists/prepared/`
+- run from the local `variant_lists/` directory
+- `MATCH_CONFIG` is already set
+- the local `match-liftover` development environment is already active and provides the `genomatch` CLI tools
+- examples write outputs under `prepared/`
 - all examples assume the default destination build setting, `--dst-build GRCh38`
 
 ## Data source
@@ -17,8 +16,6 @@ The raw input files used in the examples below come from these source collection
 - `TSD`: `HGDP_1KG_v260302_all.pvar`
 - `CMIG` shard-based collections: UKB genotype `.bim` shards and UKB HRC-imputed QCed `.bim` shards
 
-Keep environment-specific source paths out of this file. If you need the original local-path note, check [`variant_lists/README.md`](/home/oleksanf/github/precimed/genotools/variant_lists/README.md).
-
 ## Recommended workflow
 
 Use `prepare_variants.py` as the default entrypoint. Typical pattern:
@@ -26,7 +23,7 @@ Use `prepare_variants.py` as the default entrypoint. Typical pattern:
 ```bash
 prepare_variants.py --input-format <bim|pvar|vcf|sumstats> \
   --input <raw-input> \
-  --output variant_lists/prepared/<name>
+  --output prepared/<name>
 ```
 
 `--output` is a stem. The final prepared artifact is written as `<output>.vmap`, and retained stage outputs default to the same stem unless you set `--prefix` explicitly.
@@ -37,9 +34,9 @@ For intersection of two or more of prepared artifacts, use:
 
 ```bash
 intersect_variants.py --inputs \
-    variant_lists/prepared/<first>.vmap \
-    variant_lists/prepared/<second>.vmap \
-  --output variant_lists/shared/<shared-name>.vtable
+    prepared/<first>.vmap \
+    prepared/<second>.vmap \
+  --output shared/<shared-name>.vtable
 ```
 
 For projecting a payload into an existing shared target universe, use:
@@ -48,8 +45,8 @@ For projecting a payload into an existing shared target universe, use:
 project_payload.py --input-format <bfile|pfile|sumstats|sumstats-clean> \
   --input <raw-input> \
   --sumstats-metadata <sumstats-metadata-if-needed> \
-  --source-vmap variant_lists/prepared/<source-name>.vmap \
-  --target variant_lists/shared/<shared-name>.vtable \
+  --source-vmap prepared/<source-name>.vmap \
+  --target shared/<shared-name>.vtable \
   --output <projected-output>
 ```
 
@@ -59,32 +56,32 @@ project_payload.py --input-format <bfile|pfile|sumstats|sumstats-clean> \
 
 ```bash
 prepare_variants.py --input-format bim \
-  --input variant_lists/eadb_core_chrALL.bim \
-  --output variant_lists/prepared/eadb_core_chrALL
+  --input eadb_core_chrALL.bim \
+  --output prepared/eadb_core_chrALL
 
 prepare_variants.py --input-format vcf --resume \
-  --input variant_lists/HRC.r1-1.GRCh37.wgs.mac5.sites.tab.gz \
-  --output variant_lists/prepared/HRC.r1-1.GRCh37.wgs.mac5.sites
+  --input HRC.r1-1.GRCh37.wgs.mac5.sites.tab.gz \
+  --output prepared/HRC.r1-1.GRCh37.wgs.mac5.sites
 
 prepare_variants.py --input-format bim --resume \
-  --input variant_lists/DEMGENEv230501_all_link1.bim \
-  --output variant_lists/prepared/DEMGENEv230501_all_link1
+  --input DEMGENEv230501_all_link1.bim \
+  --output prepared/DEMGENEv230501_all_link1
 
 prepare_variants.py --input-format bim --resume \
-  --input variant_lists/husk_all.autosomes.v240619.plink1.bim \
-  --output variant_lists/prepared/husk_all.autosomes.v240619.plink1
+  --input husk_all.autosomes.v240619.plink1.bim \
+  --output prepared/husk_all.autosomes.v240619.plink1
 
 prepare_variants.py --input-format pvar --resume \
-  --input variant_lists/huntstudy_HNT_CHR1_22_PID107822.pvar \
-  --output variant_lists/prepared/huntstudy_HNT_CHR1_22_PID107822
+  --input huntstudy_HNT_CHR1_22_PID107822.pvar \
+  --output prepared/huntstudy_HNT_CHR1_22_PID107822
 
 prepare_variants.py --input-format pvar --resume \
-  --input variant_lists/tromsostudy_TU_imputed_8030_00676.pvar \
-  --output variant_lists/prepared/tromsostudy_TU_imputed_8030_00676
+  --input tromsostudy_TU_imputed_8030_00676.pvar \
+  --output prepared/tromsostudy_TU_imputed_8030_00676
 
 prepare_variants.py --input-format pvar --resume \
-  --input variant_lists/HGDP_1KG_v260302_all.pvar \
-  --output variant_lists/prepared/HGDP_1KG_v260302_all
+  --input HGDP_1KG_v260302_all.pvar \
+  --output prepared/HGDP_1KG_v260302_all
 ```
 
 Notes:
@@ -100,9 +97,9 @@ Notes:
 
 ```bash
 prepare_variants.py --input-format sumstats --resume \
-  --input variant_lists/sumstats/50_irnt.gwas.imputed_v3.both_sexes.tsv.gz \
-  --sumstats-metadata variant_lists/sumstats/UKB_HEIGHT_2018_irnt.variant_only.yaml \
-  --output variant_lists/prepared/UKB_HEIGHT_2018_irnt
+  --input sumstats/50_irnt.gwas.imputed_v3.both_sexes.tsv.gz \
+  --sumstats-metadata sumstats/UKB_HEIGHT_2018_irnt.variant_only.yaml \
+  --output prepared/UKB_HEIGHT_2018_irnt
 ```
 
 Notes:
@@ -112,36 +109,36 @@ Notes:
 
 ```bash
 prepare_variants.py --input-format sumstats --resume \
-  --input variant_lists/sumstats/without_UKB_HDL_INV_EUR_HRC_1KGP3_others_ALL.meta.singlevar.results.indels.gz \
-  --sumstats-metadata variant_lists/sumstats/GLGC_LIPIDS_2021_HDL_EUR_noUKB.yaml \
-  --output variant_lists/prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB
+  --input sumstats/without_UKB_HDL_INV_EUR_HRC_1KGP3_others_ALL.meta.singlevar.results.indels.gz \
+  --sumstats-metadata sumstats/GLGC_LIPIDS_2021_HDL_EUR_noUKB.yaml \
+  --output prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB
 ```
 
 ### Generated summary-stat YAML for `phs_models/`
 
 Generated metadata files:
 
-- `variant_lists/phs_models/eadb_ALZ_phs_apoe_genome_2026_01_29_model.yaml`
-- `variant_lists/phs_models/DesikanModel_noAPOE.yaml`
-- `variant_lists/phs_models/01_geneticScore.finalModel.snplist.GRCh38.yaml`
+- `phs_models/eadb_ALZ_phs_apoe_genome_2026_01_29_model.yaml`
+- `phs_models/DesikanModel_noAPOE.yaml`
+- `phs_models/01_geneticScore.finalModel.snplist.GRCh38.yaml`
 
 Commands:
 
 ```bash
 prepare_variants.py --input-format sumstats --resume \
-  --input variant_lists/phs_models/eadb_ALZ_phs_apoe_genome_2026_01_29_model.txt \
-  --sumstats-metadata variant_lists/phs_models/eadb_ALZ_phs_apoe_genome_2026_01_29_model.yaml \
-  --output variant_lists/prepared/eadb_ALZ_phs_apoe_genome_2026_01_29_model
+  --input phs_models/eadb_ALZ_phs_apoe_genome_2026_01_29_model.txt \
+  --sumstats-metadata phs_models/eadb_ALZ_phs_apoe_genome_2026_01_29_model.yaml \
+  --output prepared/eadb_ALZ_phs_apoe_genome_2026_01_29_model
 
 prepare_variants.py --input-format sumstats --resume \
-  --input variant_lists/phs_models/DesikanModel_noAPOE.txt \
-  --sumstats-metadata variant_lists/phs_models/DesikanModel_noAPOE.yaml \
-  --output variant_lists/prepared/DesikanModel_noAPOE
+  --input phs_models/DesikanModel_noAPOE.txt \
+  --sumstats-metadata phs_models/DesikanModel_noAPOE.yaml \
+  --output prepared/DesikanModel_noAPOE
 
 prepare_variants.py --input-format sumstats --resume \
-  --input variant_lists/phs_models/01_geneticScore.finalModel.snplist.csv \
-  --sumstats-metadata variant_lists/phs_models/01_geneticScore.finalModel.snplist.GRCh38.yaml \
-  --output variant_lists/prepared/01_geneticScore.finalModel.snplist.GRCh38
+  --input phs_models/01_geneticScore.finalModel.snplist.csv \
+  --sumstats-metadata phs_models/01_geneticScore.finalModel.snplist.GRCh38.yaml \
+  --output prepared/01_geneticScore.finalModel.snplist.GRCh38
 ```
 
 Notes:
@@ -157,23 +154,23 @@ You can still use raw-input shard discovery with `prepare_variants.py`:
 
 ```bash
 prepare_variants.py --input-format bim --resume \
-  --input variant_lists/ukb_genotype/ukb_snp_@_v2.bim \
-  --output variant_lists/prepared/ukb_genotype
+  --input ukb_genotype/ukb_snp_@_v2.bim \
+  --output prepared/ukb_genotype
 
 prepare_variants.py --input-format bim --resume \
-  --input variant_lists/UKB_imputed_QCed/ukb27412_imp_chr@_v3.bim \
-  --output variant_lists/prepared/UKB_imputed_QCed
+  --input UKB_imputed_QCed/ukb27412_imp_chr@_v3.bim \
+  --output prepared/UKB_imputed_QCed
 
 prepare_variants.py --input-format bim --resume \
-  --input variant_lists/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim \
-  --output variant_lists/prepared/1000G_EUR_Phase3_plink
+  --input 1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim \
+  --output prepared/1000G_EUR_Phase3_plink
 ```
 
 Shard-discovery notes:
 
-- `variant_lists/ukb_genotype/ukb_snp_@_v2.bim` captures `ukb_snp_chr1_v2.bim` through `ukb_snp_chr22_v2.bim`, plus `chrX`, `chrY`, `chrXY`, and `chrMT`
-- `variant_lists/UKB_imputed_QCed/ukb27412_imp_chr@_v3.bim` captures `ukb27412_imp_chr23_v3.bim`, because token `23` is substituted into the `@` slot after the literal `chr` prefix
-- `variant_lists/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim` captures the numbered shard files; the literal placeholder file `1000G.EUR.QC.@.bim` is not used by shard discovery
+- `ukb_genotype/ukb_snp_@_v2.bim` captures `ukb_snp_chr1_v2.bim` through `ukb_snp_chr22_v2.bim`, plus `chrX`, `chrY`, `chrXY`, and `chrMT`
+- `UKB_imputed_QCed/ukb27412_imp_chr@_v3.bim` captures `ukb27412_imp_chr23_v3.bim`, because token `23` is substituted into the `@` slot after the literal `chr` prefix
+- `1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim` captures the numbered shard files; the literal placeholder file `1000G.EUR.QC.@.bim` is not used by shard discovery
 
 
 ### Intersect lifted 1000G EUR Phase3, UKB imputed QCed, and UKB height
@@ -182,9 +179,9 @@ Use the prepared artifacts to define one shared `GRCh38` target universe:
 
 ```bash
 intersect_variants.py --inputs \
-    variant_lists/prepared/1000G_EUR_Phase3_plink.vmap \
-    variant_lists/prepared/ukb_genotype.vmap \
-  --output variant_lists/shared/grch38_shared.vtable
+    prepared/1000G_EUR_Phase3_plink.vmap \
+    prepared/ukb_genotype.vmap \
+  --output shared/grch38_shared.vtable
 ```
 
 Then use `project_payload.py` for the payloads you want to rewrite into that shared universe.
@@ -193,40 +190,40 @@ For the UKB height summary-stat payload:
 
 ```bash
 project_payload.py --input-format sumstats-clean \
-  --input variant_lists/sumstats/50_irnt.gwas.imputed_v3.both_sexes.tsv.gz \
-  --sumstats-metadata variant_lists/sumstats/UKB_HEIGHT_2018_irnt.variant_only.yaml \
-  --source-vmap variant_lists/prepared/UKB_HEIGHT_2018_irnt.vmap \
-  --target variant_lists/shared/grch38_shared.vtable \
-  --output variant_lists/shared/UKB_HEIGHT_2018_irnt.tsv.gz
+  --input sumstats/50_irnt.gwas.imputed_v3.both_sexes.tsv.gz \
+  --sumstats-metadata sumstats/UKB_HEIGHT_2018_irnt.variant_only.yaml \
+  --source-vmap prepared/UKB_HEIGHT_2018_irnt.vmap \
+  --target shared/grch38_shared.vtable \
+  --output shared/UKB_HEIGHT_2018_irnt.tsv.gz
 ```
 
 For the GLGC HDL summary-stat payload:
 
 ```bash
 project_payload.py --input-format sumstats-clean \
-  --input variant_lists/sumstats/without_UKB_HDL_INV_EUR_HRC_1KGP3_others_ALL.meta.singlevar.results.indels.gz \
-  --sumstats-metadata variant_lists/sumstats/GLGC_LIPIDS_2021_HDL_EUR_noUKB.yaml \
-  --source-vmap variant_lists/prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.vmap \
-  --target variant_lists/shared/grch38_shared.vtable \
-  --output variant_lists/shared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.tsv.gz
+  --input sumstats/without_UKB_HDL_INV_EUR_HRC_1KGP3_others_ALL.meta.singlevar.results.indels.gz \
+  --sumstats-metadata sumstats/GLGC_LIPIDS_2021_HDL_EUR_noUKB.yaml \
+  --source-vmap prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.vmap \
+  --target shared/grch38_shared.vtable \
+  --output shared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.tsv.gz
 ```
 
 For the 1000G EUR Phase3 PLINK payload:
 
 ```bash
 project_payload.py --input-format bfile \
-  --input variant_lists/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim \
-  --source-vmap variant_lists/prepared/1000G_EUR_Phase3_plink.vmap \
-  --target variant_lists/shared/grch38_shared.vtable \
-  --output variant_lists/shared/1000G_EUR_Phase3_plink/1000G.EUR.QC.@
+  --input 1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim \
+  --source-vmap prepared/1000G_EUR_Phase3_plink.vmap \
+  --target shared/grch38_shared.vtable \
+  --output shared/1000G_EUR_Phase3_plink/1000G.EUR.QC.@
 ```
 
 For the UKB genotypes PLINK payload (can be executed on a machine where full `.bed/.bim/.fam` inputs are present ):
 
 ```bash
 project_payload.py --input-format bfile \
-  --input variant_lists/ukb_genotype/ukb_snp_@_v2.bim \
-  --source-vmap variant_lists/prepared/ukb_genotype.vmap \
-  --target variant_lists/shared/grch38_shared.vtable \
-  --output variant_lists/shared/ukb_genotype/ukb_snp_@_v2
+  --input ukb_genotype/ukb_snp_@_v2.bim \
+  --source-vmap prepared/ukb_genotype.vmap \
+  --target shared/grch38_shared.vtable \
+  --output shared/ukb_genotype/ukb_snp_@_v2
 ```
