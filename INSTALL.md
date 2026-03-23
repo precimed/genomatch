@@ -16,9 +16,18 @@ User inputs may still declare either UCSC or NCBI-style contig naming as per [sp
 
 Optional FASTA assets with NCBI-style contig naming may still be kept locally under `ref/ncbi/`, but they are not used by the current implementation.
 
-## Environment
+## Runtime options
 
-Recommended setup is a Conda environment with `bcftools`, the `bcftools-liftover-plugin`, and `samtools`.
+Two supported runtime patterns are documented here:
+
+- a local Conda environment with `bcftools`, the `bcftools-liftover-plugin`, and `samtools`
+- the repository `Dockerfile`, which packages the same runtime stack inside a container
+
+In both cases, reference data and `config.yaml` remain external inputs supplied by the user.
+
+### Local Conda environment
+
+Recommended local setup is a Conda environment with `bcftools`, the `bcftools-liftover-plugin`, and `samtools`.
 
 ```bash
 conda create -n match-liftover -c conda-forge -c bioconda \
@@ -35,6 +44,28 @@ samtools --version
 pytest --version
 python -c "import yaml; print('PyYAML OK')"
 ```
+
+### Docker image
+
+The repository root contains a `Dockerfile` that packages the toolkit together with the current runtime dependencies from this document, including Python 3.12, `bcftools`, the `bcftools-liftover-plugin`, and `samtools`.
+
+Build the image from a clean checkout:
+
+```bash
+docker build -t genomatch:latest .
+```
+
+The image does not include reference FASTA files, chain files, or your `config.yaml`. Mount those from the host and set `MATCH_CONFIG` to the in-container config path:
+
+```bash
+docker run --rm -it \
+  -v "$PWD":/work \
+  -e MATCH_CONFIG=/work/config.yaml \
+  genomatch:latest \
+  prepare_variants.py --help
+```
+
+Any paths referenced from `MATCH_CONFIG` must also be visible inside the container, typically through bind mounts under `/work`.
 
 ## Reference layout
 
@@ -74,10 +105,10 @@ mkdir -p ref/chain
 Or fetch the required UCSC assets automatically:
 
 ```bash
-bash INSTALL.sh
+bash ref/INSTALL.sh
 ```
 
-`INSTALL.sh` downloads only the required UCSC FASTA and chain files, skips files that already exist, and runs `samtools faidx` only when the FASTA index is missing.
+`ref/INSTALL.sh` downloads only the required UCSC FASTA and chain files, skips files that already exist, and runs `samtools faidx` only when the FASTA index is missing.
 
 ## Download UCSC-style reference assets
 
@@ -208,7 +239,7 @@ Then use:
 
 ```bash
 export MATCH_BCFTOOLS=/absolute/path/to/bcftools-wrapper.sh
-python3 match/liftover_build.py \
+python3 src/genomatch/liftover_build.py \
   --input input.vmap \
   --output lifted.vmap \
   --target-build GRCh38
@@ -240,5 +271,5 @@ mkdir -p ref/chain
 # download UCSC FASTA assets and chain files
 # optionally download FASTA assets with NCBI-style contig naming
 # create your own config.yaml based on config.example.yaml and set MATCH_CONFIG
-pytest match-test/test_guess_build.py match-test/test_restrict_build_compatible.py match-test/test_liftover_build.py
+pytest tests/test_guess_build.py tests/test_restrict_build_compatible.py tests/test_liftover_build.py
 ```

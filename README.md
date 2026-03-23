@@ -17,11 +17,11 @@ This README is organized from concepts to workflows to reference details. It sta
 
 Before running the reference-aware tools and wrappers:
 
-1. Ensure `bcftools` with the `+liftover` plugin is available.
+1. Ensure `bcftools` with the `+liftover` plugin is available, either through your local environment or the provided `Dockerfile`.
 2. Download the required reference data and place your own `config.yaml` next to that reference tree.
 3. Set `MATCH_CONFIG=/path/to/config.yaml`.
 
-`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. See [INSTALL.md](INSTALL.md) for the reference layout and full setup details.
+`MATCH_CONFIG` is required. Reference paths in the config are resolved relative to the config file location. The provided container image packages the runtime only; users must still supply reference assets and `config.yaml` separately. See [INSTALL.md](INSTALL.md) for the reference layout and full setup details.
 
 ## Core mental model
 
