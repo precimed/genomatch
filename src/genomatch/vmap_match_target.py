@@ -74,7 +74,7 @@ def match_rows(
             if local_op == "missing":
                 continue
             if base_row.source_index == -1:
-                matched_row = VMapRow(row.chrom, row.pos, row.id, row.a1, row.a2, MISSING_SOURCE_SHARD, -1, "missing")
+                continue
             else:
                 matched_row = VMapRow(
                     row.chrom,
