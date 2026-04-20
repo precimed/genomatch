@@ -55,7 +55,11 @@ def test_end_to_end_sumstats_liftover_match_apply_real(tmp_path: Path) -> None:
     entries = select_mapping_entries(max_rows=5)
     bcftools = resolve_bcftools_with_liftover()
     config = write_real_match_config(tmp_path, chroms={entry.chrom for entry in entries})
-    env = {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": bcftools}
+    env = {
+        "MATCH_CONFIG": str(config),
+        "MATCH_BCFTOOLS": bcftools,
+        "MATCH_REFERENCE_ACCESS_MODE": "LEGACY",
+    }
 
     raw = tmp_path / "input.tsv"
     metadata = tmp_path / "metadata.yaml"
