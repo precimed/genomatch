@@ -113,11 +113,12 @@ This subsection is implementation guidance only; any implementation that preserv
 - `Direction` is passed through unchanged by clean harmonization and unchanged by `swap` / `flip_swap`
 - the clean harmonization logic is a missing-value and missing-column completion pipeline; it does not attempt to verify semantic consistency between overlapping fields that are already present
 - existing non-missing values are retained unless an explicit transform or range rule says otherwise
-- the following logic applies to handle `allele_op=swap` and `allele_op=flip_swap`
+- the following logic applies to handle `allele_op=swap` and `allele_op=flip_swap`:
   - negate signed effects (`BETA` and `Z`)
   - invert odds ratios (`OR`)
   - invert and swap lower and upper `OR` confidence intervals `ORL95` and `ORU95`
   - swapped alleles complement effect frequencies (`EAF`, `CaseEAF`, `ControlEAF`)
+  - **Implementation requirement:** Must be implemented vectorized using boolean masks and column assignment, not row-by-row loops. Create a mask for rows where `allele_op in {"swap", "flip_swap"}`, then apply operations to masked rows using vectorized assignment (e.g., `df.loc[mask, column] = ...`). Row-by-row looping with individual cell assignment is not permitted for performance reasons.
 - when swapped-allele numeric effect transforms cannot be applied because the payload value is non-numeric, non-finite, or non-invertible, `apply_vmap_to_sumstats.py` must emit a warning and set the field to missing
 - without `--clean`, `apply_vmap_to_sumstats.py` preserves the input file delimiter in output
 - without `--clean`, `apply_vmap_to_sumstats.py` preserves legacy payload-field formatting, including legacy missing-value encodings such as `n/a` for synthetic numeric missing values
@@ -127,6 +128,8 @@ This subsection is implementation guidance only; any implementation that preserv
 - order of output columns is: `CHR`, `POS`, `SNP`, `EffectAllele`, `OtherAllele`, followed by payload columns
 - without `--clean`, the order of payload columns after dropping source-side variant columns and joined variant fields is the same as in the input file; with `--clean`, the order is as produced by 
   the output of `spec/sumstats-harmonization.md`.
+
+**Implementation requirement:** In `--clean` mode, write output using vectorized DataFrame operations (e.g., pandas `to_csv()`), not row-by-row iteration. Output must be tab-delimited with missing values as empty fields.
 
 ## `apply_vmap_to_bfile.py`
 

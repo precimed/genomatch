@@ -26,7 +26,7 @@ Create and activate the environment:
 
 ```bash
 conda create -n match-liftover -c conda-forge -c bioconda \
-  python=3.12 bcftools bcftools-liftover-plugin samtools plink plink2 numpy pandas pysam pytest pyyaml pgenlib python-build twine
+  python=3.12 bcftools bcftools-liftover-plugin samtools plink plink2 numpy pandas pysam pytest pyyaml pgenlib python-build twine scipy
 
 conda activate match-liftover
 python -m pip install -e .

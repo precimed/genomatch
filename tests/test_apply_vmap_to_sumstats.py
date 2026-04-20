@@ -533,7 +533,7 @@ def test_apply_vmap_to_sumstats_clean_fill_mode_column_and_row_differ(tmp_path):
     assert out_column.read_text(encoding="utf-8").splitlines() == [
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE",
         "1\t100\trs1\tA\tG\t\t\t2\t1",
-        "1\t200\trs2\tC\tT\t0\t9\t4\t2",
+        "1\t200\trs2\tC\tT\t2.25717681190766e-19\t9\t4\t2",
     ]
 
     row = run_py(
@@ -554,7 +554,7 @@ def test_apply_vmap_to_sumstats_clean_fill_mode_column_and_row_differ(tmp_path):
     assert out_row.read_text(encoding="utf-8").splitlines() == [
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE",
         "1\t100\trs1\tA\tG\t0.0455002638963584\t2\t2\t1",
-        "1\t200\trs2\tC\tT\t0\t9\t4\t2",
+        "1\t200\trs2\tC\tT\t2.25717681190766e-19\t9\t4\t2",
     ]
 
 
@@ -650,6 +650,125 @@ def test_apply_vmap_to_sumstats_clean_prefers_z_from_p_and_beta_and_runs_second_
     values = dict(zip(header, row))
     assert math.isclose(float(values["Z"]), 2.0, rel_tol=1e-9)
     assert values["SE"] == "1"
+
+
+def test_apply_vmap_to_sumstats_clean_logistic_vectorizes_or_and_interval_derivations(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR\tPOS\tSNP\tEA\tOA\tOR\tORL95\tORU95",
+            "1\t100\trs1\tA\tG\t2\t1.2\t1.5",
+            "1\t200\trs2\tC\tT\t4\t3\t5",
+        ],
+    )
+    write_lines(
+        meta,
+        [
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_SNP: SNP",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_OR: OR",
+            "col_ORL95: ORL95",
+            "col_ORU95: ORU95",
+            "stats_Model: logistic",
+        ],
+    )
+    write_vmap_with_meta(
+        vmap,
+        [
+            "1\t100\trs1\tA\tG\t.\t0\tidentity",
+            "1\t200\trs2\tC\tT\t.\t1\tidentity",
+        ],
+    )
+
+    result = run_py(
+        "apply_vmap_to_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--vmap",
+        vmap,
+        "--output",
+        out,
+        "--clean",
+    )
+
+    assert result.returncode == 0, result.stderr
+    lines = out.read_text(encoding="utf-8").splitlines()
+    header = lines[0].split("\t")
+    row1 = dict(zip(header, lines[1].split("\t")))
+    row2 = dict(zip(header, lines[2].split("\t")))
+    assert math.isclose(float(row1["BETA"]), math.log(2.0), rel_tol=1e-12)
+    assert math.isclose(float(row2["BETA"]), math.log(4.0), rel_tol=1e-12)
+    assert math.isclose(float(row1["SE"]), 0.056925421353233446, rel_tol=1e-12)
+    assert math.isclose(float(row2["SE"]), 0.13031505369366933, rel_tol=1e-12)
+
+
+def test_apply_vmap_to_sumstats_clean_use_af_inference_vectorizes_beta_and_se(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR\tPOS\tSNP\tEA\tOA\tZ\tN\tEAF",
+            "1\t100\trs1\tA\tG\t2\t100\t0.25",
+            "1\t200\trs2\tC\tT\t3\t200\t0.4",
+        ],
+    )
+    write_lines(
+        meta,
+        [
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_SNP: SNP",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_Z: Z",
+            "col_N: N",
+            "col_EAF: EAF",
+            "stats_Model: linear",
+        ],
+    )
+    write_vmap_with_meta(
+        vmap,
+        [
+            "1\t100\trs1\tA\tG\t.\t0\tidentity",
+            "1\t200\trs2\tC\tT\t.\t1\tidentity",
+        ],
+    )
+
+    result = run_py(
+        "apply_vmap_to_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--vmap",
+        vmap,
+        "--output",
+        out,
+        "--clean",
+        "--use-af-inference",
+    )
+
+    assert result.returncode == 0, result.stderr
+    lines = out.read_text(encoding="utf-8").splitlines()
+    header = lines[0].split("\t")
+    row1 = dict(zip(header, lines[1].split("\t")))
+    row2 = dict(zip(header, lines[2].split("\t")))
+    assert math.isclose(float(row1["BETA"]), 0.32025630761017426, rel_tol=1e-12)
+    assert math.isclose(float(row2["BETA"]), 0.29952114893657694, rel_tol=1e-12)
+    assert math.isclose(float(row1["SE"]), 0.16012815380508713, rel_tol=1e-12)
+    assert math.isclose(float(row2["SE"]), 0.09984038297885897, rel_tol=1e-12)
 
 
 def test_apply_vmap_to_sumstats_clean_use_af_inference_derives_n(tmp_path):

@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+import numpy as np
+import pandas as pd
+
 from ._cli_utils import run_cli
 from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
 from .sumstats_clean import harmonize_clean_sumstats, resolve_clean_metadata_columns
@@ -232,79 +235,71 @@ def build_missing_payload_row(
     return cols
 
 
-def parse_clean_numeric(raw: object) -> float:
-    if raw is None:
-        raise ValueError("missing value")
-    if isinstance(raw, str) and not raw.strip():
-        raise ValueError("missing value")
-    value = float(raw)
-    if not math.isfinite(value):
-        raise ValueError(f"non-finite numeric value: {raw!r}")
-    return value
-
-
-def maybe_negate_clean(raw: object, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> float:
-    try:
-        return -parse_clean_numeric(raw)
-    except Exception:
+def maybe_negate_clean_series(series: pd.Series, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce").astype(float)
+    invalid_mask = ~np.isfinite(numeric)
+    if invalid_mask.any():
         warn_once(
             warning_keys,
             ("negate_clean", column_name),
             f"could not negate non-numeric value in column {column_name!r}; writing missing value",
         )
-        return float("nan")
+    numeric = -numeric
+    numeric[invalid_mask] = np.nan
+    return numeric
 
 
-def maybe_invert_clean(raw: object, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> float:
-    try:
-        value = parse_clean_numeric(raw)
-        if value == 0:
-            raise ValueError("cannot invert zero")
-        return 1.0 / value
-    except Exception:
+def maybe_invert_clean_series(series: pd.Series, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce").astype(float)
+    invalid_mask = ~np.isfinite(numeric) | (numeric == 0)
+    if invalid_mask.any():
         warn_once(
             warning_keys,
             ("invert_clean", column_name),
             f"could not invert zero or non-numeric value in column {column_name!r}; writing missing value",
         )
-        return float("nan")
+    numeric = 1.0 / numeric
+    numeric[invalid_mask] = np.nan
+    return numeric
 
 
-def maybe_complement_clean(raw: object, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> float:
-    try:
-        value = parse_clean_numeric(raw)
-        return 1.0 - value
-    except Exception:
+def maybe_complement_clean_series(series: pd.Series, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce").astype(float)
+    invalid_mask = ~np.isfinite(numeric)
+    if invalid_mask.any():
         warn_once(
             warning_keys,
             ("complement_clean", column_name),
             f"could not complement non-numeric value in column {column_name!r}; writing missing value",
         )
-        return float("nan")
+    numeric = 1.0 - numeric
+    numeric[invalid_mask] = np.nan
+    return numeric
 
 
-def maybe_invert_interval_clean(
-    lower_raw: object,
-    upper_raw: object,
+def maybe_invert_interval_clean_series(
+    lower_series: pd.Series,
+    upper_series: pd.Series,
     *,
     lower_column: str,
     upper_column: str,
     warning_keys: Set[Tuple[str, str]],
-) -> Tuple[float, float]:
-    try:
-        lower = parse_clean_numeric(lower_raw)
-        upper = parse_clean_numeric(upper_raw)
-        if lower == 0 or upper == 0:
-            raise ValueError("cannot invert zero")
-        return 1.0 / upper, 1.0 / lower
-    except Exception:
+) -> Tuple[pd.Series, pd.Series]:
+    lower = pd.to_numeric(lower_series, errors="coerce").astype(float)
+    upper = pd.to_numeric(upper_series, errors="coerce").astype(float)
+    invalid_mask = ~np.isfinite(lower) | ~np.isfinite(upper) | (lower == 0) | (upper == 0)
+    if invalid_mask.any():
         warn_once(
             warning_keys,
             ("invert_interval_clean", f"{lower_column}|{upper_column}"),
             "could not invert zero or non-numeric odds-ratio interval in columns "
             f"{lower_column!r} and {upper_column!r}; writing missing value",
         )
-        return float("nan"), float("nan")
+    lower_out = 1.0 / upper
+    upper_out = 1.0 / lower
+    lower_out[invalid_mask] = np.nan
+    upper_out[invalid_mask] = np.nan
+    return lower_out, upper_out
 
 
 def collect_clean_rows(
@@ -337,27 +332,6 @@ def clear_clean_unmatched_rows(payload_sumstats, vmap_rows) -> None:
         payload_sumstats.iloc[unmatched_indices, :] = float("nan")
 
 
-def format_clean_value(value: object) -> str:
-    if value is None:
-        return ""
-    try:
-        if value != value:
-            return ""
-    except Exception:
-        pass
-    if isinstance(value, str):
-        return value
-    if isinstance(value, bool):
-        return str(value)
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            return ""
-        return format(value, ".15g")
-    return str(value)
-
-
 def run_clean_apply(
     args: argparse.Namespace,
     *,
@@ -378,69 +352,79 @@ def run_clean_apply(
     )
     clear_clean_unmatched_rows(payload_sumstats, vmap_rows)
     warning_keys: Set[Tuple[str, str]] = set()
-    for idx, vrow in enumerate(vmap_rows):
-        if vrow.allele_op not in {"swap", "flip_swap"}:
-            continue
-        for column in ("BETA", "Z"):
+    swap_mask = np.array([vrow.allele_op in {"swap", "flip_swap"} for vrow in vmap_rows])
+    swap_indices = np.where(swap_mask)[0]
+
+    for column in ("BETA", "Z"):
+        if column in payload_sumstats.columns:
+            payload_sumstats.loc[swap_indices, column] = maybe_negate_clean_series(
+                payload_sumstats.loc[swap_indices, column],
+                column_name=column,
+                warning_keys=warning_keys,
+            )
+
+    if "ORL95" in payload_sumstats.columns and "ORU95" in payload_sumstats.columns:
+        lower_series, upper_series = maybe_invert_interval_clean_series(
+            payload_sumstats.loc[swap_indices, "ORL95"],
+            payload_sumstats.loc[swap_indices, "ORU95"],
+            lower_column="ORL95",
+            upper_column="ORU95",
+            warning_keys=warning_keys,
+        )
+        payload_sumstats.loc[swap_indices, "ORL95"] = lower_series
+        payload_sumstats.loc[swap_indices, "ORU95"] = upper_series
+    else:
+        for column in ("ORL95", "ORU95"):
             if column in payload_sumstats.columns:
-                payload_sumstats.at[idx, column] = maybe_negate_clean(
-                    payload_sumstats.at[idx, column],
+                payload_sumstats.loc[swap_indices, column] = maybe_invert_clean_series(
+                    payload_sumstats.loc[swap_indices, column],
                     column_name=column,
                     warning_keys=warning_keys,
                 )
-        if "ORL95" in payload_sumstats.columns and "ORU95" in payload_sumstats.columns:
-            payload_sumstats.at[idx, "ORL95"], payload_sumstats.at[idx, "ORU95"] = maybe_invert_interval_clean(
-                payload_sumstats.at[idx, "ORL95"],
-                payload_sumstats.at[idx, "ORU95"],
-                lower_column="ORL95",
-                upper_column="ORU95",
+
+    if "OR" in payload_sumstats.columns:
+        payload_sumstats.loc[swap_indices, "OR"] = maybe_invert_clean_series(
+            payload_sumstats.loc[swap_indices, "OR"],
+            column_name="OR",
+            warning_keys=warning_keys,
+        )
+
+    for column in ("EAF", "CaseEAF", "ControlEAF"):
+        if column in payload_sumstats.columns:
+            payload_sumstats.loc[swap_indices, column] = maybe_complement_clean_series(
+                payload_sumstats.loc[swap_indices, column],
+                column_name=column,
                 warning_keys=warning_keys,
             )
-        else:
-            for column in ("ORL95", "ORU95"):
-                if column in payload_sumstats.columns:
-                    payload_sumstats.at[idx, column] = maybe_invert_clean(
-                        payload_sumstats.at[idx, column],
-                        column_name=column,
-                        warning_keys=warning_keys,
-                    )
-        if "OR" in payload_sumstats.columns:
-            payload_sumstats.at[idx, "OR"] = maybe_invert_clean(
-                payload_sumstats.at[idx, "OR"],
-                column_name="OR",
-                warning_keys=warning_keys,
-            )
-        for column in ("EAF", "CaseEAF", "ControlEAF"):
-            if column in payload_sumstats.columns:
-                payload_sumstats.at[idx, column] = maybe_complement_clean(
-                    payload_sumstats.at[idx, column],
-                    column_name=column,
-                    warning_keys=warning_keys,
-                )
 
     retained_indices = list(range(len(vmap_rows)))
     if args.only_mapped_target:
         if "P" not in payload_sumstats.columns:
             retained_indices = []
         else:
-            retained_indices = [idx for idx in retained_indices if format_clean_value(payload_sumstats.at[idx, "P"]) != ""]
+            p_mask = ~payload_sumstats["P"].isna()
+            retained_indices = [idx for idx in retained_indices if p_mask.iloc[idx]]
         if not retained_indices:
             raise ValueError("no retained target rows remain after applying --only-mapped-target")
 
-    with open_text(output_path, "wt") as handle:
-        output_header = ["CHR", "POS", "SNP", "EffectAllele", "OtherAllele", *list(payload_sumstats.columns)]
-        handle.write("\t".join(output_header) + "\n")
-        for idx in retained_indices:
-            vrow = vmap_rows[idx]
-            row_values = [
-                vrow.chrom,
-                vrow.pos,
-                vrow.id,
-                vrow.a1,
-                vrow.a2,
-                *[format_clean_value(payload_sumstats.at[idx, column]) for column in payload_sumstats.columns],
-            ]
-            handle.write("\t".join(row_values) + "\n")
+    output_df = pd.DataFrame({
+        'CHR': [vmap_rows[i].chrom for i in retained_indices],
+        'POS': [vmap_rows[i].pos for i in retained_indices],
+        'SNP': [vmap_rows[i].id for i in retained_indices],
+        'EffectAllele': [vmap_rows[i].a1 for i in retained_indices],
+        'OtherAllele': [vmap_rows[i].a2 for i in retained_indices],
+    })
+    for col in payload_sumstats.columns:
+        output_df[col] = payload_sumstats.loc[retained_indices, col].values
+
+    output_df.to_csv(
+        output_path,
+        sep='\t',
+        header=True,
+        index=False,
+        na_rep='',
+        float_format=lambda x: format(x, '.15g') if math.isfinite(x) else '',
+    )
     return 0
 
 

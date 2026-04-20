@@ -18,6 +18,7 @@ dependencies = [
   "pgenlib",
   "pysam",
   "PyYAML",
+  "scipy",
 ]
 
 [project.scripts]
