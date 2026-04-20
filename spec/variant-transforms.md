@@ -4,6 +4,20 @@ This file defines target-side row-transform semantics. Exact matching, intersect
 
 Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.md](ploidy-model.md).
 
+## Reference access policy
+
+- this policy exists to improve performance and support vectorized reference-backed operations across build-aware utilities
+- any tool path that consults FASTA-backed reference bases is in scope, including `guess_build.py`, `restrict_build_compatible.py`, and `liftover_build.py`
+- FASTA-consuming tools use bulk reference access by default when querying FASTA-backed reference bases
+- reference access mode is controlled by `MATCH_REFERENCE_ACCESS_MODE`; accepted values are `BULK` and `LEGACY` case-insensitively, with default `BULK` when unset
+- the legacy per-lookup FASTA fetch path is available only when `MATCH_REFERENCE_ACCESS_MODE=LEGACY` is set
+- the legacy path is intended for tests and profiling, not as the default runtime behavior
+- tools that use FASTA-backed reference access must preserve their existing validation and error semantics when switching between bulk and legacy access modes
+
+**Implementation requirement:** bulk FASTA access should be cached per reference FASTA path and per contig, not per base position. Cache lifetime may extend for the duration of the process or tool invocation. GRCh37 and GRCh38 must use separate caches because they resolve to different FASTA paths. An implementation may eagerly load all primary contigs or lazily populate contig caches, but it must not fall back to repeated per-position `fetch()` calls in the default bulk mode.
+
+**Implementation requirement:** in the default bulk mode, FASTA-consuming tools must not implement reference lookup as a per-variant loop around `fetch_reference_base()` or `fasta.fetch(contig, pos - 1, pos)`. They must batch by contig and answer lookups from contig-level cached reference data. The legacy per-variant fetch path is allowed only when `MATCH_REFERENCE_ACCESS_MODE=LEGACY` is set.
+
 ## Strand-flip scope
 
 - `--allow-strand-flips` is not part of `match_vmap_to_target.py`

@@ -1172,3 +1172,56 @@ def test_restrict_build_compatible_norm_indels_fails_when_bcftools_norm_fails(tm
     assert "bcftools norm failed" in result.stderr.lower()
     assert str(norm_debug_log_path(out, check_mode="e")) in result.stderr
     assert "fake bcftools failure" in norm_debug_log_path(out, check_mode="e").read_text(encoding="utf-8")
+
+
+def test_restrict_build_compatible_reference_access_modes_are_consistent_and_default_to_bulk(tmp_path):
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "base.vmap"
+    write_fasta(grch37, {"chr1": "AGT"})
+    write_fasta(grch38, {"chr1": "CCC"})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(
+        source,
+        [
+            "1\t1\tt1\tA\tC\tshardA\t5\tidentity",
+            "1\t2\tt2\tT\tC\tshardA\t6\tidentity",
+            "1\t3\tt3\tC\tG\tshardA\t7\tidentity",
+        ],
+    )
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+
+    def run_mode(mode: str | None):
+        out = tmp_path / f"restricted_{mode or 'default'}.vmap"
+        env = {"MATCH_CONFIG": str(config)}
+        if mode is not None:
+            env["MATCH_REFERENCE_ACCESS_MODE"] = mode
+        result = run_py_with_env(
+            "restrict_build_compatible.py",
+            env,
+            "--source",
+            source,
+            "--output",
+            out,
+            "--allow-strand-flips",
+        )
+        assert result.returncode == 0, result.stderr
+        return (
+            read_tsv(out),
+            json.loads(result.stdout),
+            out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"),
+        )
+
+    default_rows, default_summary, default_meta = run_mode(None)
+    bulk_rows, bulk_summary, bulk_meta = run_mode("BULK")
+    legacy_rows, legacy_summary, legacy_meta = run_mode("legacy")
+
+    assert default_rows == bulk_rows == legacy_rows
+    assert default_meta == bulk_meta == legacy_meta
+    for summary in (default_summary, bulk_summary, legacy_summary):
+        summary.pop("output", None)
+    assert default_summary == bulk_summary == legacy_summary

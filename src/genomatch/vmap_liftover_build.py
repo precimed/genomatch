@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
-from .reference_utils import fetch_reference_base, resolve_bcftools_binary, resolve_liftover_assets
+from .reference_utils import fetch_reference_bases, resolve_bcftools_binary, resolve_liftover_assets
 from .haploid_utils import expected_ploidy_pair
 from .vtable_utils import (
     VMapRow,
@@ -90,14 +90,16 @@ def convert_rows_to_ucsc(rows: Sequence[VariantRow], contig_naming: str) -> List
     return out_rows
 
 
-def resolve_ref_alt(row: VariantRow, source_fasta: Path) -> LiftoverPreparation:
-    validate_allele_value(row.a1, label="liftover_build.py input")
-    validate_allele_value(row.a2, label="liftover_build.py input")
+def parse_source_position(row: VariantRow) -> int:
     try:
-        pos = int(row.pos)
+        return int(row.pos)
     except ValueError as exc:
         raise ValueError(f"invalid source position for liftover input: {row.chrom}:{row.pos}") from exc
-    ref_base = fetch_reference_base(source_fasta, row.chrom, pos)
+
+
+def resolve_ref_alt(row: VariantRow, ref_base: str) -> LiftoverPreparation:
+    validate_allele_value(row.a1, label="liftover_build.py input")
+    validate_allele_value(row.a2, label="liftover_build.py input")
     if ref_base not in {"A", "C", "G", "T"}:
         raise ValueError(f"source reference base not found for liftover input: {row.chrom}:{row.pos}")
     a1 = row.a1.upper()
@@ -124,12 +126,21 @@ def prepare_liftover_rows(
     upstream_allele_ops: Sequence[str],
     source_fasta: Path,
 ) -> List[PreparedLiftoverRow]:
+    positions: List[int] = []
+    queries: List[Tuple[str, int]] = []
+    for row in rows:
+        pos = parse_source_position(row)
+        positions.append(pos)
+        queries.append((row.chrom, pos))
+    reference_bases = fetch_reference_bases(source_fasta, queries)
+
     prepared_rows: List[PreparedLiftoverRow] = []
     for idx, (row, (source_shard, source_index), upstream_allele_op) in enumerate(
         zip(rows, source_provenance, upstream_allele_ops)
     ):
         row_id = f"row{idx}"
-        preparation = resolve_ref_alt(row, source_fasta)
+        ref_base = reference_bases.get((row.chrom, positions[idx]), "")
+        preparation = resolve_ref_alt(row, ref_base)
         source_record = LiftoverSourceRecord(
             row,
             source_shard,

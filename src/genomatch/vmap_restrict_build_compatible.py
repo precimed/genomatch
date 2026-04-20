@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, Set, Tuple
 
-from .reference_utils import fetch_reference_base, resolve_bcftools_binary, resolve_internal_reference_fasta
+from .reference_utils import fetch_reference_bases, resolve_bcftools_binary, resolve_internal_reference_fasta
 from .haploid_utils import expected_ploidy_pair
 from .vtable_utils import (
     VMapRow,
@@ -90,15 +90,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def candidate_ref_base(row: VariantRow, fasta_path: Path, contig_naming: str) -> str:
-    pos = int(row.pos)
-    try:
-        ucsc_contig = normalize_contig_for_reference(row.chrom, contig_naming, "ucsc")
-    except ValueError:
-        return ""
-    return fetch_reference_base(fasta_path, ucsc_contig, pos)
-
-
 def validate_reference_aware_alleles(row: VariantRow, *, label: str) -> None:
     validate_allele_value(row.a1, label=label)
     validate_allele_value(row.a2, label=label)
@@ -153,10 +144,25 @@ def restrict_rows(
     contig_naming: str,
     allow_strand_flips: bool,
 ) -> List[Tuple[VariantRow | None, str]]:
-    out_rows: List[Tuple[VariantRow | None, str]] = []
+    candidate_rows: List[Tuple[VariantRow, str | None, int]] = []
+    queries: List[Tuple[str, int]] = []
     for row in rows:
         validate_reference_aware_alleles(row, label="restrict_build_compatible.py input")
-        ref_base = candidate_ref_base(row, fasta_path, contig_naming)
+        pos = int(row.pos)
+        try:
+            ucsc_contig = normalize_contig_for_reference(row.chrom, contig_naming, "ucsc")
+        except ValueError:
+            ucsc_contig = None
+        candidate_rows.append((row, ucsc_contig, pos))
+        if ucsc_contig is not None:
+            queries.append((ucsc_contig, pos))
+    reference_bases = fetch_reference_bases(fasta_path, queries)
+
+    out_rows: List[Tuple[VariantRow | None, str]] = []
+    for row, ucsc_contig, pos in candidate_rows:
+        ref_base = ""
+        if ucsc_contig is not None:
+            ref_base = reference_bases.get((ucsc_contig, pos), "")
         if ref_base not in {"A", "C", "G", "T"}:
             out_rows.append((None, "identity"))
             continue

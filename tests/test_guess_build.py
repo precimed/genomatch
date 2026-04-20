@@ -223,3 +223,42 @@ def test_guess_build_accepts_plink_family_input(tmp_path, contig_naming, chrom, 
     assert summary["genome_build"] == "GRCh37"
     assert summary["contig_naming"] == contig_naming
     assert summary["normalization"] == f"{contig_naming}->ucsc"
+
+
+def test_guess_build_reference_access_modes_are_consistent_and_default_to_bulk(tmp_path):
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "cohort.vtable"
+    write_fasta(grch37, {"chr1": "ACG"})
+    write_fasta(grch38, {"chr1": "TGA"})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA", "1\t3\trs3\tT\tG"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
+    )
+
+    common_env = {"MATCH_CONFIG": str(config)}
+    result_default = run_py_with_env("guess_build.py", common_env, "--input", source)
+    result_bulk = run_py_with_env(
+        "guess_build.py",
+        {**common_env, "MATCH_REFERENCE_ACCESS_MODE": "BULK"},
+        "--input",
+        source,
+    )
+    result_legacy = run_py_with_env(
+        "guess_build.py",
+        {**common_env, "MATCH_REFERENCE_ACCESS_MODE": "legacy"},
+        "--input",
+        source,
+    )
+    assert result_default.returncode == 0, result_default.stderr
+    assert result_bulk.returncode == 0, result_bulk.stderr
+    assert result_legacy.returncode == 0, result_legacy.stderr
+
+    summary_default = json.loads(result_default.stdout)
+    summary_bulk = json.loads(result_bulk.stdout)
+    summary_legacy = json.loads(result_legacy.stdout)
+    assert summary_default == summary_bulk
+    assert summary_bulk == summary_legacy

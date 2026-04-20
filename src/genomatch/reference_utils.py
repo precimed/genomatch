@@ -4,9 +4,10 @@ import os
 import shutil
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Sequence, Tuple
 
 DEFAULT_MATCH_CONFIG = Path("/ref/config.yaml")
+REFERENCE_ACCESS_MODES = {"BULK", "LEGACY"}
 
 
 def _load_yaml(path: Path) -> Dict[str, object]:
@@ -111,6 +112,19 @@ def resolve_bcftools_binary() -> str:
     raise ValueError("bcftools not found; install it or set MATCH_BCFTOOLS")
 
 
+def resolve_reference_access_mode() -> str:
+    raw_mode = os.environ.get("MATCH_REFERENCE_ACCESS_MODE")
+    if raw_mode is None or raw_mode.strip() == "":
+        return "BULK"
+    mode = raw_mode.strip().upper()
+    if mode not in REFERENCE_ACCESS_MODES:
+        accepted = ", ".join(sorted(REFERENCE_ACCESS_MODES))
+        raise ValueError(
+            f"unsupported MATCH_REFERENCE_ACCESS_MODE {raw_mode!r}; expected one of: {accepted}"
+        )
+    return mode
+
+
 @lru_cache(maxsize=None)
 def open_indexed_fasta(path: str):
     try:
@@ -127,14 +141,37 @@ def open_indexed_fasta(path: str):
         raise ValueError(f"failed to open indexed FASTA {fasta_path}: {exc}") from exc
 
 
-def fetch_reference_base(fasta_path: Path, contig: str, pos: int) -> str:
-    if pos <= 0:
-        return ""
-    fasta = open_indexed_fasta(str(fasta_path))
+@lru_cache(maxsize=None)
+def _indexed_fasta_references(path: str) -> frozenset[str]:
+    fasta = open_indexed_fasta(path)
+    fasta_path = Path(path)
     try:
-        references = set(fasta.references)
+        return frozenset(fasta.references)
     except Exception as exc:
         raise ValueError(f"failed to inspect indexed FASTA {fasta_path}: {exc}") from exc
+
+
+@lru_cache(maxsize=None)
+def _fetch_contig_sequence(path: str, contig: str) -> str:
+    fasta = open_indexed_fasta(path)
+    fasta_path = Path(path)
+    references = _indexed_fasta_references(path)
+    if contig not in references:
+        return ""
+    try:
+        return fasta.fetch(contig).upper()
+    except Exception as exc:
+        raise ValueError(
+            f"failed to fetch reference contig from indexed FASTA {fasta_path} at {contig}: {exc}"
+        ) from exc
+
+
+def fetch_reference_base_legacy(fasta_path: Path, contig: str, pos: int) -> str:
+    if pos <= 0:
+        return ""
+    path_str = str(fasta_path)
+    fasta = open_indexed_fasta(path_str)
+    references = _indexed_fasta_references(path_str)
     if contig not in references:
         return ""
     try:
@@ -152,3 +189,56 @@ def fetch_reference_base(fasta_path: Path, contig: str, pos: int) -> str:
     if len(seq) != 1:
         return ""
     return seq.upper()
+
+
+def fetch_reference_bases_bulk(
+    fasta_path: Path,
+    queries: Sequence[Tuple[str, int]],
+) -> Dict[Tuple[str, int], str]:
+    path_str = str(fasta_path)
+    out: Dict[Tuple[str, int], str] = {}
+    positions_by_contig: Dict[str, list[int]] = {}
+    for contig, pos in queries:
+        if pos <= 0:
+            out[(contig, pos)] = ""
+            continue
+        positions_by_contig.setdefault(contig, []).append(pos)
+    for contig, positions in positions_by_contig.items():
+        sequence = _fetch_contig_sequence(path_str, contig)
+        if not sequence:
+            for pos in positions:
+                out[(contig, pos)] = ""
+            continue
+        contig_length = len(sequence)
+        for pos in positions:
+            if pos > contig_length:
+                out[(contig, pos)] = ""
+                continue
+            out[(contig, pos)] = sequence[pos - 1]
+    return out
+
+
+def fetch_reference_bases(
+    fasta_path: Path,
+    queries: Sequence[Tuple[str, int]],
+) -> Dict[Tuple[str, int], str]:
+    if resolve_reference_access_mode() == "LEGACY":
+        return {
+            (contig, pos): fetch_reference_base_legacy(fasta_path, contig, pos)
+            for contig, pos in queries
+        }
+    return fetch_reference_bases_bulk(fasta_path, queries)
+
+
+def fetch_reference_base(fasta_path: Path, contig: str, pos: int) -> str:
+    mode = resolve_reference_access_mode()
+    if mode == "LEGACY":
+        return fetch_reference_base_legacy(fasta_path, contig, pos)
+    sequence = _fetch_contig_sequence(str(fasta_path), contig)
+    if pos <= 0:
+        return ""
+    if not sequence:
+        return ""
+    if pos > len(sequence):
+        return ""
+    return sequence[pos - 1]
