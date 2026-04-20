@@ -70,6 +70,8 @@ In v1, `guess_build.py` evaluates only `GRCh37` and `GRCh38`.
 
 For each build it computes an allele/reference compatibility rate against the configured UCSC internal FASTA for that build, after internal normalization to UCSC contig naming when needed.
 
+By default, build guessing is computed on a random downsample of up to `10,000` target rows (`--sample-rows 10000`). Sampling is without replacement and deterministic for reproducibility. Use `--sample-rows 0` to disable downsampling and evaluate all rows.
+
 The current fixed decision policy is:
 
 - guess the best-scoring build only if its compatibility rate is at least `0.60`

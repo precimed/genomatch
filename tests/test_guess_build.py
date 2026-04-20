@@ -262,3 +262,84 @@ def test_guess_build_reference_access_modes_are_consistent_and_default_to_bulk(t
     summary_legacy = json.loads(result_legacy.stdout)
     assert summary_default == summary_bulk
     assert summary_bulk == summary_legacy
+
+
+def test_guess_build_sample_rows_limits_considered_rows(tmp_path):
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "cohort.vtable"
+    write_fasta(grch37, {"chr1": "A" * 32})
+    write_fasta(grch38, {"chr1": "T" * 32})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    rows = [f"1\t{i}\trs{i}\tA\tC" for i in range(1, 21)]
+    write_lines(source, rows)
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "guess_build.py",
+        {"MATCH_CONFIG": str(config)},
+        "--input",
+        source,
+        "--sample-rows",
+        "5",
+    )
+    assert result.returncode == 0, result.stderr
+    summary = json.loads(result.stdout)
+    assert summary["sample_rows_requested"] == 5
+    assert summary["sample_rows_used"] == 5
+    considered = [entry["considered_rows"] for entry in summary["evidence"]]
+    assert considered == [5, 5]
+
+
+def test_guess_build_sample_rows_zero_uses_all_rows(tmp_path):
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "cohort.vtable"
+    write_fasta(grch37, {"chr1": "A" * 32})
+    write_fasta(grch38, {"chr1": "T" * 32})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    rows = [f"1\t{i}\trs{i}\tA\tC" for i in range(1, 13)]
+    write_lines(source, rows)
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "guess_build.py",
+        {"MATCH_CONFIG": str(config)},
+        "--input",
+        source,
+        "--sample-rows",
+        "0",
+    )
+    assert result.returncode == 0, result.stderr
+    summary = json.loads(result.stdout)
+    assert summary["sample_rows_requested"] == 0
+    assert summary["sample_rows_used"] == 12
+    considered = [entry["considered_rows"] for entry in summary["evidence"]]
+    assert considered == [12, 12]
+
+
+def test_guess_build_rejects_negative_sample_rows(tmp_path):
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "cohort.vtable"
+    write_fasta(grch37, {"chr1": "AC"})
+    write_fasta(grch38, {"chr1": "TG"})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(source, ["1\t1\trs1\tA\tC"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env("guess_build.py", {"MATCH_CONFIG": str(config)}, "--input", source, "--sample-rows", "-1")
+    assert result.returncode != 0
+    assert "--sample-rows must be >= 0" in result.stderr

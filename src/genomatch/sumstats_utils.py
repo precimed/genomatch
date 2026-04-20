@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, TextIO, Tuple
 
+import pandas as pd
+
 from .vtable_utils import open_text
 
 
@@ -132,6 +134,39 @@ class EffectColumnMapping:
     frequency: List[Optional[int]]
 
 
+@dataclass(frozen=True)
+class SumstatsTable:
+    path: Path
+    header_line: str
+    header: List[str]
+    delimiter: Optional[str]
+    frame: pd.DataFrame
+    source_index: pd.Series
+
+
+def build_sumstats_read_csv_kwargs(
+    path: Path,
+    delimiter: Optional[str],
+    *,
+    keep_default_na: bool,
+    dtype: object | None = None,
+) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {
+        "filepath_or_buffer": path,
+        "comment": "#",
+        "skip_blank_lines": True,
+        "keep_default_na": keep_default_na,
+    }
+    if dtype is not None:
+        kwargs["dtype"] = dtype
+    if delimiter is None:
+        kwargs["sep"] = r"\s+"
+        kwargs["engine"] = "python"
+    else:
+        kwargs["sep"] = delimiter
+    return kwargs
+
+
 def resolve_column(header: List[str], value: object, label: str, *, required: bool = False) -> Optional[int]:
     if value is None:
         if required:
@@ -211,3 +246,31 @@ def open_sumstats_data(path: Path) -> Iterator[Tuple[TextIO, str, List[str], Opt
             yield handle, header_line, split_line(header_line, delimiter), delimiter
             return
     raise ValueError(f"sumstats file is missing a header line: {path}")
+
+
+def read_sumstats_table(path: Path) -> SumstatsTable:
+    """
+    Assumes: path points to a single-file sumstats payload with one header row (after optional comment/blank preamble).
+    Performs: PN(parse delimiter/header and tabular rows via pandas as string-safe payload values), PV(header presence and deterministic source_index assignment).
+    Guarantees: table rows preserve raw data-row order with source_index=0..N-1 over rows only (excluding comments/blanks/header), while semantic required-column validation is deferred to importer/apply kernels.
+    """
+    with open_sumstats_data(path) as (_handle, header_line, header, delimiter):
+        pass
+
+    main_read_csv_kwargs = build_sumstats_read_csv_kwargs(
+        path,
+        delimiter,
+        keep_default_na=False,
+        dtype=object,
+    )
+    frame = pd.read_csv(**main_read_csv_kwargs)
+
+    source_index = pd.Series(range(len(frame)), dtype="int64")
+    return SumstatsTable(
+        path=path,
+        header_line=header_line,
+        header=header,
+        delimiter=delimiter,
+        frame=frame,
+        source_index=source_index,
+    )

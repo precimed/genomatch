@@ -7,12 +7,20 @@ from pathlib import Path
 
 from ._cli_utils import run_cli
 from .contig_cleanup_utils import (
-    load_target_variant_object,
-    normalize_target_rows,
+    normalize_target_table,
     normalized_output_metadata,
-    write_variant_object_like_input,
 )
-from .vtable_utils import SUPPORTED_CONTIG_NAMINGS, duplicate_target_row_keys, target_row_key, write_vmap_status_qc
+from .vtable_utils import (
+    SUPPORTED_CONTIG_NAMINGS,
+    VMapRowsTable,
+    VariantRowsTable,
+    duplicate_target_rows_mask_table,
+    load_variant_object_tables,
+    write_metadata,
+    write_vmap_status_qc,
+    write_vmap_table,
+    write_vtable_table,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,32 +37,38 @@ def main() -> int:
     output_path = Path(args.output)
     if not input_path.exists():
         raise ValueError(f"input file not found: {input_path}")
-    loaded = load_target_variant_object(input_path)
-    input_rows = loaded.base_vmap_rows if loaded.base_vmap_rows is not None else loaded.target_rows
-    result = normalize_target_rows(input_rows, args.to, genome_build=str(loaded.target_metadata.get("genome_build")))
-    output_rows = list(result.rows)
+    loaded = load_variant_object_tables(input_path)
+    genome_build = str(loaded.target_metadata.get("genome_build"))
+    is_vmap = loaded.base_vmap_table is not None
+    source_frame = (
+        loaded.base_vmap_table.to_frame(copy=False) if is_vmap else loaded.target_rows_table.to_frame(copy=False)
+    )
+    result = normalize_target_table(source_frame, args.to, genome_build=genome_build)
+    out_frame = result.frame
     duplicate_target_count = 0
     qc_path = output_path.with_name(output_path.name + ".qc.tsv")
-    if loaded.base_vmap_rows is not None:
-        duplicate_keys = duplicate_target_row_keys(output_rows)
-        duplicate_target_count = sum(1 for row in output_rows if target_row_key(row) in duplicate_keys)
-        if duplicate_keys:
-            qc_rows = [
-                (row.source_shard, row.source_index, row.id, "duplicate_target")
-                for row in output_rows
-                if target_row_key(row) in duplicate_keys
-            ]
-            output_rows = [row for row in output_rows if target_row_key(row) not in duplicate_keys]
-            write_vmap_status_qc(qc_path, qc_rows)
+    if is_vmap:
+        duplicate_mask = duplicate_target_rows_mask_table(out_frame)
+        duplicate_target_count = int(duplicate_mask.sum())
+        if duplicate_target_count > 0:
+            dup_frame = out_frame.loc[duplicate_mask]
+            write_vmap_status_qc(
+                qc_path,
+                zip(
+                    dup_frame["source_shard"].astype(str),
+                    dup_frame["source_index"].astype(int),
+                    dup_frame["id"].astype(str),
+                    ["duplicate_target"] * duplicate_target_count,
+                ),
+            )
+            out_frame = out_frame.loc[~duplicate_mask].reset_index(drop=True)
         elif qc_path.exists():
             qc_path.unlink()
-    write_variant_object_like_input(
-        loaded,
-        output_path,
-        output_rows,
-        normalized_output_metadata(loaded, args.to),
-        preserve_qc=True,
-    )
+    if is_vmap:
+        write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
+    else:
+        write_vtable_table(output_path, VariantRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
+    write_metadata(output_path, normalized_output_metadata(loaded, args.to))
     print(
         f"normalize_contigs.py: normalized {result.normalized_count} rows to {args.to}; "
         f"dropped {result.unknown_count} unresolved rows and {duplicate_target_count} duplicate target rows.",

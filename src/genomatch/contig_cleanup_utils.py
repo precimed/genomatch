@@ -4,8 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, Union
 
+import pandas as pd
+
+from .vectorization_utils import map_unique_values
 from .vtable_utils import (
     LoadedVariantObject,
+    LoadedVariantObjectTables,
     UNKNOWN_CONTIG,
     VMapRow,
     VariantRow,
@@ -21,9 +25,17 @@ from .vtable_utils import (
 
 TargetRow = Union[VariantRow, VMapRow]
 
+
 @dataclass(frozen=True)
 class NormalizedTargetRows:
     rows: List[TargetRow]
+    normalized_count: int
+    unknown_count: int
+
+
+@dataclass(frozen=True)
+class NormalizedTargetTable:
+    frame: pd.DataFrame
     normalized_count: int
     unknown_count: int
 
@@ -51,6 +63,35 @@ def normalize_target_rows(rows: Sequence[TargetRow], to_naming: str, *, genome_b
             normalized_count += 1
         normalized_rows.append(_replace_row_chrom(row, chrom))
     return NormalizedTargetRows(normalized_rows, normalized_count, unknown_count)
+
+
+def normalize_target_table(
+    frame: pd.DataFrame,
+    to_naming: str,
+    *,
+    genome_build: str | None = None,
+) -> NormalizedTargetTable:
+    # Assumes: frame has chrom and pos columns as object dtype strings.
+    # Performs: SV(contig label normalization via unique-value remap or per-row for plink_splitx).
+    # Guarantees: NormalizedTargetTable with chrom remapped, UNKNOWN_CONTIG rows excluded, counts tracked.
+    if to_naming == "plink_splitx":
+        # PERF: per-row apply retained; pos required per-row for PAR boundary classification
+        new_chrom = frame.apply(
+            lambda row: repair_contig_label(str(row["chrom"]), to_naming, pos=str(row["pos"]), genome_build=genome_build),
+            axis=1,
+        )
+    else:
+        new_chrom = map_unique_values(
+            frame["chrom"],
+            lambda chrom: repair_contig_label(chrom, to_naming, genome_build=genome_build),
+        )
+    unknown_mask = new_chrom.eq(UNKNOWN_CONTIG)
+    unknown_count = int(unknown_mask.sum())
+    changed_mask = ~unknown_mask & new_chrom.ne(frame["chrom"])
+    normalized_count = int(changed_mask.sum())
+    out_frame = frame.loc[~unknown_mask].copy()
+    out_frame["chrom"] = new_chrom.loc[~unknown_mask].values
+    return NormalizedTargetTable(out_frame.reset_index(drop=True), normalized_count, unknown_count)
 
 
 def require_target_contig_cleanup_contract(loaded: LoadedVariantObject) -> Dict[str, object]:
@@ -82,7 +123,7 @@ def build_target_restriction_selection_for_contigs(
     return selected
 
 
-def normalized_output_metadata(loaded: LoadedVariantObject, to_naming: str) -> Dict[str, object]:
+def normalized_output_metadata(loaded: Union[LoadedVariantObject, LoadedVariantObjectTables], to_naming: str) -> Dict[str, object]:
     if loaded.object_type == "variant_table":
         out_meta = dict(loaded.raw_metadata)
         out_meta["contig_naming"] = to_naming

@@ -1,7 +1,7 @@
 import gzip
 import math
 
-from utils import run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_json, write_lines
 
 
 def write_vmap_with_meta(path, lines):
@@ -321,7 +321,7 @@ def test_apply_vmap_to_sumstats_rejects_template_output_path(tmp_path):
     assert "does not accept '@' paths" in result.stderr
 
 
-def test_apply_vmap_to_sumstats_fails_on_short_payload_rows(tmp_path):
+def test_apply_vmap_to_sumstats_fails_when_required_variant_columns_are_missing(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     vmap = tmp_path / "map.vmap"
@@ -333,7 +333,88 @@ def test_apply_vmap_to_sumstats_fails_on_short_payload_rows(tmp_path):
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
-    assert "fewer columns than expected" in result.stderr
+    assert "missing values in required variant columns" in result.stderr
+
+
+def test_apply_vmap_to_sumstats_roundtrip_preserves_provenance_with_comment_and_blank_lines(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "imported.vmap"
+    out = tmp_path / "out.tsv"
+
+    sumstats.write_text(
+        "# metadata preamble\n"
+        "\n"
+        "CHR\tPOS\tSNP\tEA\tOA\tBETA\n"
+        "# in-body comment that should not affect source_index\n"
+        "1\t100\trs1\tA\tG\t0.5\n"
+        "\n"
+        "# another in-body comment\n"
+        "1\t200\trs2\tC\tT\t-1.0\n",
+        encoding="utf-8",
+    )
+    write_lines(
+        meta,
+        [
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_SNP: SNP",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_BETA: BETA",
+        ],
+    )
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", vmap)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(vmap) == [
+        ["1", "100", "rs1", "A", "G", ".", "0", "identity"],
+        ["1", "200", "rs2", "C", "T", ".", "1", "identity"],
+    ]
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEA\tOA\tBETA\n"
+        "1\t100\trs1\tA\tG\t0.5\n"
+        "1\t200\trs2\tC\tT\t-1.0\n"
+    )
+
+
+def test_apply_vmap_to_sumstats_source_index_ignores_comment_and_blank_lines(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+
+    sumstats.write_text(
+        "# pre-header comment\n"
+        "\n"
+        "CHR\tPOS\tSNP\tEA\tOA\tBETA\n"
+        "# skipped line before first data row\n"
+        "1\t100\trs1\tA\tG\t0.5\n"
+        "\n"
+        "# skipped line before second data row\n"
+        "1\t200\trs2\tC\tT\t-1.0\n",
+        encoding="utf-8",
+    )
+    write_lines(
+        meta,
+        [
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_SNP: SNP",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_BETA: BETA",
+        ],
+    )
+    write_lines(vmap, ["1\t200\trs2\tC\tT\t.\t1\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t200\trs2\tC\tT\t-1.0\n"
 
 
 def test_apply_vmap_to_sumstats_clean_normalizes_headers_and_drops_unrecognized_columns(tmp_path):

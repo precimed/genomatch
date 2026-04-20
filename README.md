@@ -214,7 +214,7 @@ Downstream transforms other than `normalize_contigs.py` require declared `contig
 | Import | `import_pvar.py` | raw `.pvar` | `.vmap` | Creates provenance; supports raw-input `@` discovery and `--chr2use` / `--contigs` |
 | Import | `import_vcf.py` | raw `.vcf` / `.vcf.gz` | `.vmap` | Creates provenance; supports raw-input `@` discovery and `--chr2use` / `--contigs` |
 | Import | `import_sumstats.py` | raw summary statistics plus metadata YAML | `.vmap` | Creates provenance; supports `--chr2use` / `--contigs` and optional `--id-vtable`; single-file only |
-| Normalize / metadata | `guess_build.py` | `.vmap` or `.vtable` | same as input | Metadata-only update; on `.vmap`, updates target-side metadata only |
+| Normalize / metadata | `guess_build.py` | `.vmap` or `.vtable` | same as input | Metadata-only update; on `.vmap`, updates target-side metadata only; build evidence uses a default random downsample of up to `10,000` rows (`--sample-rows`, use `0` for all rows) |
 | Normalize / metadata | `normalize_contigs.py` | `.vmap` or `.vtable` | same as input | Repairs or standardizes target contigs; target naming is selected with `--to` |
 | Normalize / metadata | `restrict_contigs.py` | `.vmap` or `.vtable` | same as input | Target-side contig filter via `--chr2use` / `--contigs` |
 | Normalize / metadata | `drop_strand_ambiguous.py` | `.vmap` or `.vtable` | same as input | Drops strand-ambiguous target rows |

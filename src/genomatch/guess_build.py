@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -21,6 +22,8 @@ from .vtable_utils import (
 MIN_GUESS_COMPATIBILITY_RATE = 0.60
 MIN_GUESS_MARGIN = 0.10
 HIGH_CONFIDENCE_COMPATIBILITY_RATE = 0.85
+DEFAULT_GUESS_SAMPLE_ROWS = 10_000
+DEFAULT_GUESS_SAMPLE_SEED = 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,6 +33,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, help="Input .vtable or .vmap")
     parser.add_argument("--write", action="store_true", help="Write updated metadata sidecar")
     parser.add_argument("--force", action="store_true", help="Overwrite existing metadata fields")
+    parser.add_argument(
+        "--sample-rows",
+        type=int,
+        default=DEFAULT_GUESS_SAMPLE_ROWS,
+        help=(
+            "Maximum number of target rows to sample for build guessing (default: 10000). "
+            "Use 0 to disable downsampling and use all rows."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -99,6 +111,14 @@ def guess_build(rows: List[VariantRow], contig_naming: str) -> Dict[str, object]
     }
 
 
+def sample_rows_for_guess(rows: List[VariantRow], sample_rows: int) -> List[VariantRow]:
+    if sample_rows <= 0 or len(rows) <= sample_rows:
+        return rows
+    rng = random.Random(DEFAULT_GUESS_SAMPLE_SEED)
+    sampled_indices = sorted(rng.sample(range(len(rows)), sample_rows))
+    return [rows[index] for index in sampled_indices]
+
+
 def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
@@ -111,8 +131,11 @@ def main() -> int:
     rows = loaded.target_rows
     if not rows:
         raise ValueError("empty variant object")
+    if args.sample_rows < 0:
+        raise ValueError("--sample-rows must be >= 0")
     require_rows_match_contig_naming(rows, contig_naming, label="variant object")
-    build_guess = guess_build(rows, contig_naming)
+    sampled_rows = sample_rows_for_guess(rows, int(args.sample_rows))
+    build_guess = guess_build(sampled_rows, contig_naming)
 
     output_meta = dict(current_meta)
     if loaded.object_type == "variant_map":
@@ -137,6 +160,8 @@ def main() -> int:
         "confidence": build_guess["confidence"],
         "write_requested": bool(args.write),
         "metadata_updated": False,
+        "sample_rows_requested": int(args.sample_rows),
+        "sample_rows_used": len(sampled_rows),
         "evidence": build_guess["evidence"],
     }
     if args.write and metadata_can_change:

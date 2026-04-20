@@ -6,32 +6,39 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+import pandas as pd
+
 from ._cli_utils import run_cli
 from .importer_utils import (
-    filter_import_rows_by_chr2use,
-    finalize_imported_vmap,
-    ImportQcRow,
-    ImportedVariantRow,
-    is_canonical_import_allele,
+    finalize_imported_vmap_vectorized,
+    is_canonical_allele_token,
     is_valid_import_position,
     reject_template_argument,
 )
+from .contig_utils import canonical_contig_from_any_supported_label
 from .sumstats_utils import (
     extract_variant_field,
     find_metadata_value,
     load_metadata,
-    open_sumstats_data,
+    read_sumstats_table,
     resolve_column,
     resolve_variant_columns,
-    split_line,
 )
 from .vtable_utils import (
     load_metadata as load_variant_metadata,
     normalize_allele_token,
     open_text,
+    parse_chr2use,
     validate_vtable_metadata,
     VariantRow,
 )
+
+
+MISSING_VALUE_TOKENS = {"", "nan", "none"}
+
+
+def is_missing_token_series(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.lower().isin(MISSING_VALUE_TOKENS)
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,7 +72,7 @@ def load_id_lookup_vtable(path: Path) -> tuple[Dict[str, VariantRow], Set[str], 
             a2 = normalize_allele_token(a2)
             if not chrom or not is_valid_import_position(pos):
                 raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
-            if not is_canonical_import_allele(a1) or not is_canonical_import_allele(a2):
+            if not is_canonical_allele_token(a1) or not is_canonical_allele_token(a2):
                 raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
             lookup_id = row_id.strip()
             if not lookup_id or lookup_id == ".":
@@ -130,98 +137,171 @@ def main() -> int:
     inherited_target_meta: Optional[Dict[str, object]] = None
     if id_vtable_path is not None:
         id_lookup_rows, ambiguous_lookup_ids, inherited_target_meta = load_id_lookup_vtable(id_vtable_path)
-    with open_sumstats_data(input_path) as (handle, _header_line, header, delimiter):
-        if id_vtable_path is None:
-            variant_columns = resolve_variant_columns(header, metadata, require_pos=True)
-            max_idx = max(
-                variant_columns.chr,
-                variant_columns.pos or 0,
-                variant_columns.effect_allele,
-                variant_columns.other_allele,
-                variant_columns.snp or 0,
+    sumstats_table = read_sumstats_table(input_path)
+    header = list(sumstats_table.header)
+    frame = sumstats_table.frame
+    if id_vtable_path is None:
+        variant_columns = resolve_variant_columns(header, metadata, require_pos=True)
+    else:
+        snp_idx, effect_idx, other_idx = resolve_id_enrichment_columns(header, metadata)
+
+    rows_frame = pd.DataFrame(columns=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index"])
+    qc_rows_frame = pd.DataFrame(columns=["source_shard", "source_index", "reason"])
+    if id_vtable_path is None:
+        n_rows = len(frame)
+        reason = pd.Series([None] * n_rows, dtype="object")
+
+        valid_mask = reason.isna()
+        chrom_series = pd.Series([""] * n_rows, dtype="object")
+        pos_series = pd.Series([""] * n_rows, dtype="object")
+        row_id_series = pd.Series(["."] * n_rows, dtype="object")
+        a1_series = pd.Series([""] * n_rows, dtype="object")
+        a2_series = pd.Series([""] * n_rows, dtype="object")
+
+        if bool(valid_mask.any()):
+            active_idx = valid_mask[valid_mask].index
+            chrom_raw = frame.iloc[active_idx, variant_columns.chr].astype(str)
+            pos_raw = frame.iloc[active_idx, variant_columns.pos].astype(str)
+            a1_raw = frame.iloc[active_idx, variant_columns.effect_allele].astype(str)
+            a2_raw = frame.iloc[active_idx, variant_columns.other_allele].astype(str)
+
+            chrom_series.iloc[active_idx] = chrom_raw.map(lambda value: extract_variant_field(value, "CHR"))
+            pos_series.iloc[active_idx] = pos_raw.map(lambda value: extract_variant_field(value, "POS"))
+            a1_series.iloc[active_idx] = a1_raw.map(lambda value: normalize_allele_token(extract_variant_field(value, "EffectAllele")))
+            a2_series.iloc[active_idx] = a2_raw.map(lambda value: normalize_allele_token(extract_variant_field(value, "OtherAllele")))
+
+            missing_required_mask = valid_mask & (
+                is_missing_token_series(chrom_series)
+                | is_missing_token_series(pos_series)
+                | is_missing_token_series(a1_series)
+                | is_missing_token_series(a2_series)
             )
-        else:
-            snp_idx, effect_idx, other_idx = resolve_id_enrichment_columns(header, metadata)
-            max_idx = max(snp_idx, effect_idx, other_idx)
-        rows: List[ImportedVariantRow] = []
-        qc_rows: List[ImportQcRow] = []
-        source_index = 0
-        for line in handle:
-            if not line.strip() or line.startswith("#"):
-                continue
-            cols = split_line(line, delimiter)
-            if len(cols) <= max_idx:
-                qc_rows.append(ImportQcRow(".", source_index, "malformed_row"))
-                source_index += 1
-                continue
-            try:
-                if id_vtable_path is None:
-                    chrom = extract_variant_field(cols[variant_columns.chr], "CHR")
-                    pos = extract_variant_field(cols[variant_columns.pos], "POS")
-                    row_id = cols[variant_columns.snp] if variant_columns.snp is not None and cols[variant_columns.snp] else "."
-                    a1 = extract_variant_field(cols[variant_columns.effect_allele], "EffectAllele")
-                    a2 = extract_variant_field(cols[variant_columns.other_allele], "OtherAllele")
-                else:
-                    raw_id = cols[snp_idx].strip()
-                    a1 = extract_variant_field(cols[effect_idx], "EffectAllele")
-                    a2 = extract_variant_field(cols[other_idx], "OtherAllele")
-                a1 = normalize_allele_token(a1)
-                a2 = normalize_allele_token(a2)
-            except Exception:
-                qc_rows.append(ImportQcRow(".", source_index, "malformed_row"))
-                source_index += 1
-                continue
-            if not is_canonical_import_allele(a1) or not is_canonical_import_allele(a2):
-                qc_rows.append(ImportQcRow(".", source_index, "non_actg_allele"))
-                source_index += 1
-                continue
-            if id_vtable_path is None:
-                if not chrom or not is_valid_import_position(pos):
-                    qc_rows.append(ImportQcRow(".", source_index, "malformed_row"))
-                    source_index += 1
-                    continue
-            else:
-                if not raw_id or raw_id == ".":
-                    qc_rows.append(ImportQcRow(".", source_index, "invalid_id"))
-                    source_index += 1
-                    continue
-                if raw_id in ambiguous_lookup_ids:
-                    qc_rows.append(ImportQcRow(".", source_index, "ambiguous_id_match"))
-                    source_index += 1
-                    continue
-                matched_row = id_lookup_rows.get(raw_id)
-                if matched_row is None:
-                    qc_rows.append(ImportQcRow(".", source_index, "id_not_found"))
-                    source_index += 1
-                    continue
-                chrom = matched_row.chrom
-                pos = matched_row.pos
-                row_id = raw_id
-            rows.append(
-                ImportedVariantRow(
-                    VariantRow(
-                        chrom,
-                        pos,
-                        row_id,
-                        a1,
-                        a2,
-                    ),
-                    ".",
-                    source_index,
-                )
+            reason.loc[missing_required_mask] = "malformed_row"
+
+            if variant_columns.snp is not None:
+                snp_raw = frame.iloc[active_idx, variant_columns.snp].astype(str)
+                row_id_series.iloc[active_idx] = snp_raw.where(snp_raw != "", ".")
+
+            non_actg_mask = reason.isna() & (
+                ~a1_series.map(is_canonical_allele_token).fillna(False)
+                | ~a2_series.map(is_canonical_allele_token).fillna(False)
             )
-            source_index += 1
-    rows, chr_qc_rows = filter_import_rows_by_chr2use(rows, args.chr2use)
-    qc_rows.extend(chr_qc_rows)
-    finalize_imported_vmap(
+            reason.loc[non_actg_mask] = "non_actg_allele"
+
+            malformed_mask = reason.isna() & (
+                chrom_series.astype(str).str.strip().eq("")
+                | ~pos_series.map(is_valid_import_position).fillna(False)
+            )
+            reason.loc[malformed_mask] = "malformed_row"
+
+        retained_mask = reason.isna()
+        retained_indices = retained_mask[retained_mask].index
+        rows_frame = pd.DataFrame(
+            {
+                "chrom": chrom_series.iloc[retained_indices].astype(str).values,
+                "pos": pos_series.iloc[retained_indices].astype(str).values,
+                "id": row_id_series.iloc[retained_indices].astype(str).values,
+                "a1": a1_series.iloc[retained_indices].astype(str).values,
+                "a2": a2_series.iloc[retained_indices].astype(str).values,
+                "source_shard": ".",
+                "source_index": retained_indices.astype("int64"),
+            },
+            columns=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index"],
+        )
+        qc_indices = reason[reason.notna()].index
+        qc_rows_frame = pd.DataFrame(
+            {
+                "source_shard": ".",
+                "source_index": qc_indices.astype("int64"),
+                "reason": reason.iloc[qc_indices].astype(str).values,
+            },
+            columns=["source_shard", "source_index", "reason"],
+        )
+    else:
+        n_rows = len(frame)
+        reason = pd.Series([None] * n_rows, dtype="object")
+
+        valid_mask = reason.isna()
+        raw_id_series = pd.Series([""] * n_rows, dtype="object")
+        a1_series = pd.Series([""] * n_rows, dtype="object")
+        a2_series = pd.Series([""] * n_rows, dtype="object")
+
+        if bool(valid_mask.any()):
+            active_idx = valid_mask[valid_mask].index
+            raw_id_series.iloc[active_idx] = frame.iloc[active_idx, snp_idx].astype(str).str.strip()
+            a1_raw = frame.iloc[active_idx, effect_idx].astype(str)
+            a2_raw = frame.iloc[active_idx, other_idx].astype(str)
+            a1_series.iloc[active_idx] = a1_raw.map(lambda value: normalize_allele_token(extract_variant_field(value, "EffectAllele")))
+            a2_series.iloc[active_idx] = a2_raw.map(lambda value: normalize_allele_token(extract_variant_field(value, "OtherAllele")))
+
+            missing_required_mask = valid_mask & (
+                is_missing_token_series(a1_series)
+                | is_missing_token_series(a2_series)
+            )
+            reason.loc[missing_required_mask] = "malformed_row"
+
+            non_actg_mask = reason.isna() & (
+                ~a1_series.map(is_canonical_allele_token).fillna(False)
+                | ~a2_series.map(is_canonical_allele_token).fillna(False)
+            )
+            reason.loc[non_actg_mask] = "non_actg_allele"
+
+            invalid_id_mask = reason.isna() & (
+                raw_id_series.astype(str).str.strip().eq("")
+                | raw_id_series.astype(str).str.strip().eq(".")
+            )
+            reason.loc[invalid_id_mask] = "invalid_id"
+
+            ambiguous_id_mask = reason.isna() & raw_id_series.isin(ambiguous_lookup_ids)
+            reason.loc[ambiguous_id_mask] = "ambiguous_id_match"
+
+            missing_id_mask = reason.isna() & ~raw_id_series.isin(set(id_lookup_rows))
+            reason.loc[missing_id_mask] = "id_not_found"
+
+        retained_mask = reason.isna()
+        retained_indices = retained_mask[retained_mask].index
+        raw_id_retained = raw_id_series.iloc[retained_indices].astype(str)
+        rows_frame = pd.DataFrame(
+            {
+                "chrom": raw_id_retained.map(lambda value: id_lookup_rows[value].chrom).values,
+                "pos": raw_id_retained.map(lambda value: id_lookup_rows[value].pos).values,
+                "id": raw_id_retained.values,
+                "a1": a1_series.iloc[retained_indices].astype(str).values,
+                "a2": a2_series.iloc[retained_indices].astype(str).values,
+                "source_shard": ".",
+                "source_index": retained_indices.astype("int64"),
+            },
+            columns=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index"],
+        )
+        qc_indices = reason[reason.notna()].index
+        qc_rows_frame = pd.DataFrame(
+            {
+                "source_shard": ".",
+                "source_index": qc_indices.astype("int64"),
+                "reason": reason.iloc[qc_indices].astype(str).values,
+            },
+            columns=["source_shard", "source_index", "reason"],
+        )
+
+    allowed_chr, chr_filter_enabled = parse_chr2use(args.chr2use)
+    if chr_filter_enabled and not rows_frame.empty:
+        allowed_set = set(allowed_chr)
+        canonical = rows_frame["chrom"].astype(str).map(canonical_contig_from_any_supported_label)
+        keep_mask = canonical.isin(allowed_set)
+        dropped = rows_frame.loc[~keep_mask, ["source_shard", "source_index"]].copy()
+        if not dropped.empty:
+            dropped["reason"] = "filtered_by_chr2use"
+            qc_rows_frame = pd.concat([qc_rows_frame, dropped], ignore_index=True)
+        rows_frame = rows_frame.loc[keep_mask].reset_index(drop=True)
+    finalize_imported_vmap_vectorized(
         output_path=output_path,
-        rows=rows,
+        rows_frame=rows_frame,
         genome_build=args.genome_build if inherited_target_meta is None else str(inherited_target_meta["genome_build"]),
         target_contig_naming=None if inherited_target_meta is None else inherited_target_meta.get("contig_naming"),
         infer_target_contig_naming=inherited_target_meta is None,
         created_by="import_sumstats.py",
         derived_from=input_path,
-        qc_rows=qc_rows,
+        qc_rows_frame=qc_rows_frame,
     )
     return 0
 

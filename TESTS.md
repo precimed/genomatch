@@ -87,6 +87,9 @@ The migrated suite must keep coverage for:
 - `guess_build.py` requires declared `contig_naming`
 - `guess_build.py` writes inferred metadata only when `genome_build` is `unknown` or `--force` is used
 - `guess_build.py` guesses build from configured reference assets and reports evidence
+- `guess_build.py` defaults to random downsampling of at most 10,000 target rows when computing build evidence
+- `guess_build.py --sample-rows 0` disables downsampling and evaluates all target rows
+- `guess_build.py` rejects negative `--sample-rows`
 - `guess_build.py` accepts UCSC-named input without extra normalization
 - `guess_build.py` returns `genome_build=unknown` when evidence is ambiguous, below threshold, or unusable
 - malformed metadata sidecars fail clearly during `guess_build.py`
