@@ -233,6 +233,8 @@ def parse_lifted_vcf(
 ) -> Tuple[List[VMapRow], Dict[str, str]]:
     parsed_rows: List[Tuple[str, VMapRow]] = []
     status_by_row_id: Dict[str, str] = {}
+
+    vcf_data: List[List[str]] = []
     with open(path, "r", encoding="utf-8", newline="") as handle:
         for raw_line in handle:
             if not raw_line.strip() or raw_line.startswith("#"):
@@ -240,75 +242,90 @@ def parse_lifted_vcf(
             parts = raw_line.rstrip("\n").split("\t")
             if len(parts) < 8:
                 raise ValueError(f"invalid lifted VCF row: {raw_line.strip()}")
-            chrom, pos, row_id, ref, alt, _qual, filt, info_raw = parts[:8]
-            if row_id not in row_lookup:
-                raise ValueError(f"unexpected liftover row ID: {row_id}")
-            if filt not in {".", "PASS"}:
-                continue
-            record = row_lookup[row_id]
-            if "," in alt:
-                status_by_row_id[row_id] = "unsupported_non_snv"
-                continue
-            ref_token = ref.upper()
-            alt_token = alt.upper()
-            if not ref_token or not alt_token or set(ref_token) - {"A", "C", "G", "T"} or set(alt_token) - {"A", "C", "G", "T"}:
-                status_by_row_id[row_id] = "unsupported_non_snv"
-                continue
-            if len(ref_token) > 1 and len(alt_token) > 1:
-                status_by_row_id[row_id] = "unsupported_non_snv"
-                continue
-            try:
-                final_chrom = convert_contig_label(chrom, "ucsc", final_contig_naming)
-            except ValueError:
-                status_by_row_id[row_id] = "unsupported_target_contig"
-                continue
-            source_ploidy_pair = expected_ploidy_pair(
-                record.row.chrom,
-                record.row.pos,
-                genome_build=source_build,
-            )
-            target_ploidy_pair = expected_ploidy_pair(
-                final_chrom,
-                pos,
-                genome_build=target_build,
-            )
-            if target_ploidy_pair != source_ploidy_pair:
-                status_by_row_id[row_id] = "ploidy_class_changed"
-                continue
-            liftover_op = allele_op_from_liftover_info(info_raw)
-            # Compose the full allele-orientation history:
-            # final_op = upstream ∘ input_to_vcf ∘ bcftools_liftover ∘ vcf_to_canonical_output
-            #
-            # vcf_to_canonical_output is always "swap" by construction because lifted VCF rows
-            # are parsed as REF/ALT, while the emitted canonical row is written as a1=ALT, a2=REF.
-            #
-            # input_to_vcf is the source-side normalization required to express the input row as
-            # a valid source-build VCF REF/ALT record. When liftover_build.py is used after the
-            # recommended restrict_build_compatible.py step, this is expected to be "swap"
-            # because that tool canonicalizes retained rows to a1=non-reference, a2=reference.
-            output_allele_op = "swap"
-            parsed_rows.append(
-                (
-                    row_id,
-                    VMapRow(
-                        final_chrom,
-                        pos,
-                        record.row.id,
-                        alt_token,
-                        ref_token,
-                        record.source_shard,
-                        record.source_index,
+            vcf_data.append(parts[:8])
+
+    acgt_set = {"A", "C", "G", "T"}
+    for parts in vcf_data:
+        chrom, pos, row_id, ref, alt, _qual, filt, info_raw = parts
+        if row_id not in row_lookup:
+            raise ValueError(f"unexpected liftover row ID: {row_id}")
+        if filt not in {".", "PASS"}:
+            continue
+        record = row_lookup[row_id]
+
+        if "," in alt:
+            status_by_row_id[row_id] = "unsupported_non_snv"
+            continue
+
+        ref_token = ref.upper()
+        alt_token = alt.upper()
+        if (
+            not ref_token
+            or not alt_token
+            or not set(ref_token) <= acgt_set
+            or not set(alt_token) <= acgt_set
+        ):
+            status_by_row_id[row_id] = "unsupported_non_snv"
+            continue
+
+        if len(ref_token) > 1 and len(alt_token) > 1:
+            status_by_row_id[row_id] = "unsupported_non_snv"
+            continue
+
+        try:
+            final_chrom = convert_contig_label(chrom, "ucsc", final_contig_naming)
+        except ValueError:
+            status_by_row_id[row_id] = "unsupported_target_contig"
+            continue
+
+        source_ploidy_pair = expected_ploidy_pair(
+            record.row.chrom,
+            record.row.pos,
+            genome_build=source_build,
+        )
+        target_ploidy_pair = expected_ploidy_pair(
+            final_chrom,
+            pos,
+            genome_build=target_build,
+        )
+        if target_ploidy_pair != source_ploidy_pair:
+            status_by_row_id[row_id] = "ploidy_class_changed"
+            continue
+
+        liftover_op = allele_op_from_liftover_info(info_raw)
+        # Compose the full allele-orientation history:
+        # final_op = upstream ∘ input_to_vcf ∘ bcftools_liftover ∘ vcf_to_canonical_output
+        #
+        # vcf_to_canonical_output is always "swap" by construction because lifted VCF rows
+        # are parsed as REF/ALT, while the emitted canonical row is written as a1=ALT, a2=REF.
+        #
+        # input_to_vcf is the source-side normalization required to express the input row as
+        # a valid source-build VCF REF/ALT record. When liftover_build.py is used after the
+        # recommended restrict_build_compatible.py step, this is expected to be "swap"
+        # because that tool canonicalizes retained rows to a1=non-reference, a2=reference.
+        output_allele_op = "swap"
+        parsed_rows.append(
+            (
+                row_id,
+                VMapRow(
+                    final_chrom,
+                    pos,
+                    record.row.id,
+                    alt_token,
+                    ref_token,
+                    record.source_shard,
+                    record.source_index,
+                    compose_allele_ops(
+                        record.upstream_allele_op,
                         compose_allele_ops(
-                            record.upstream_allele_op,
-                            compose_allele_ops(
-                                record.input_allele_op,
-                                compose_allele_ops(liftover_op, output_allele_op),
-                            ),
+                            record.input_allele_op,
+                            compose_allele_ops(liftover_op, output_allele_op),
                         ),
                     ),
-                )
+                ),
             )
-            status_by_row_id[row_id] = "lifted"
+        )
+        status_by_row_id[row_id] = "lifted"
 
     parsed_rows = sorted(
         parsed_rows,
