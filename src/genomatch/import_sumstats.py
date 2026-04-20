@@ -27,6 +27,7 @@ from .sumstats_utils import (
 )
 from .vtable_utils import (
     load_metadata as load_variant_metadata,
+    normalize_allele_token,
     open_text,
     validate_vtable_metadata,
     VariantRow,
@@ -60,6 +61,8 @@ def load_id_lookup_vtable(path: Path) -> tuple[Dict[str, VariantRow], Set[str], 
             if len(parts) != 5:
                 raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
             chrom, pos, row_id, a1, a2 = parts
+            a1 = normalize_allele_token(a1)
+            a2 = normalize_allele_token(a2)
             if not chrom or not is_valid_import_position(pos):
                 raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
             if not is_canonical_import_allele(a1) or not is_canonical_import_allele(a2):
@@ -162,6 +165,8 @@ def main() -> int:
                     raw_id = cols[snp_idx].strip()
                     a1 = extract_variant_field(cols[effect_idx], "EffectAllele")
                     a2 = extract_variant_field(cols[other_idx], "OtherAllele")
+                a1 = normalize_allele_token(a1)
+                a2 = normalize_allele_token(a2)
             except Exception:
                 qc_rows.append(ImportQcRow(".", source_index, "malformed_row"))
                 source_index += 1

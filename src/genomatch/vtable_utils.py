@@ -95,6 +95,10 @@ def ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def normalize_allele_token(value: str) -> str:
+    return value.strip().upper()
+
+
 def _load_json(path: Path) -> Dict[str, object]:
     with open(path, "r", encoding="utf-8", newline="\n") as handle:
         data = json.load(handle)
@@ -208,7 +212,15 @@ def read_vtable(path: Path) -> List[VariantRow]:
             parts = line.rstrip("\n").split("\t")
             if len(parts) != 5:
                 raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
-            rows.append(VariantRow(*parts))
+            rows.append(
+                VariantRow(
+                    parts[0],
+                    parts[1],
+                    parts[2],
+                    normalize_allele_token(parts[3]),
+                    normalize_allele_token(parts[4]),
+                )
+            )
     validate_vtable_rows(rows, label=str(path))
     return rows
 
@@ -235,7 +247,18 @@ def read_vmap(path: Path) -> List[VMapRow]:
                 source_index = int(parts[6])
             except ValueError as exc:
                 raise ValueError(f"invalid vmap row in {path}: {line.strip()}") from exc
-            rows.append(VMapRow(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], source_index, parts[7]))
+            rows.append(
+                VMapRow(
+                    parts[0],
+                    parts[1],
+                    parts[2],
+                    normalize_allele_token(parts[3]),
+                    normalize_allele_token(parts[4]),
+                    parts[5],
+                    source_index,
+                    parts[7],
+                )
+            )
     validate_vmap_rows(rows)
     return rows
 
@@ -313,7 +336,7 @@ def variant_rows_from_vmap_rows(rows: Sequence[VMapRow]) -> List[VariantRow]:
 
 
 def target_row_key(row: VariantRow | VMapRow) -> tuple[str, str, str, str]:
-    return (row.chrom, row.pos, row.a1.upper(), row.a2.upper())
+    return (row.chrom, row.pos, row.a1, row.a2)
 
 
 def duplicate_target_row_keys(rows: Sequence[VariantRow | VMapRow]) -> set[tuple[str, str, str, str]]:
@@ -401,7 +424,7 @@ def possible_fasta_contigs(label: str, contig_naming: str) -> List[str]:
 
 
 def validate_allele_value(value: str, *, label: str) -> None:
-    token = value.strip().upper()
+    token = normalize_allele_token(value)
     if not token:
         raise ValueError(f"invalid allele code in {label}: {value!r}")
     if any(base not in COMPLEMENT for base in token):
@@ -410,7 +433,7 @@ def validate_allele_value(value: str, *, label: str) -> None:
 
 def validate_snv_alleles(row: VariantRow, *, label: str) -> None:
     for allele_name, allele in (("a1", row.a1), ("a2", row.a2)):
-        token = allele.strip().upper()
+        token = normalize_allele_token(allele)
         if len(token) != 1 or token not in COMPLEMENT:
             raise ValueError(
                 f"{label} currently supports only single-base A/C/G/T alleles; "
@@ -528,7 +551,7 @@ def filter_variant_rows_by_chr(
 
 
 def complement_allele(value: str) -> str:
-    token = value.upper()
+    token = normalize_allele_token(value)
     if any(base not in COMPLEMENT for base in token):
         raise ValueError(f"cannot complement non-ACGT allele: {value!r}")
     return "".join(COMPLEMENT[base] for base in reversed(token))
@@ -541,8 +564,8 @@ def classify_allele_operation(
     target_a2: str,
     allow_strand_flips: bool,
 ) -> str:
-    source = (source_a1.upper(), source_a2.upper())
-    target = (target_a1.upper(), target_a2.upper())
+    source = (source_a1, source_a2)
+    target = (target_a1, target_a2)
     if source == target:
         return "identity"
     if (source[1], source[0]) == target:

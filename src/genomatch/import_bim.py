@@ -16,7 +16,7 @@ from .importer_utils import (
     is_valid_import_position,
     resolve_import_input_paths,
 )
-from .vtable_utils import VariantRow
+from .vtable_utils import normalize_allele_token, VariantRow
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,6 +45,8 @@ def main() -> int:
                     source_index += 1
                     continue
                 chrom, snp, _cm, bp, a1, a2 = parts[:6]
+                a1 = normalize_allele_token(a1)
+                a2 = normalize_allele_token(a2)
                 if not chrom or not is_valid_import_position(bp):
                     qc_rows.append(ImportQcRow(shard.source_shard, source_index, "malformed_row"))
                     source_index += 1

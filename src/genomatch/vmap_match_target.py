@@ -27,7 +27,7 @@ from .vtable_utils import (
 
 
 def target_key(row: VariantRow, contig_naming: str, *, label: str) -> Tuple[str, str, str, str]:
-    return (canonical_contig_from_row(row, contig_naming, label=label), row.pos, row.a1.upper(), row.a2.upper())
+    return (canonical_contig_from_row(row, contig_naming, label=label), row.pos, row.a1, row.a2)
 
 
 def detect_target_duplicates(rows: Sequence[VariantRow], contig_naming: str, *, label: str) -> None:

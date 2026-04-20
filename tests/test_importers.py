@@ -132,6 +132,16 @@ def test_import_bim_writes_qc_for_malformed_and_non_actg_rows(tmp_path):
     ]
 
 
+def test_import_bim_normalizes_lowercase_alleles_to_uppercase(tmp_path):
+    source = tmp_path / "input.bim"
+    out = tmp_path / "out.vmap"
+    write_lines(source, ["1\trs1\t0\t100\ta\tg"])
+
+    result = run_py("import_bim.py", "--input", source, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+
 def test_import_vcf_drops_multiallelic_rows_to_qc(tmp_path):
     source = tmp_path / "input.vcf"
     out = tmp_path / "out.vmap"
@@ -175,6 +185,23 @@ def test_import_vcf_writes_qc_for_malformed_and_non_actg_rows(tmp_path):
         [".", "0", "malformed_row"],
         [".", "1", "non_actg_allele"],
     ]
+
+
+def test_import_vcf_normalizes_lowercase_alleles_to_uppercase(tmp_path):
+    source = tmp_path / "input.vcf"
+    out = tmp_path / "out.vmap"
+    write_lines(
+        source,
+        [
+            "##fileformat=VCFv4.2",
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+            "1\t100\trs1\tg\ta\t.\t.\t.",
+        ],
+    )
+
+    result = run_py("import_vcf.py", "--input", source, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
 
 
 def test_import_vcf_discovers_shards_preserves_exact_source_shard_and_writes_qc(tmp_path):
@@ -263,6 +290,23 @@ def test_import_pvar_discovers_shards_preserves_exact_source_shard_and_writes_qc
     ]
 
 
+def test_import_pvar_normalizes_lowercase_alleles_to_uppercase(tmp_path):
+    source = tmp_path / "input.pvar"
+    out = tmp_path / "out.vmap"
+    write_lines(
+        source,
+        [
+            "##fileformat=VCFv4.2",
+            "#CHROM\tPOS\tID\tREF\tALT",
+            "1\t100\trs1\tg\ta",
+        ],
+    )
+
+    result = run_py("import_pvar.py", "--input", source, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+
 def test_import_sumstats_uses_metadata_contract_and_single_file_provenance(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
@@ -274,6 +318,17 @@ def test_import_sumstats_uses_metadata_contract_and_single_file_provenance(tmp_p
     assert read_tsv(out) == [["X", "100", "rs1", "A", "G", ".", "0", "identity"]]
     meta_payload = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta_payload["target"]["contig_naming"] == "ncbi"
+
+
+def test_import_sumstats_normalizes_lowercase_alleles_to_uppercase(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["CHR\tPOS\tSNP\tEA\tOA", "1\t100\trs1\ta\tg"])
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
 
 
 def test_import_sumstats_rejects_template_input(tmp_path):

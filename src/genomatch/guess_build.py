@@ -56,7 +56,7 @@ def compatibility_rate(rows: List[VariantRow], fasta_path: Path, contig_naming: 
         if ref_base not in {"A", "C", "G", "T"}:
             continue
         considered += 1
-        alleles = {row.a1.upper(), row.a2.upper()}
+        alleles = {row.a1, row.a2}
         if ref_base in alleles:
             compatible += 1
     return compatible, considered

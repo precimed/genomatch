@@ -96,14 +96,14 @@ def validate_reference_aware_alleles(row: VariantRow, *, label: str) -> None:
 
 
 def is_reference_anchored(a1: str, a2: str, ref_base: str) -> bool:
-    alleles = [a1.upper(), a2.upper()]
+    alleles = [a1, a2]
     return any(len(allele) == 1 and allele == ref_base for allele in alleles)
 
 
 def canonicalize_reference_anchored_row(row: VariantRow, ref_base: str) -> Tuple[VariantRow, str] | None:
-    if len(row.a2) == 1 and row.a2.upper() == ref_base:
+    if len(row.a2) == 1 and row.a2 == ref_base:
         return row, "identity"
-    if len(row.a1) == 1 and row.a1.upper() == ref_base:
+    if len(row.a1) == 1 and row.a1 == ref_base:
         return VariantRow(row.chrom, row.pos, row.id, row.a2, row.a1), "swap"
     return None
 
@@ -176,7 +176,7 @@ def restrict_rows(
 
 def normalize_candidate_to_ucsc_vcf(candidate: NormalizationCandidate, contig_naming: str) -> Tuple[str, str, str, str, str]:
     chrom = convert_contig_label(candidate.row.chrom, contig_naming, "ucsc")
-    return chrom, candidate.row.pos, candidate.candidate_id, candidate.row.a2.upper(), candidate.row.a1.upper()
+    return chrom, candidate.row.pos, candidate.candidate_id, candidate.row.a2, candidate.row.a1
 
 
 def write_normalization_vcf(
@@ -332,7 +332,7 @@ def normalization_debug_log_path(output_path: Path, *, check_mode: str) -> Path:
 
 
 def is_normalized_acgt_allele(value: str) -> bool:
-    token = value.strip().upper()
+    token = value.strip()
     return bool(token) and set(token) <= {"A", "C", "G", "T"}
 
 
@@ -375,7 +375,7 @@ def parse_normalized_candidates(
         if final_pos <= 0:
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "norm_invalid_position")
             continue
-        if ref.upper() == alt.upper():
+        if ref == alt:
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "norm_identical_ref_alt_alleles")
             continue
         if not is_normalized_acgt_allele(ref) or not is_normalized_acgt_allele(alt):
@@ -386,7 +386,7 @@ def parse_normalized_candidates(
         except ValueError:
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "unsupported_target_contig")
             continue
-        canonical = VariantRow(final_chrom, str(final_pos), candidate.row.id, alt.upper(), ref.upper())
+        canonical = VariantRow(final_chrom, str(final_pos), candidate.row.id, alt, ref)
         if len(canonical.a1) > 1 and len(canonical.a2) > 1:
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "norm_unsupported_complex_indel")
             continue

@@ -23,7 +23,7 @@ from .vtable_utils import (
 
 
 def variant_key(row: VariantRow) -> Tuple[str, str, str, str]:
-    return (row.chrom, row.pos, row.a1.upper(), row.a2.upper())
+    return (row.chrom, row.pos, row.a1, row.a2)
 
 
 def load_intersect_metadata(path: Path) -> dict:
