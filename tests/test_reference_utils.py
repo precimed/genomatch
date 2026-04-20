@@ -77,3 +77,28 @@ def test_relative_paths_resolve_from_ref_config_directory(monkeypatch, tmp_path)
     assert reference_utils.resolve_internal_reference_fasta("GRCh38") == grch38
     assert reference_utils.resolve_liftover_chain("GRCh37", "GRCh38") == chain37to38
     assert reference_utils.resolve_liftover_chain("GRCh38", "GRCh37") == chain38to37
+
+
+def test_resolve_reference_access_mode_defaults_to_bulk(monkeypatch):
+    monkeypatch.delenv("MATCH_REFERENCE_ACCESS_MODE", raising=False)
+    assert reference_utils.resolve_reference_access_mode() == "BULK"
+
+
+@pytest.mark.parametrize(
+    "raw_value,expected",
+    [
+        ("bulk", "BULK"),
+        ("BULK", "BULK"),
+        ("legacy", "LEGACY"),
+        ("LeGaCy", "LEGACY"),
+    ],
+)
+def test_resolve_reference_access_mode_accepts_case_insensitive_values(monkeypatch, raw_value, expected):
+    monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", raw_value)
+    assert reference_utils.resolve_reference_access_mode() == expected
+
+
+def test_resolve_reference_access_mode_rejects_unknown_value(monkeypatch):
+    monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", "fast")
+    with pytest.raises(ValueError, match="unsupported MATCH_REFERENCE_ACCESS_MODE"):
+        reference_utils.resolve_reference_access_mode()

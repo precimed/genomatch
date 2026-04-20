@@ -35,6 +35,7 @@ def test_pip_install_exposes_cli_tools(tmp_path):
             "install",
             "--no-build-isolation",
             "--no-deps",
+            "--ignore-installed",
             "--prefix",
             str(prefix),
             str(REPO_ROOT),

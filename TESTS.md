@@ -111,6 +111,9 @@ The migrated suite must keep coverage for:
 - `liftover_build.py` must reject PLINK split-X (`plink_splitx`) input rows clearly
 - tests for `guess_build.py` and `restrict_build_compatible.py` must verify internal normalization to UCSC reference naming for each supported non-UCSC declared input naming mode (`ncbi`, `plink`, and `plink_splitx`) within their supported modes
 - tests for `liftover_build.py` must verify internal normalization to UCSC reference naming for supported non-UCSC declared input naming modes (`ncbi` and `plink`)
+- FASTA-consuming tools (`guess_build.py`, `restrict_build_compatible.py`, `liftover_build.py`) must honor `MATCH_REFERENCE_ACCESS_MODE` with accepted values `BULK` and `LEGACY`, parsed case-insensitively
+- when `MATCH_REFERENCE_ACCESS_MODE` is unset, FASTA-consuming tools must run in default `BULK` mode
+- for identical inputs and reference assets, `BULK` and `LEGACY` modes must produce consistent outputs and equivalent QC/error semantics for `guess_build.py`, `restrict_build_compatible.py`, and `liftover_build.py`
 
 ### Mapping
 

@@ -103,6 +103,8 @@ Importer-emitted `.vmap` is the normal starting artifact for provenance-preservi
 - Build-guessing is explicit and lives only in `guess_build.py`.
 - Reference-dependent tools resolve assets from `match/config.yaml` plus input metadata; there are no CLI reference overrides in v1.
 - Current reference-aware operations use UCSC-style internal reference FASTA and top-level chain config entries after strict validation against declared metadata.
+- FASTA-consuming tools use bulk reference access by default. The reference access mode is controlled by `MATCH_REFERENCE_ACCESS_MODE`, which accepts `BULK` and `LEGACY` case-insensitively (`BULK` is the default when unset).
+- The legacy per-lookup FASTA fetch path is available only in `LEGACY` mode, primarily for tests and profiling.
 - `liftover_build.py` is the only cross-build conversion entrypoint.
 - `.vmap` target duplicates by `chrom:pos:a1:a2` are not allowed.
 - Source duplicates are tolerated; first occurrence wins.

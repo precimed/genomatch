@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from ._cli_utils import run_cli
-from .reference_utils import fetch_reference_base, resolve_internal_reference_fasta
+from .reference_utils import fetch_reference_bases, resolve_internal_reference_fasta
 from .vtable_utils import (
     VariantRow,
     load_variant_object,
@@ -34,8 +34,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def compatibility_rate(rows: List[VariantRow], fasta_path: Path, contig_naming: str) -> Tuple[int, int]:
-    compatible = 0
-    considered = 0
+    candidate_rows: List[Tuple[VariantRow, str, int]] = []
+    queries: List[Tuple[str, int]] = []
     for row in rows:
         try:
             pos = int(row.pos)
@@ -45,7 +45,14 @@ def compatibility_rate(rows: List[VariantRow], fasta_path: Path, contig_naming: 
             ucsc_contig = normalize_contig_for_reference(row.chrom, contig_naming, "ucsc")
         except ValueError:
             continue
-        ref_base = fetch_reference_base(fasta_path, ucsc_contig, pos)
+        candidate_rows.append((row, ucsc_contig, pos))
+        queries.append((ucsc_contig, pos))
+    reference_bases = fetch_reference_bases(fasta_path, queries)
+
+    compatible = 0
+    considered = 0
+    for row, ucsc_contig, pos in candidate_rows:
+        ref_base = reference_bases.get((ucsc_contig, pos), "")
         if ref_base not in {"A", "C", "G", "T"}:
             continue
         considered += 1

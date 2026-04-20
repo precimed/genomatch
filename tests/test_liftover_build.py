@@ -1080,3 +1080,61 @@ def test_liftover_build_drops_all_unsupported_non_snv_rows_with_qc(tmp_path):
         ["source_shard", "source_index", "source_id", "status"],
         [".", "0", "rs1", "unsupported_non_snv"],
     ]
+
+
+def test_liftover_build_reference_access_modes_are_consistent_and_default_to_bulk(tmp_path):
+    grch37_ucsc = tmp_path / "hg19.fa"
+    grch38_ucsc = tmp_path / "hg38.fa"
+    chain37to38 = tmp_path / "37to38.chain"
+    chain38to37 = tmp_path / "38to37.chain"
+    config = tmp_path / "config.yaml"
+    fake_bcftools = tmp_path / "bcftools"
+    source = tmp_path / "src.vtable"
+
+    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_lines(chain37to38, ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t3"])
+    write_lines(chain38to37, ["chr1\t5\tchr1\t1", "chr1\t3\tchr1\t2"])
+    write_match_config(
+        config,
+        grch37_ucsc_fasta=grch37_ucsc,
+        grch38_ucsc_fasta=grch38_ucsc,
+        chain37to38=chain37to38,
+        chain38to37=chain38to37,
+    )
+    write_fake_bcftools(fake_bcftools)
+    write_lines(source, ["1\t2\trs2\tC\tA", "1\t1\trs1\tA\tG", "1\t4\trs4\tG\tA"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    def run_mode(mode: str | None):
+        out = tmp_path / f"lifted_{mode or 'default'}.vtable"
+        env = {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(fake_bcftools)}
+        if mode is not None:
+            env["MATCH_REFERENCE_ACCESS_MODE"] = mode
+        result = run_py_with_env(
+            "liftover_build.py",
+            env,
+            "--input",
+            source,
+            "--output",
+            out,
+            "--target-build",
+            "GRCh38",
+        )
+        assert result.returncode == 0, result.stderr
+        return (
+            read_tsv(out),
+            read_tsv(out.with_name(out.name + ".qc.tsv")),
+            out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"),
+        )
+
+    default_rows, default_qc, default_meta = run_mode(None)
+    bulk_rows, bulk_qc, bulk_meta = run_mode("BULK")
+    legacy_rows, legacy_qc, legacy_meta = run_mode("legacy")
+
+    assert default_rows == bulk_rows == legacy_rows
+    assert default_qc == bulk_qc == legacy_qc
+    assert default_meta == bulk_meta == legacy_meta
