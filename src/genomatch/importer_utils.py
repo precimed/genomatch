@@ -15,6 +15,7 @@ from .vtable_utils import (
     COMPLEMENT,
     ensure_parent_dir,
     MISSING_SOURCE_SHARD,
+    normalize_allele_token,
     VMapRow,
     VariantRow,
     infer_contig_naming,
@@ -136,7 +137,8 @@ def importer_should_warn_for_contigs(labels: Sequence[str]) -> bool:
 
 
 def is_canonical_import_allele(value: str) -> bool:
-    return bool(value) and all(base in COMPLEMENT for base in value)
+    token = normalize_allele_token(value)
+    return bool(token) and all(base in COMPLEMENT for base in token)
 
 
 def is_valid_import_position(value: str) -> bool:

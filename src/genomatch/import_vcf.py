@@ -16,7 +16,7 @@ from .importer_utils import (
     is_valid_import_position,
     resolve_import_input_paths,
 )
-from .vtable_utils import VariantRow, open_text
+from .vtable_utils import normalize_allele_token, VariantRow, open_text
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,6 +61,8 @@ def main() -> int:
                     qc_rows.append(ImportQcRow(shard.source_shard, source_index, "multiallelic"))
                     source_index += 1
                     continue
+                ref = normalize_allele_token(ref)
+                alt = normalize_allele_token(alt)
                 if not is_canonical_import_allele(alt) or not is_canonical_import_allele(ref):
                     qc_rows.append(ImportQcRow(shard.source_shard, source_index, "non_actg_allele"))
                     source_index += 1

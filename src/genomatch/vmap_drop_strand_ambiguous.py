@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
 def is_strand_ambiguous(a1: str, a2: str) -> bool:
     validate_allele_value(a1, label="drop_strand_ambiguous.py input")
     validate_allele_value(a2, label="drop_strand_ambiguous.py input")
-    return complement_allele(a1) == a2.upper()
+    return complement_allele(a1) == a2
 
 
 def build_selection_rows(rows):

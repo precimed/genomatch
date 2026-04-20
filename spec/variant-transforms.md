@@ -18,6 +18,14 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 
 **Implementation requirement:** in the default bulk mode, FASTA-consuming tools must not implement reference lookup as a per-variant loop around `fetch_reference_base()` or `fasta.fetch(contig, pos - 1, pos)`. They must batch by contig and answer lookups from contig-level cached reference data. The legacy per-variant fetch path is allowed only when `MATCH_REFERENCE_ACCESS_MODE=LEGACY` is set.
 
+## Allele case normalization
+
+- allele strings are canonical uppercase `A` / `C` / `G` / `T` sequences across target-side rows
+- all `import_*` tools must normalize retained alleles to uppercase before writing `.vmap`
+- when loading user-provided `.vtable` / `.vmap`, tools must normalize loaded allele strings to uppercase before downstream processing
+- FASTA sequences loaded into reference caches must be normalized to uppercase at load time
+- downstream transforms should operate on already-normalized uppercase alleles and should not rely on scattered fallback uppercasing in per-row hot paths
+
 ## Strand-flip scope
 
 - `--allow-strand-flips` is not part of `match_vmap_to_target.py`

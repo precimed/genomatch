@@ -16,7 +16,7 @@ from .importer_utils import (
     is_valid_import_position,
     resolve_import_input_paths,
 )
-from .vtable_utils import VariantRow, open_text
+from .vtable_utils import normalize_allele_token, VariantRow, open_text
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,6 +69,8 @@ def main() -> int:
                 chrom = parts[columns["CHROM"]]
                 pos = parts[columns["POS"]]
                 ref = parts[columns["REF"]]
+                alt = normalize_allele_token(alt)
+                ref = normalize_allele_token(ref)
                 if not chrom or not is_valid_import_position(pos):
                     qc_rows.append(ImportQcRow(shard.source_shard, source_index, "malformed_row"))
                     source_index += 1

@@ -22,6 +22,7 @@ from .vtable_utils import (
     require_contig_naming,
     require_rows_match_contig_naming,
     shard_local_provenance,
+    normalize_allele_token,
     target_row_key,
     validate_allele_value,
     variant_rows_from_vmap_rows,
@@ -102,8 +103,8 @@ def resolve_ref_alt(row: VariantRow, ref_base: str) -> LiftoverPreparation:
     validate_allele_value(row.a2, label="liftover_build.py input")
     if ref_base not in {"A", "C", "G", "T"}:
         raise ValueError(f"source reference base not found for liftover input: {row.chrom}:{row.pos}")
-    a1 = row.a1.upper()
-    a2 = row.a2.upper()
+    a1 = row.a1
+    a2 = row.a2
     is_snv = len(a1) == 1 and len(a2) == 1
     is_supported_non_snv = (len(a1) == 1) != (len(a2) == 1)
     if a2 == ref_base and a1 != ref_base:
@@ -268,8 +269,8 @@ def parse_lifted_vcf(
             status_by_row_id[row_id] = "unsupported_non_snv"
             continue
 
-        ref_token = ref.upper()
-        alt_token = alt.upper()
+        ref_token = normalize_allele_token(ref)
+        alt_token = normalize_allele_token(alt)
         if (
             not ref_token
             or not alt_token
