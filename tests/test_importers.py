@@ -331,6 +331,79 @@ def test_import_sumstats_normalizes_lowercase_alleles_to_uppercase(tmp_path):
     assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
 
 
+def test_import_sumstats_source_index_ignores_blank_and_comment_lines(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    sumstats.write_text(
+        "# pre-header comment\n"
+        "\n"
+        "CHR\tPOS\tSNP\tEA\tOA\n"
+        "# comment between data rows\n"
+        "1\t100\trs1\tA\tG\n"
+        "\n"
+        "# another comment\n"
+        "1\t200\trs2\tC\tT\n",
+        encoding="utf-8",
+    )
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["1", "100", "rs1", "A", "G", ".", "0", "identity"],
+        ["1", "200", "rs2", "C", "T", ".", "1", "identity"],
+    ]
+
+
+def test_import_sumstats_qc_reason_precedence_and_indices_with_mixed_rows(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    sumstats.write_text(
+        "CHR\tPOS\tEA\tOA\n"
+        "1\t0\tA\tN\n"
+        "1\t0\tA\tG\n"
+        "\n"
+        "# this line is skipped and should not count\n"
+        "1\t300\tC\tT\n",
+        encoding="utf-8",
+    )
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "300", ".", "C", "T", ".", "2", "identity"]]
+    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
+        ["source_shard", "source_index", "reason"],
+        [".", "0", "non_actg_allele"],
+        [".", "1", "malformed_row"],
+    ]
+
+
+def test_import_sumstats_marks_missing_required_variant_fields_as_malformed_with_correct_source_index(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(
+        sumstats,
+        [
+            "CHR\tPOS\tEA\tOA",
+            "1\t100\tA",
+            "1\t200\tC\tT",
+        ],
+    )
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "200", ".", "C", "T", ".", "1", "identity"]]
+    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
+        ["source_shard", "source_index", "reason"],
+        [".", "0", "malformed_row"],
+    ]
+
+
 def test_import_sumstats_rejects_template_input(tmp_path):
     meta = tmp_path / "ss.yaml"
     out = tmp_path / "ss.vmap"

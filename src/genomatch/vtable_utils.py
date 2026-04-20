@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+import pandas as pd
+
+from .tabular_rows import VMapRow, VMapRowsTable, VariantRow, VariantRowsTable
 from .contig_utils import (
     CANONICAL_CONTIG_ORDER,
     NUMERIC_CONTIG_NAMINGS,
@@ -43,27 +46,8 @@ ALLELE_OP_COMPOSITION = {
 COMPLEMENT = {"A": "T", "C": "G", "G": "C", "T": "A"}
 MISSING_SOURCE_SHARD = "."
 CANONICAL_CONTIG_RANK = {label: idx for idx, label in enumerate(CANONICAL_CONTIG_ORDER, start=1)}
-
-
-@dataclass(frozen=True)
-class VariantRow:
-    chrom: str
-    pos: str
-    id: str
-    a1: str
-    a2: str
-
-
-@dataclass(frozen=True)
-class VMapRow:
-    chrom: str
-    pos: str
-    id: str
-    a1: str
-    a2: str
-    source_shard: str
-    source_index: int
-    allele_op: str
+POSITIVE_INT_TOKEN_PATTERN = r"\+?0*[1-9]\d*"
+SIGNED_INT_TOKEN_PATTERN = r"[+-]?\d+"
 
 
 @dataclass(frozen=True)
@@ -74,6 +58,16 @@ class LoadedVariantObject:
     target_metadata: Dict[str, object]
     raw_metadata: Dict[str, object]
     base_vmap_rows: Optional[List[VMapRow]]
+
+
+@dataclass(frozen=True)
+class LoadedVariantObjectTables:
+    path: Path
+    object_type: str
+    target_rows_table: VariantRowsTable
+    target_metadata: Dict[str, object]
+    raw_metadata: Dict[str, object]
+    base_vmap_table: Optional[VMapRowsTable]
 
 
 def open_text(path: Path, mode: str):
@@ -93,6 +87,9 @@ def metadata_path_for(path: Path) -> Path:
 
 def ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+WRITE_CHUNK_ROWS = 100_000
 
 
 def normalize_allele_token(value: str) -> str:
@@ -204,25 +201,35 @@ def make_vmap_metadata(
 
 
 def read_vtable(path: Path) -> List[VariantRow]:
-    rows: List[VariantRow] = []
-    with open_text(path, "rt") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) != 5:
-                raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
-            rows.append(
-                VariantRow(
-                    parts[0],
-                    parts[1],
-                    parts[2],
-                    normalize_allele_token(parts[3]),
-                    normalize_allele_token(parts[4]),
-                )
-            )
-    validate_vtable_rows(rows, label=str(path))
-    return rows
+    return read_vtable_table(path).to_rows()
+
+
+def read_vtable_table(path: Path) -> VariantRowsTable:
+    # Assumes: path points to a tab-delimited vtable payload.
+    # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
+    # Guarantees: VariantRowsTable with canonical uppercase a1/a2 and validated vtable invariants.
+    try:
+        frame = pd.read_table(
+            path,
+            sep="\t",
+            header=None,
+            names=["chrom", "pos", "id", "a1", "a2"],
+            dtype="object",
+            keep_default_na=False,
+            na_values=[],
+            skip_blank_lines=True,
+            compression="infer",
+        )
+    except Exception as exc:
+        raise ValueError(f"invalid vtable row in {path}") from exc
+    if frame.isna().any(axis=None):
+        raise ValueError(f"invalid vtable row in {path}")
+    table = VariantRowsTable.from_frame(frame, copy=False)
+    frame = table.to_frame(copy=False)
+    frame["a1"] = frame["a1"].str.strip().str.upper()
+    frame["a2"] = frame["a2"].str.strip().str.upper()
+    _validate_vtable_frame(frame, label=str(path), assume_normalized_alleles=True)
+    return table
 
 
 def write_vtable(path: Path, rows: Iterable[VariantRow]) -> None:
@@ -234,38 +241,68 @@ def write_vtable(path: Path, rows: Iterable[VariantRow]) -> None:
             handle.write("\t".join([row.chrom, row.pos, row.id, row.a1, row.a2]) + "\n")
 
 
+def write_vtable_table(path: Path, table: VariantRowsTable, *, assume_validated: bool = False) -> None:
+    # Assumes: table columns conform to VariantRowsTable schema.
+    # Performs: CV(vtable invariants before emission) unless assume_validated, file emission.
+    # Guarantees: on-disk .vtable rows satisfy contract-level schema/invariants.
+    frame = table.to_frame(copy=False)
+    if not assume_validated:
+        _validate_vtable_frame(frame, label=str(path))
+    ensure_parent_dir(path)
+    lines = (
+        frame["chrom"].astype(str) + "\t"
+        + frame["pos"].astype(str) + "\t"
+        + frame["id"].astype(str) + "\t"
+        + frame["a1"].astype(str) + "\t"
+        + frame["a2"].astype(str) + "\n"
+    )
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        _write_series_in_chunks(handle, lines)
+
+
 def read_vmap(path: Path) -> List[VMapRow]:
-    rows: List[VMapRow] = []
-    with open_text(path, "rt") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) != 8:
-                raise ValueError(f"invalid vmap row in {path}: {line.strip()}")
-            try:
-                source_index = int(parts[6])
-            except ValueError as exc:
-                raise ValueError(f"invalid vmap row in {path}: {line.strip()}") from exc
-            rows.append(
-                VMapRow(
-                    parts[0],
-                    parts[1],
-                    parts[2],
-                    normalize_allele_token(parts[3]),
-                    normalize_allele_token(parts[4]),
-                    parts[5],
-                    source_index,
-                    parts[7],
-                )
-            )
-    validate_vmap_rows(rows)
-    return rows
+    return read_vmap_table(path).to_rows()
 
 
-def write_vmap(path: Path, rows: Iterable[VMapRow]) -> None:
+def read_vmap_table(path: Path) -> VMapRowsTable:
+    # Assumes: path points to a tab-delimited vmap payload.
+    # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
+    # Guarantees: VMapRowsTable with canonical uppercase a1/a2, int64 source_index, and validated vmap invariants.
+    try:
+        frame = pd.read_table(
+            path,
+            sep="\t",
+            header=None,
+            names=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"],
+            dtype="object",
+            keep_default_na=False,
+            na_values=[],
+            skip_blank_lines=True,
+            compression="infer",
+        )
+    except Exception as exc:
+        raise ValueError(f"invalid vmap row in {path}") from exc
+    if frame.isna().any(axis=None):
+        raise ValueError(f"invalid vmap row in {path}")
+    source_index = frame["source_index"].str.strip()
+    source_index_numeric = pd.to_numeric(source_index, errors="coerce")
+    valid_source_index_tokens = source_index.str.fullmatch(SIGNED_INT_TOKEN_PATTERN).fillna(False)
+    invalid_source_index = ~valid_source_index_tokens | source_index_numeric.isna()
+    if bool(invalid_source_index.any()):
+        raise ValueError(f"invalid vmap row in {path}")
+    frame["source_index"] = source_index_numeric.astype("int64")
+    table = VMapRowsTable.from_frame(frame, copy=False)
+    frame = table.to_frame(copy=False)
+    frame["a1"] = frame["a1"].str.strip().str.upper()
+    frame["a2"] = frame["a2"].str.strip().str.upper()
+    _validate_vmap_frame(frame, assume_normalized_alleles=True)
+    return table
+
+
+def write_vmap(path: Path, rows: Iterable[VMapRow], *, assume_validated: bool = False) -> None:
     rows_list = list(rows)
-    validate_vmap_rows(rows_list)
+    if not assume_validated:
+        validate_vmap_rows(rows_list)
     ensure_parent_dir(path)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         for row in rows_list:
@@ -286,69 +323,114 @@ def write_vmap(path: Path, rows: Iterable[VMapRow]) -> None:
             )
 
 
+def write_vmap_table(path: Path, table: VMapRowsTable, *, assume_validated: bool = False) -> None:
+    # Assumes: table columns conform to VMapRowsTable schema.
+    # Performs: CV(vmap invariants before emission) unless assume_validated, file emission.
+    # Guarantees: on-disk .vmap rows satisfy contract-level schema/invariants.
+    frame = table.to_frame(copy=False)
+    if not assume_validated:
+        _validate_vmap_frame(frame)
+    ensure_parent_dir(path)
+    frame.loc[:, ["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"]].to_csv(
+        path,
+        sep="\t",
+        header=False,
+        index=False,
+        lineterminator="\n",
+        compression="infer",
+        chunksize=WRITE_CHUNK_ROWS,
+    )
+
+
+def _write_series_in_chunks(handle, lines: pd.Series, chunk_rows: int = WRITE_CHUNK_ROWS) -> None:
+    # PERF: loop retained for bounded-memory file output; vectorizing full join increases peak memory.
+    for start in range(0, len(lines), chunk_rows):
+        stop = start + chunk_rows
+        handle.write("".join(lines.iloc[start:stop].tolist()))
+
+
+def _invalid_positive_int_token_mask(values: pd.Series) -> pd.Series:
+    # Assumes: `values` is a scalar-like Series expected to encode positive integer coordinates.
+    # Performs: vectorized token normalization plus numeric parsing and positive-integer validation.
+    # Guarantees: True at indices where token is absent, non-integer, or <= 0.
+    tokens = values.str.strip()
+    numeric = pd.to_numeric(tokens, errors="coerce")
+    valid_positive_tokens = tokens.str.fullmatch(POSITIVE_INT_TOKEN_PATTERN).fillna(False)
+    return ~valid_positive_tokens | numeric.isna() | numeric.le(0)
+
+
+def _validate_vtable_frame(
+    frame: pd.DataFrame,
+    label: str,
+    *,
+    assume_normalized_alleles: bool = False,
+) -> None:
+    if frame["chrom"].eq("").any():
+        raise ValueError(f"{label} row is missing chrom")
+    invalid_pos = _invalid_positive_int_token_mask(frame["pos"])
+    if invalid_pos.any():
+        first_idx = int(invalid_pos.idxmax())
+        raise ValueError(f"{label} row has invalid pos: {frame.at[first_idx, 'pos']!r}")
+    if frame["id"].eq("").any():
+        raise ValueError(f"{label} row is missing id")
+    validate_allele_values(
+        pd.concat([frame["a1"], frame["a2"]], ignore_index=True),
+        label=label,
+        assume_normalized=assume_normalized_alleles,
+    )
+
+
+def _validate_vmap_frame(
+    frame: pd.DataFrame,
+    *,
+    assume_normalized_alleles: bool = False,
+) -> None:
+    validate_allele_values(
+        pd.concat([frame["a1"], frame["a2"]], ignore_index=True),
+        label="vmap",
+        assume_normalized=assume_normalized_alleles,
+    )
+    invalid_pos = _invalid_positive_int_token_mask(frame["pos"])
+    if invalid_pos.any():
+        first_idx = int(invalid_pos.idxmax())
+        raise ValueError(f"vmap row has invalid pos: {frame.at[first_idx, 'pos']!r}")
+    duplicate_mask = frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
+    if duplicate_mask.any():
+        raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
+    missing_match = frame["source_index"].eq(-1)
+    bad_missing_shard = missing_match & frame["source_shard"].ne(MISSING_SOURCE_SHARD)
+    if bad_missing_shard.any():
+        raise ValueError("vmap row with source_index=-1 must have source_shard='.'")
+    bad_missing_op = missing_match & frame["source_shard"].eq(MISSING_SOURCE_SHARD) & frame["allele_op"].ne("missing")
+    if bad_missing_op.any():
+        raise ValueError("vmap row with source_index=-1 must have allele_op=missing")
+    out_of_range = frame["source_index"].lt(0) & ~missing_match
+    if out_of_range.any():
+        raise ValueError("vmap row source_index out of range")
+    required_shard = frame["source_index"].ge(0) & frame["source_shard"].eq("")
+    if required_shard.any():
+        raise ValueError("vmap row with source_index>=0 must define source_shard")
+    valid_nonmissing_ops = VALID_ALLELE_OPS - {"missing"}
+    invalid_op = frame["source_index"].ge(0) & frame["source_shard"].ne("") & ~frame["allele_op"].isin(valid_nonmissing_ops)
+    if invalid_op.any():
+        first_idx = int(invalid_op.idxmax())
+        raise ValueError(f"invalid allele_op in vmap row: {frame.at[first_idx, 'allele_op']!r}")
+
+
 def validate_vtable_rows(rows: Sequence[VariantRow], label: str = "vtable") -> None:
-    for row in rows:
-        if not row.chrom:
-            raise ValueError(f"{label} row is missing chrom")
-        try:
-            pos = int(row.pos)
-        except ValueError as exc:
-            raise ValueError(f"{label} row has invalid pos: {row.pos!r}") from exc
-        if pos <= 0:
-            raise ValueError(f"{label} row has invalid pos: {row.pos!r}")
-        if not row.id:
-            raise ValueError(f"{label} row is missing id")
-        validate_allele_value(row.a1, label=label)
-        validate_allele_value(row.a2, label=label)
+    _validate_vtable_frame(
+        VariantRowsTable.from_rows(list(rows), keep_row_idx=False).to_frame(copy=False),
+        label,
+    )
 
 
 def validate_vmap_rows(rows: Sequence[VMapRow]) -> None:
-    seen = set()
-    for row in rows:
-        validate_allele_value(row.a1, label="vmap")
-        validate_allele_value(row.a2, label="vmap")
-        try:
-            pos = int(row.pos)
-        except ValueError as exc:
-            raise ValueError(f"vmap row has invalid pos: {row.pos!r}") from exc
-        if pos <= 0:
-            raise ValueError(f"vmap row has invalid pos: {row.pos!r}")
-        key = target_row_key(row)
-        if key in seen:
-            raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
-        seen.add(key)
-        if row.source_index == -1:
-            if row.source_shard != MISSING_SOURCE_SHARD:
-                raise ValueError("vmap row with source_index=-1 must have source_shard='.'")
-            if row.allele_op != "missing":
-                raise ValueError("vmap row with source_index=-1 must have allele_op=missing")
-            continue
-        if row.source_index < 0:
-            raise ValueError("vmap row source_index out of range")
-        if not row.source_shard:
-            raise ValueError("vmap row with source_index>=0 must define source_shard")
-        if row.allele_op not in VALID_ALLELE_OPS - {"missing"}:
-            raise ValueError(f"invalid allele_op in vmap row: {row.allele_op!r}")
+    _validate_vmap_frame(VMapRowsTable.from_rows(list(rows), keep_row_idx=False).to_frame(copy=False))
 
 
 def variant_rows_from_vmap_rows(rows: Sequence[VMapRow]) -> List[VariantRow]:
     return [VariantRow(row.chrom, row.pos, row.id, row.a1, row.a2) for row in rows]
 
-
-def target_row_key(row: VariantRow | VMapRow) -> tuple[str, str, str, str]:
-    return (row.chrom, row.pos, row.a1, row.a2)
-
-
-def duplicate_target_row_keys(rows: Sequence[VariantRow | VMapRow]) -> set[tuple[str, str, str, str]]:
-    seen = set()
-    duplicate_keys = set()
-    for row in rows:
-        key = target_row_key(row)
-        if key in seen:
-            duplicate_keys.add(key)
-        else:
-            seen.add(key)
-    return duplicate_keys
 
 
 def write_vmap_status_qc(path: Path, rows: Iterable[tuple[str, int, str, str]]) -> None:
@@ -388,6 +470,39 @@ def load_variant_object(path: Path) -> LoadedVariantObject:
     raise ValueError(f"unsupported variant object path: {path}")
 
 
+def load_variant_object_tables(path: Path) -> LoadedVariantObjectTables:
+    # Assumes: metadata sidecar exists and matches object suffix.
+    # Performs: PV(object-type/metadata boundary checks), PN/PV via table readers.
+    # Guarantees: typed table-first loaded object with target metadata and optional provenance table.
+    metadata = load_metadata(path)
+    if path.name.endswith(".vtable"):
+        validate_vtable_metadata(metadata)
+        return LoadedVariantObjectTables(
+            path=path,
+            object_type="variant_table",
+            target_rows_table=read_vtable_table(path),
+            target_metadata={
+                "genome_build": metadata["genome_build"],
+                **({"contig_naming": metadata["contig_naming"]} if "contig_naming" in metadata else {}),
+            },
+            raw_metadata=metadata,
+            base_vmap_table=None,
+        )
+    if path.name.endswith(".vmap"):
+        validate_vmap_metadata(metadata)
+        vmap_table = read_vmap_table(path)
+        target_frame = vmap_table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
+        return LoadedVariantObjectTables(
+            path=path,
+            object_type="variant_map",
+            target_rows_table=VariantRowsTable.from_frame(target_frame, copy=False),
+            target_metadata=dict(metadata["target"]),
+            raw_metadata=metadata,
+            base_vmap_table=vmap_table,
+        )
+    raise ValueError(f"unsupported variant object path: {path}")
+
+
 def compose_allele_ops(first: str, second: str) -> str:
     if first == "missing" or second == "missing":
         return "missing"
@@ -395,6 +510,69 @@ def compose_allele_ops(first: str, second: str) -> str:
     if composed is None:
         raise ValueError(f"cannot compose allele operations: {first!r}, {second!r}")
     return composed
+
+
+def compose_allele_ops_series(first_ops: pd.Series, second_ops: pd.Series) -> pd.Series:
+    # Assumes: both inputs are position-aligned and encode allele-op tokens.
+    # Performs: vectorized pairwise allele-op composition via unique-pair remap.
+    # Guarantees: one composed allele-op token per input row; output index matches first_ops.index.
+    if len(first_ops) != len(second_ops):
+        raise ValueError("compose_allele_ops_series requires aligned series lengths")
+    original_index = first_ops.index
+    first = first_ops.reset_index(drop=True).astype(str)
+    second = second_ops.reset_index(drop=True).astype(str)
+    pairs = pd.DataFrame({"first": first, "second": second}, dtype="object")
+    unique_pairs = pairs.drop_duplicates(ignore_index=True)
+    composed_values: List[str] = []
+    # PERF: loop retained over tiny unique-op pair set (bounded by allele-op domain), not row count.
+    for first_op, second_op in unique_pairs.itertuples(index=False, name=None):
+        composed_values.append(compose_allele_ops(str(first_op), str(second_op)))
+    unique_pairs["composed"] = pd.Series(composed_values, dtype="object")
+    result = pairs.merge(unique_pairs, on=["first", "second"], how="left", sort=False)["composed"]
+    return result.set_axis(original_index)
+
+
+def duplicate_target_rows_mask_table(frame: pd.DataFrame) -> pd.Series:
+    # Assumes: frame represents target-row columns for variant rows/maps.
+    # Performs: vectorized duplicate detection on canonical target key.
+    # Guarantees: boolean mask marking all duplicate target rows.
+    required = {"chrom", "pos", "a1", "a2"}
+    missing = [col for col in required if col not in frame.columns]
+    if missing:
+        missing_csv = ",".join(missing)
+        raise ValueError(f"target frame is missing required columns: {missing_csv}")
+    return frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep=False)
+
+
+def sort_target_table_by_declared_coordinate(frame: pd.DataFrame, contig_naming: str, *, label: str) -> pd.DataFrame:
+    # Assumes: target frame has at least chrom/pos columns in declared contig naming.
+    # Performs: PV/SV checks for sortable keys and deterministic stable sort.
+    # Guarantees: frame sorted by canonical contig rank then integer position.
+    required = {"chrom", "pos"}
+    missing = [col for col in required if col not in frame.columns]
+    if missing:
+        missing_csv = ",".join(missing)
+        raise ValueError(f"{label} frame is missing required columns: {missing_csv}")
+    out = frame.copy()
+    canonical = out["chrom"].map(lambda chrom: canonical_contig_from_label(str(chrom), contig_naming))
+    invalid_mask = canonical.isna() | canonical.eq(UNKNOWN_CONTIG)
+    if invalid_mask.any():
+        first_invalid = str(out.loc[invalid_mask, "chrom"].iloc[0])
+        raise ValueError(
+            f"{label} has contigs inconsistent with declared contig_naming={contig_naming!r}: {first_invalid!r}. "
+            "Run normalize_contigs.py first"
+        )
+    pos_numeric = pd.to_numeric(out["pos"], errors="coerce")
+    invalid_pos = pos_numeric.isna() | (pos_numeric <= 0)
+    if invalid_pos.any():
+        first_pos = out.loc[invalid_pos, "pos"].iloc[0]
+        raise ValueError(f"{label} row has invalid pos: {first_pos!r}")
+    out["__rank"] = canonical.map(lambda token: CANONICAL_CONTIG_RANK[str(token)]).astype("int64")
+    out["__pos"] = pos_numeric.astype("int64")
+    out.sort_values(by=["__rank", "__pos"], kind="mergesort", inplace=True)
+    out.drop(columns=["__rank", "__pos"], inplace=True)
+    out.reset_index(drop=True, inplace=True)
+    return out
 
 
 def shard_local_provenance(shards: Sequence[str]) -> List[Tuple[str, int]]:
@@ -429,6 +607,31 @@ def validate_allele_value(value: str, *, label: str) -> None:
         raise ValueError(f"invalid allele code in {label}: {value!r}")
     if any(base not in COMPLEMENT for base in token):
         raise ValueError(f"invalid allele code in {label}: {value!r}")
+
+
+def validate_allele_values(
+    values: Sequence[str] | pd.Series,
+    *,
+    label: str,
+    assume_normalized: bool = False,
+) -> None:
+    if isinstance(values, pd.Series):
+        raw = values.reset_index(drop=True)
+    else:
+        raw = pd.Series(list(values), dtype="object")
+    if assume_normalized:
+        normalized = raw.astype(str)
+    else:
+        normalized = raw.astype(str).str.strip().str.upper()
+    empty_mask = normalized.isna() | normalized.eq("")
+    if bool(empty_mask.any()):
+        first_empty = int(empty_mask.idxmax())
+        raise ValueError(f"invalid allele code in {label}: {raw.at[first_empty]!r}")
+    valid_mask = normalized.str.fullmatch(r"[ACGT]+").fillna(False)
+    invalid_mask = ~valid_mask
+    if bool(invalid_mask.any()):
+        first_invalid = int(invalid_mask.idxmax())
+        raise ValueError(f"invalid allele code in {label}: {raw.at[first_invalid]!r}")
 
 
 def validate_snv_alleles(row: VariantRow, *, label: str) -> None:
@@ -498,6 +701,19 @@ def require_rows_match_contig_naming(rows: Sequence[object], contig_naming: str,
         examples = ", ".join(repr(item) for item in invalid)
         raise ValueError(
             f"{label} has contigs inconsistent with declared contig_naming={contig_naming!r}: {examples}. "
+            "Run normalize_contigs.py first"
+        )
+
+
+def require_table_matches_contig_naming(table: VariantRowsTable, contig_naming: str, *, label: str) -> None:
+    frame = table.to_frame(copy=False)
+    canonical = frame["chrom"].map(lambda chrom: canonical_contig_from_label(str(chrom), contig_naming))
+    invalid_mask = canonical.isna() | canonical.eq(UNKNOWN_CONTIG)
+    if invalid_mask.any():
+        examples = frame.loc[invalid_mask, "chrom"].astype(str).head(3).tolist()
+        examples_str = ", ".join(repr(c) for c in examples)
+        raise ValueError(
+            f"{label} has contigs inconsistent with declared contig_naming={contig_naming!r}: {examples_str}. "
             "Run normalize_contigs.py first"
         )
 

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Sequence
+
+import pandas as pd
+
+_ACGT_RE = re.compile(r"^[ACGT]+$")
 
 from .contig_utils import (
     canonical_contig_from_any_supported_label,
@@ -16,13 +21,13 @@ from .vtable_utils import (
     ensure_parent_dir,
     MISSING_SOURCE_SHARD,
     normalize_allele_token,
-    VMapRow,
+    VMapRowsTable,
     VariantRow,
     infer_contig_naming,
     make_vmap_metadata,
     parse_chr2use,
     write_metadata,
-    write_vmap,
+    write_vmap_table,
 )
 
 
@@ -46,6 +51,106 @@ class ImportQcRow:
     reason: str
 
 
+IMPORTED_ROWS_COLUMNS = ["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index"]
+IMPORT_QC_COLUMNS = ["source_shard", "source_index", "reason"]
+
+
+def _require_columns(frame: pd.DataFrame, required: Sequence[str], *, label: str) -> None:
+    missing = [name for name in required if name not in frame.columns]
+    if missing:
+        missing_csv = ",".join(missing)
+        raise ValueError(f"{label} frame is missing required columns: {missing_csv}")
+
+
+def _rows_frame_from_dataclass_rows(rows: Iterable[ImportedVariantRow]) -> pd.DataFrame:
+    rows_list = list(rows)
+    return pd.DataFrame(
+        {
+            "chrom": [item.row.chrom for item in rows_list],
+            "pos": [item.row.pos for item in rows_list],
+            "id": [item.row.id for item in rows_list],
+            "a1": [item.row.a1 for item in rows_list],
+            "a2": [item.row.a2 for item in rows_list],
+            "source_shard": [item.source_shard for item in rows_list],
+            "source_index": [item.source_index for item in rows_list],
+        },
+        columns=IMPORTED_ROWS_COLUMNS,
+    )
+
+
+def _qc_frame_from_dataclass_rows(qc_rows: Sequence[ImportQcRow]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "source_shard": [item.source_shard for item in qc_rows],
+            "source_index": [item.source_index for item in qc_rows],
+            "reason": [item.reason for item in qc_rows],
+        },
+        columns=IMPORT_QC_COLUMNS,
+    )
+
+
+def finalize_imported_vmap_vectorized(
+    *,
+    output_path: Path,
+    rows_frame: pd.DataFrame,
+    genome_build: str,
+    target_contig_naming: str | None = None,
+    infer_target_contig_naming: bool = True,
+    created_by: str,
+    derived_from: Path,
+    qc_rows_frame: pd.DataFrame | None = None,
+) -> None:
+    # Assumes: `rows_frame` was produced by trusted importer-stage PN/PV and contains
+    # canonical row payload columns defined by `IMPORTED_ROWS_COLUMNS`.
+    # Performs: CV(required-column presence, source_index numeric->int64 coercion,
+    # vmap row-table schema at write boundary, metadata schema via writer helpers).
+    # Guarantees: emits `.vmap` + metadata from validated row payload and, when present,
+    # emits QC TSV with required `IMPORT_QC_COLUMNS` schema.
+    _require_columns(rows_frame, IMPORTED_ROWS_COLUMNS, label="imported rows")
+    rows_view = rows_frame.loc[:, IMPORTED_ROWS_COLUMNS].copy(deep=False)
+    chroms = rows_view["chrom"].astype(str).tolist()
+    if infer_target_contig_naming:
+        contig_naming = infer_contig_naming(chroms)
+        if contig_naming is None and importer_should_warn_for_contigs(chroms):
+            print(
+                "Warning: retained rows include mixed or invalid contig labels; preserving contigs as-is, "
+                "omitting contig_naming from metadata, and requiring normalize_contigs.py before downstream use.",
+                file=sys.stderr,
+            )
+    else:
+        contig_naming = target_contig_naming
+
+    vmap_frame = rows_view.assign(allele_op="identity")
+    vmap_frame["source_index"] = pd.to_numeric(vmap_frame["source_index"], errors="raise").astype("int64")
+    write_vmap_table(
+        output_path,
+        VMapRowsTable.from_frame(vmap_frame.loc[:, [
+            "chrom",
+            "pos",
+            "id",
+            "a1",
+            "a2",
+            "source_shard",
+            "source_index",
+            "allele_op",
+        ]], copy=False),
+        assume_validated=True,
+    )
+    metadata = make_vmap_metadata(
+        {"genome_build": genome_build, "contig_naming": contig_naming},
+        provenance={"created_by": created_by, "derived_from": str(derived_from)},
+    )
+    write_metadata(output_path, metadata)
+
+    if qc_rows_frame is None:
+        return
+    _require_columns(qc_rows_frame, IMPORT_QC_COLUMNS, label="import qc")
+    qc_view = qc_rows_frame.loc[:, IMPORT_QC_COLUMNS]
+    if qc_view.empty:
+        return
+    write_import_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_view)
+
+
 def finalize_imported_vmap(
     *,
     output_path: Path,
@@ -57,47 +162,33 @@ def finalize_imported_vmap(
     derived_from: Path,
     qc_rows: Sequence[ImportQcRow],
 ) -> None:
-    rows_list = list(rows)
-    chroms = [item.row.chrom for item in rows_list]
-    if infer_target_contig_naming:
-        contig_naming = infer_contig_naming(chroms)
-        if contig_naming is None and importer_should_warn_for_contigs(chroms):
-            print(
-                "Warning: retained rows include mixed or invalid contig labels; preserving contigs as-is, "
-                "omitting contig_naming from metadata, and requiring normalize_contigs.py before downstream use.",
-                file=sys.stderr,
-            )
-    else:
-        contig_naming = target_contig_naming
-    write_vmap(
-        output_path,
-        [
-            VMapRow(
-                item.row.chrom,
-                item.row.pos,
-                item.row.id,
-                item.row.a1,
-                item.row.a2,
-                item.source_shard,
-                item.source_index,
-                "identity",
-            )
-            for item in rows_list
-        ],
+    finalize_imported_vmap_vectorized(
+        output_path=output_path,
+        rows_frame=_rows_frame_from_dataclass_rows(rows),
+        genome_build=genome_build,
+        target_contig_naming=target_contig_naming,
+        infer_target_contig_naming=infer_target_contig_naming,
+        created_by=created_by,
+        derived_from=derived_from,
+        qc_rows_frame=_qc_frame_from_dataclass_rows(qc_rows),
     )
-    metadata = make_vmap_metadata(
-        {"genome_build": genome_build, "contig_naming": contig_naming},
-        provenance={"created_by": created_by, "derived_from": str(derived_from)},
-    )
-    write_metadata(output_path, metadata)
-    if qc_rows:
-        write_import_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_rows)
 
 
-def write_import_qc(path: Path, rows: Sequence[ImportQcRow]) -> None:
+def write_import_qc(path: Path, rows: Sequence[ImportQcRow] | pd.DataFrame) -> None:
+    # Assumes: caller passes dataclass QC rows or DataFrame intended for import QC output.
+    # Performs: CV(QC schema column presence when DataFrame input, deterministic row order
+    # preservation, newline-delimited tabular serialization).
+    # Guarantees: writes UTF-8 QC TSV with header `source_shard/source_index/reason`.
     ensure_parent_dir(path)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("source_shard\tsource_index\treason\n")
+        if isinstance(rows, pd.DataFrame):
+            _require_columns(rows, IMPORT_QC_COLUMNS, label="import qc")
+            # PERF: row loop retained for streamed text emission; vectorization would still
+            # require per-row string formatting and does not materially reduce I/O-bound cost.
+            for source_shard, source_index, reason in rows.loc[:, IMPORT_QC_COLUMNS].itertuples(index=False, name=None):
+                handle.write(f"{source_shard}\t{source_index}\t{reason}\n")
+            return
         for row in rows:
             handle.write(f"{row.source_shard}\t{row.source_index}\t{row.reason}\n")
 
@@ -136,9 +227,12 @@ def importer_should_warn_for_contigs(labels: Sequence[str]) -> bool:
     )
 
 
+def is_canonical_allele_token(token: str) -> bool:
+    return bool(token) and bool(_ACGT_RE.match(token))
+
+
 def is_canonical_import_allele(value: str) -> bool:
-    token = normalize_allele_token(value)
-    return bool(token) and all(base in COMPLEMENT for base in token)
+    return is_canonical_allele_token(normalize_allele_token(value))
 
 
 def is_valid_import_position(value: str) -> bool:

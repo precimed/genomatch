@@ -18,11 +18,11 @@ from .sumstats_utils import (
     join_line,
     load_metadata,
     open_text,
-    open_sumstats_data,
+    read_sumstats_table,
     resolve_column,
     resolve_effect_columns,
     rewrite_variant_fields,
-    split_line,
+    SumstatsTable,
 )
 from .vtable_utils import (
     load_metadata as load_variant_metadata,
@@ -132,10 +132,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def max_required_column(*indices: int | None) -> int:
-    return max(idx for idx in indices if idx is not None)
-
-
 def metadata_column_name(metadata: Dict[str, object], key: str) -> Optional[str]:
     value = find_metadata_value(metadata, key)
     if value is None:
@@ -157,29 +153,55 @@ def output_column_index(header: List[str], column_name: Optional[str]) -> Option
 
 
 def load_sumstats_rows_single_file(
-    input_path: Path,
-    min_columns: int,
+    sumstats_table: SumstatsTable,
+    required_variant_columns: Dict[str, int],
     needed_by_shard: Dict[str, Set[int]],
 ) -> Tuple[str, List[str], Optional[str], Dict[Tuple[str, int], List[str]]]:
+    """
+    Assumes: `sumstats_table` came from shared PN/PV parse boundary (`read_sumstats_table`) and `needed_by_shard` uses vmap provenance keys.
+    Performs: SV required-variant-field presence validation and source-shard/index lookup materialization.
+    Guarantees: returns rows keyed by (source_shard='.', source_index) using shared zero-based source_index semantics over parsed data rows.
+    """
     if set(needed_by_shard) - {"."}:
         unsupported = sorted(set(needed_by_shard) - {"."})
         raise ValueError(
             "apply_vmap_to_sumstats.py supports single-file payload lookup only for source_shard='.'; "
             f"found {unsupported!r}"
         )
-    with open_sumstats_data(input_path) as (handle, header_line, header, delimiter):
-        rows_by_provenance: Dict[Tuple[str, int], List[str]] = {}
-        row_index = 0
-        for line in handle:
-            if not line.strip() or line.startswith("#"):
+    frame = sumstats_table.frame
+    if required_variant_columns:
+        missing_tokens = {"", "nan", "none"}
+        field_missing: Dict[str, bool] = {}
+        for field_name, col_idx in required_variant_columns.items():
+            if col_idx >= len(frame.columns):
+                field_missing[field_name] = True
                 continue
-            cols = split_line(line, delimiter)
-            if len(cols) < min_columns:
-                raise ValueError(f"sumstats row has fewer columns than expected: {input_path}")
-            if row_index in needed_by_shard.get(".", set()):
-                rows_by_provenance[(".", row_index)] = cols
-            row_index += 1
-        return header_line, header, delimiter, rows_by_provenance
+            column_values = frame.iloc[:, col_idx].astype(str).str.strip().str.lower()
+            field_missing[field_name] = bool(column_values.isin(missing_tokens).any())
+        if any(field_missing.values()):
+            missing_fields = [name for name, is_missing in field_missing.items() if is_missing]
+            raise ValueError(
+                "sumstats input has missing values in required variant columns: "
+                + ", ".join(missing_fields)
+            )
+
+    rows_by_provenance: Dict[Tuple[str, int], List[str]] = {}
+    needed_indices = needed_by_shard.get(".", set())
+    if needed_indices:
+        if len(sumstats_table.source_index) != len(frame):
+            raise ValueError(f"sumstats source_index length mismatch for parsed frame: {sumstats_table.path}")
+        payload_rows_by_source_index = {
+            int(source_index): [str(value) for value in row_values]
+            for source_index, row_values in zip(
+                sumstats_table.source_index.tolist(),
+                frame.itertuples(index=False, name=None),
+            )
+        }
+        for row_index in sorted(needed_indices):
+            row_values = payload_rows_by_source_index.get(row_index)
+            if row_values is not None:
+                rows_by_provenance[(".", row_index)] = row_values
+    return sumstats_table.header_line, sumstats_table.header, sumstats_table.delimiter, rows_by_provenance
 
 
 def rewrite_or_synthesize_variant_value(raw: str, replacements: Dict[str, str]) -> str:
@@ -595,25 +617,43 @@ def main() -> int:
         label="variant map target",
     )
     vmap_rows = filtered_vmap_rows(all_vmap_rows, only_mapped_target=args.only_mapped_target)
-    with open_sumstats_data(input_path) as (_preview_handle, _header_line, preview_header, preview_delimiter):
-        pass
+    sumstats_table = read_sumstats_table(input_path)
+    preview_header = list(sumstats_table.header)
+    preview_delimiter = sumstats_table.delimiter
+    required_variant_columns: Dict[str, int]
 
     if args.clean:
         clean_resolved = resolve_clean_metadata_columns(preview_header, metadata, include_variant_columns=True)
         if not clean_resolved:
             raise ValueError("clean summary-stat application requires metadata-defined columns")
-        min_columns = max(clean_resolved.values()) + 1
+        required_variant_columns = {
+            "CHR": clean_resolved["col_CHR"],
+            "POS": clean_resolved["col_POS"],
+            "EffectAllele": clean_resolved["col_EffectAllele"],
+            "OtherAllele": clean_resolved["col_OtherAllele"],
+        }
     else:
         col_name_chr = metadata_column_name(metadata, "col_CHR")
         idx_chr = resolve_column(preview_header, col_name_chr, "col_CHR", required=True)
-        effect_columns = resolve_effect_columns(preview_header, metadata)
-        min_columns = max_required_column(idx_chr, *effect_columns.signed, *effect_columns.invert, *effect_columns.frequency) + 1
+        idx_a1 = output_column_index(preview_header, metadata_column_name(metadata, "col_EffectAllele"))
+        idx_a2 = output_column_index(preview_header, metadata_column_name(metadata, "col_OtherAllele"))
+        idx_pos_required = output_column_index(preview_header, metadata_column_name(metadata, "col_POS"))
+        required_variant_columns = {
+            "CHR": idx_chr,
+        }
+        if idx_a1 is not None:
+            required_variant_columns["EffectAllele"] = idx_a1
+        if idx_a2 is not None:
+            required_variant_columns["OtherAllele"] = idx_a2
+        if idx_pos_required is not None:
+            required_variant_columns["POS"] = idx_pos_required
+    _effect_columns = resolve_effect_columns(preview_header, metadata)
 
     needed_by_shard = build_needed_source_indices(vmap_rows)
     if needed_by_shard:
         _header_line, _header, _delimiter, rows_by_provenance = load_sumstats_rows_single_file(
-            input_path,
-            min_columns,
+            sumstats_table,
+            required_variant_columns,
             needed_by_shard,
         )
     else:

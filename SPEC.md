@@ -29,6 +29,7 @@ The normative files for the `match/` contract are:
 - [ploidy-model.md](spec/ploidy-model.md)
 - [payload-application.md](spec/payload-application.md)
 - [sumstats-harmonization.md](spec/sumstats-harmonization.md)
+- [performance-contract.md](spec/performance-contract.md)
 - [workflow.md](spec/workflow.md)
 
 Within [README.md](README.md), the following sections are intentionally normative and may serve as source of truth:
