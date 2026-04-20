@@ -38,7 +38,11 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
     entries = select_mapping_entries(max_rows=4)
     bcftools = resolve_bcftools_with_liftover()
     config = write_real_match_config(tmp_path, chroms={entry.chrom for entry in entries})
-    env = {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": bcftools}
+    env = {
+        "MATCH_CONFIG": str(config),
+        "MATCH_BCFTOOLS": bcftools,
+        "MATCH_REFERENCE_ACCESS_MODE": "BULK",
+    }
 
     source = tmp_path / "source.vtable"
     lifted = tmp_path / "lifted.vtable"
@@ -76,7 +80,11 @@ def test_real_liftover_composes_existing_vmap_provenance(tmp_path: Path) -> None
     entries = select_mapping_entries(max_rows=4)
     bcftools = resolve_bcftools_with_liftover()
     config = write_real_match_config(tmp_path, chroms={entry.chrom for entry in entries})
-    env = {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": bcftools}
+    env = {
+        "MATCH_CONFIG": str(config),
+        "MATCH_BCFTOOLS": bcftools,
+        "MATCH_REFERENCE_ACCESS_MODE": "LEGACY",
+    }
 
     source = tmp_path / "base.vmap"
     lifted = tmp_path / "lifted.vmap"
