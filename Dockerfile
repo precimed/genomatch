@@ -13,6 +13,7 @@ RUN micromamba install -y -n base -c conda-forge -c bioconda \
     samtools \
     numpy \
     pandas \
+    scipy \
     pysam \
     pytest \
     pyyaml \

@@ -3,11 +3,11 @@ from __future__ import annotations
 import math
 import re
 from copy import deepcopy
-from statistics import NormalDist
 from typing import Callable, Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 from .sumstats_utils import find_metadata_value
 
@@ -73,7 +73,6 @@ PAYLOAD_OUTPUT_ORDER = [
 ]
 
 FREQUENCY_COLUMNS = ("EAF", "CaseEAF", "ControlEAF", "OAF", "CaseOAF", "ControlOAF")
-NORMAL_DIST = NormalDist()
 NON_ALNUM = re.compile(r"[^A-Za-z0-9]")
 
 
@@ -208,49 +207,32 @@ def validate_numeric_ranges(sumstats: pd.DataFrame) -> pd.DataFrame:
     return sumstats
 
 
-def safe_formula(func: Callable[..., float], *args: object) -> float:
-    clean_args: List[float] = []
-    for arg in args:
-        if is_missing_value(arg):
-            return np.nan
-        try:
-            value = float(arg)
-        except Exception:
-            return np.nan
-        if not math.isfinite(value):
-            return np.nan
-        clean_args.append(value)
-    try:
-        value = func(*clean_args)
-    except Exception:
-        return np.nan
-    return value if math.isfinite(value) else np.nan
 
 
-def sign(value: float) -> float:
-    if value > 0:
-        return 1.0
-    if value < 0:
-        return -1.0
-    return 0.0
+def sign(value):
+    return np.sign(value)
 
 
-def qnorm(value: float) -> float:
-    if not 0 < value < 1:
-        raise ValueError("qnorm input out of range")
-    return NORMAL_DIST.inv_cdf(value)
+def qnorm(value):
+    with np.errstate(invalid='ignore'):
+        result = stats.norm.ppf(value)
+    return result
 
 
-def pnorm(value: float) -> float:
-    return NORMAL_DIST.cdf(value)
+def pnorm(value):
+    return stats.norm.cdf(value)
 
 
 def pval_from_neglog10p(value: float) -> float:
-    return 10 ** (-value)
+    value = np.asarray(value, dtype=float)
+    with np.errstate(over="ignore", invalid="ignore"):
+        return np.power(10.0, -value)
 
 
 def pval_from_log10p(value: float) -> float:
-    return 10**value
+    value = np.asarray(value, dtype=float)
+    with np.errstate(over="ignore", invalid="ignore"):
+        return np.power(10.0, value)
 
 
 def zscore_from_beta_se(beta: float, se: float) -> float:
@@ -270,7 +252,11 @@ def beta_from_zscore_se(z_value: float, se: float) -> float:
 
 
 def beta_from_zscore_N_af(z_value: float, n_value: float, af_value: float) -> float:
-    return z_value / math.sqrt(2.0 * af_value * (1.0 - af_value) * (n_value + z_value**2))
+    z_value = np.asarray(z_value, dtype=float)
+    n_value = np.asarray(n_value, dtype=float)
+    af_value = np.asarray(af_value, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        return z_value / np.sqrt(2.0 * af_value * (1.0 - af_value) * (n_value + z_value**2))
 
 
 def se_from_zscore_beta(z_value: float, beta: float) -> float:
@@ -278,27 +264,48 @@ def se_from_zscore_beta(z_value: float, beta: float) -> float:
 
 
 def se_from_zscore_N_af(z_value: float, n_value: float, af_value: float) -> float:
-    return 1.0 / math.sqrt(2.0 * af_value * (1.0 - af_value) * (n_value + z_value**2))
+    z_value = np.asarray(z_value, dtype=float)
+    n_value = np.asarray(n_value, dtype=float)
+    af_value = np.asarray(af_value, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        return 1.0 / np.sqrt(2.0 * af_value * (1.0 - af_value) * (n_value + z_value**2))
 
 
 def n_from_zscore_beta_af(z_value: float, beta: float, af_value: float) -> float:
-    return z_value**2 / (2.0 * af_value * (1.0 - af_value) * beta**2) - z_value**2
+    z_value = np.asarray(z_value, dtype=float)
+    beta = np.asarray(beta, dtype=float)
+    af_value = np.asarray(af_value, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        return z_value**2 / (2.0 * af_value * (1.0 - af_value) * beta**2) - z_value**2
 
 
 def beta_from_oddsratio(odds_ratio: float) -> float:
-    return math.log(odds_ratio)
+    odds_ratio = np.asarray(odds_ratio, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.log(odds_ratio)
 
 
 def se_from_ORu95_ORl95(or_u95: float, or_l95: float) -> float:
-    return (math.log(or_u95) - math.log(or_l95)) / (2.0 * qnorm(0.975))
+    or_u95 = np.asarray(or_u95, dtype=float)
+    or_l95 = np.asarray(or_l95, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return (np.log(or_u95) - np.log(or_l95)) / (2.0 * qnorm(0.975))
 
 
 def neff_from_nca_nco(n_case: float, n_control: float) -> float:
-    return 4.0 / ((1.0 / n_case) + (1.0 / n_control))
+    n_case = np.asarray(n_case, dtype=float)
+    n_control = np.asarray(n_control, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return 4.0 / ((1.0 / n_case) + (1.0 / n_control))
 
 
 def af_from_case_control(case_af: float, control_af: float, n_case: float, n_control: float) -> float:
-    return (case_af * n_case + control_af * n_control) / (n_case + n_control)
+    case_af = np.asarray(case_af, dtype=float)
+    control_af = np.asarray(control_af, dtype=float)
+    n_case = np.asarray(n_case, dtype=float)
+    n_control = np.asarray(n_control, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return (case_af * n_case + control_af * n_control) / (n_case + n_control)
 
 
 def apply_constant_rule(sumstats: pd.DataFrame, output_column: str, value: float | None, *, fill_mode: str) -> pd.DataFrame:
@@ -330,14 +337,12 @@ def apply_formula_rule(
             return sumstats
         if any(column not in sumstats.columns for column in input_columns):
             return sumstats
-        sumstats[output_column] = pd.Series(
-            [
-                safe_formula(formula, *(sumstats[column].iloc[idx] for column in input_columns))
-                for idx in range(len(sumstats))
-            ],
-            index=sumstats.index,
-            dtype=float,
-        )
+        input_arrays = [pd.to_numeric(sumstats[column], errors='coerce').values for column in input_columns]
+        try:
+            result = formula(*input_arrays)
+        except Exception:
+            result = np.full(len(sumstats), np.nan)
+        sumstats[output_column] = pd.Series(result, index=sumstats.index, dtype=float)
         return sumstats
     if any(column not in sumstats.columns for column in input_columns):
         return sumstats
@@ -346,10 +351,12 @@ def apply_formula_rule(
     mask = sumstats[output_column].isna()
     if not mask.any():
         return sumstats
-    sumstats.loc[mask, output_column] = [
-        safe_formula(formula, *(sumstats[column].iloc[idx] for column in input_columns))
-        for idx in sumstats.index[mask]
-    ]
+    input_arrays = [pd.to_numeric(sumstats.loc[mask, column], errors='coerce').values for column in input_columns]
+    try:
+        result = formula(*input_arrays)
+    except Exception:
+        result = np.full(np.sum(mask), np.nan)
+    sumstats.loc[mask, output_column] = result
     return sumstats
 
 

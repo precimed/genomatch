@@ -16,6 +16,8 @@ If the caller uses `--only-mapped-target`, any later dropping of rows with missi
 
 Harmonization pipeline is a fixed sequence of transformation steps. CLI parsing, file I/O, and wrapper orchestration are described in [payload-application.md](payload-application.md).
 
+**Implementation requirement:** Formula application must be vectorized across arrays, not row-by-row loops. Implementations must extract input columns as NumPy/pandas arrays, apply formulas element-wise using array broadcasting, and assign results back as Series. NaN handling must be consistent: any formula producing non-finite values becomes missing in the output. Row-by-row formula application (with per-row safety checks) is not permitted for performance reasons.
+
 Missing values may use any convenient internal representation.
 
 User options for this operation:
@@ -115,6 +117,8 @@ Apply these additional rules sequentially.
 In `fill-mode=row`: each rule is valid only where the output field is missing for a given row and all required inputs are present for that row.
 In `fill-mode=column`: each rule is valid only when the whole output column is absent from the dataframe and all input columns are present. A present column with some missing values is not partially filled in this mode.
 An all-missing column that was dropped earlier counts as absent for later `fill-mode=column` derivation.
+
+Both fill modes must be implemented using vectorized array operations, not row-by-row loops.
 
 - `N`: if missing, use `stats_TotalN` ; apply only if model is `linear`
 - `CaseN`: if missing, use `stats_CaseN` ; apply only if model is `logistic`
