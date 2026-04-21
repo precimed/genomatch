@@ -89,6 +89,19 @@ def _qc_frame_from_dataclass_rows(qc_rows: Sequence[ImportQcRow]) -> pd.DataFram
     )
 
 
+def _deduplicate_target_identity_first_wins(rows_view: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Assumes: rows_view already contains IMPORTED_ROWS_COLUMNS in importer discovery order.
+    # Performs: deterministic first-occurrence deduplication on target identity (chrom,pos,a1,a2).
+    # Guarantees: retained rows preserve first-seen order; dropped duplicates are reported as import QC rows.
+    duplicate_mask = rows_view.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
+    if not bool(duplicate_mask.any()):
+        return rows_view.reset_index(drop=True), pd.DataFrame(columns=IMPORT_QC_COLUMNS)
+    dropped = rows_view.loc[duplicate_mask, ["source_shard", "source_index"]].copy()
+    dropped["reason"] = "duplicate_target"
+    retained = rows_view.loc[~duplicate_mask].reset_index(drop=True)
+    return retained, dropped.loc[:, IMPORT_QC_COLUMNS].reset_index(drop=True)
+
+
 def finalize_imported_vmap_vectorized(
     *,
     output_path: Path,
@@ -108,6 +121,7 @@ def finalize_imported_vmap_vectorized(
     # emits QC TSV with required `IMPORT_QC_COLUMNS` schema.
     _require_columns(rows_frame, IMPORTED_ROWS_COLUMNS, label="imported rows")
     rows_view = rows_frame.loc[:, IMPORTED_ROWS_COLUMNS].copy(deep=False)
+    rows_view, duplicate_qc = _deduplicate_target_identity_first_wins(rows_view)
     chroms = rows_view["chrom"].astype(str).tolist()
     if infer_target_contig_naming:
         contig_naming = infer_contig_naming(chroms)
@@ -143,9 +157,12 @@ def finalize_imported_vmap_vectorized(
     write_metadata(output_path, metadata)
 
     if qc_rows_frame is None:
-        return
-    _require_columns(qc_rows_frame, IMPORT_QC_COLUMNS, label="import qc")
-    qc_view = qc_rows_frame.loc[:, IMPORT_QC_COLUMNS]
+        qc_view = pd.DataFrame(columns=IMPORT_QC_COLUMNS)
+    else:
+        _require_columns(qc_rows_frame, IMPORT_QC_COLUMNS, label="import qc")
+        qc_view = qc_rows_frame.loc[:, IMPORT_QC_COLUMNS]
+    if not duplicate_qc.empty:
+        qc_view = pd.concat([qc_view, duplicate_qc], ignore_index=True)
     if qc_view.empty:
         return
     write_import_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_view)
