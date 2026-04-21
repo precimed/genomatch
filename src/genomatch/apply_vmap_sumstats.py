@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 import sys
 from pathlib import Path
@@ -37,13 +38,14 @@ from .vtable_utils import (
 
 NA_NUMERIC = "n/a"
 JOINED_VARIANT_FIELD_ORDER = ["CHR", "POS", "EffectAllele", "OtherAllele"]
+logger = logging.getLogger(__name__)
 
 
 def warn_once(warning_keys: Set[Tuple[str, str]], key: Tuple[str, str], message: str) -> None:
     if key in warning_keys:
         return
     warning_keys.add(key)
-    print(f"Warning: {message}", file=sys.stderr)
+    logger.warning("%s", message)
 
 
 def parse_finite_float(raw: str) -> float:
@@ -376,7 +378,7 @@ def run_clean_apply(
         metadata,
         fill_mode=args.fill_mode,
         use_af_inference=args.use_af_inference,
-        warn=lambda message: print(f"Warning: {message}", file=sys.stderr),
+        warn=lambda message: logger.warning("%s", message),
     )
     clear_clean_unmatched_rows(payload_sumstats, vmap_rows)
     warning_keys: Set[Tuple[str, str]] = set()

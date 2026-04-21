@@ -275,7 +275,7 @@ def test_prepare_variants_deferred_plink_splitx_uses_interim_plink_and_retains_s
     )
 
     assert result.returncode == 0, result.stderr
-    command_lines = [line for line in result.stderr.splitlines() if line.startswith("+ ")]
+    command_lines = [line for line in result.stderr.splitlines() if "+ " in line]
     normalize_lines = [line for line in command_lines if "normalize_contigs.py" in line]
     update_idx = next(idx for idx, line in enumerate(command_lines) if "guess_build.py" in line)
     restrict_idx = next(idx for idx, line in enumerate(command_lines) if "restrict_build_compatible.py" in line)
@@ -324,7 +324,7 @@ def test_prepare_variants_deferred_plink_splitx_runs_after_liftover(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    command_lines = [line for line in result.stderr.splitlines() if line.startswith("+ ")]
+    command_lines = [line for line in result.stderr.splitlines() if "+ " in line]
     liftover_idx = next(idx for idx, line in enumerate(command_lines) if "liftover_build.py" in line)
     splitx_idx = next(idx for idx, line in enumerate(command_lines) if "normalize_contigs.py" in line and "--to plink_splitx" in line)
     assert liftover_idx < splitx_idx

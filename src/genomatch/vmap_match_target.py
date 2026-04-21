@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
+from ._cli_utils import run_cli
 from .vtable_utils import (
     MISSING_SOURCE_SHARD,
     VMapRow,
@@ -24,6 +25,8 @@ from .vtable_utils import (
     write_metadata,
     write_vmap,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def target_key(row: VariantRow, contig_naming: str, *, label: str) -> Tuple[str, str, str, str]:
@@ -124,10 +127,9 @@ def main() -> int:
 
     target_loaded = load_variant_object(target_path)
     if target_loaded.object_type == "variant_map":
-        print(
-            "Warning: target .vmap provenance is ignored by match_vmap_to_target.py; "
-            "use convert_vmap_to_target.py first to materialize a provenance-free .vtable and silence this warning.",
-            file=sys.stderr,
+        logger.warning(
+            "target .vmap provenance is ignored by match_vmap_to_target.py; "
+            "use convert_vmap_to_target.py first to materialize a provenance-free .vtable and silence this warning."
         )
     target_meta = dict(target_loaded.target_metadata)
     target_contig_naming = require_contig_naming(target_meta, label="target variant object")
@@ -152,16 +154,18 @@ def main() -> int:
         },
     )
     missing = sum(1 for row in out_rows if row.source_index == -1)
-    print(
-        f"match_vmap_to_target.py: matched {len(out_rows) - missing}/{len(out_rows)} target rows; missing {missing}.",
-        file=sys.stderr,
+    logger.info(
+        "match_vmap_to_target.py: matched %s/%s target rows; missing %s.",
+        len(out_rows) - missing,
+        len(out_rows),
+        missing,
     )
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

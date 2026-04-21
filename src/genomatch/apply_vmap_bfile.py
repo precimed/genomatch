@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import shutil
 import sys
@@ -38,6 +39,8 @@ from .sample_axis_utils import (
     require_identical_sample_signatures,
 )
 from .vtable_utils import load_metadata, MISSING_SOURCE_SHARD, read_vmap, require_contig_naming, require_rows_match_contig_naming, validate_vmap_metadata
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -402,9 +405,11 @@ def main() -> int:
                     swapped_packed_cache,
                     remapped_packed_cache,
                 )
-            print(
-                f"apply_vmap_to_bfile.py progress: {done_chunks}/{total_chunks} chunks -> {output_bed_path}",
-                file=sys.stderr,
+            logger.info(
+                "apply_vmap_to_bfile.py progress: %s/%s chunks -> %s",
+                done_chunks,
+                total_chunks,
+                output_bed_path,
             )
 
     for shard_out_prefix, indices in grouped_output_indices(vmap_rows, args.output_prefix):
@@ -431,39 +436,32 @@ def main() -> int:
             parts.append(
                 f"found {absent_nonmissing_incompatible_count} incompatible absent-region nonmissing genotypes"
             )
-        print(f"Warning: {'; '.join(parts)}.", file=sys.stderr)
+        logger.warning("%s.", "; ".join(parts))
     if unknown_sex_unvalidated_count:
-        print(
-            "Warning: skipped ploidy validation for "
-            f"{unknown_sex_unvalidated_count} sex-dependent row/sample cells with unknown output sex.",
-            file=sys.stderr,
+        logger.warning(
+            "skipped ploidy validation for %s sex-dependent row/sample cells with unknown output sex.",
+            unknown_sex_unvalidated_count,
         )
     reconciliation_summary = compute_reconciliation_missingness_summary(sample_axis_plan, vmap_rows)
     if reconciliation_summary is not None:
-        print(
+        logger.info(
             "Sample-axis reconciliation summary: introduced "
             f"{reconciliation_summary.total_missing_cells} missing row/sample cells across "
             f"{reconciliation_summary.mapped_variant_count} retained mapped variants and "
-            f"{reconciliation_summary.output_sample_count} output subjects.",
-            file=sys.stderr,
+            f"{reconciliation_summary.output_sample_count} output subjects."
         )
         if reconciliation_summary.subjects_over_threshold:
-            print(
-                "Warning: sample-axis reconciliation caused >50% added missingness for "
-                f"{reconciliation_summary.subjects_over_threshold} output subjects.",
-                file=sys.stderr,
+            logger.warning(
+                "sample-axis reconciliation caused >50%% added missingness for %s output subjects.",
+                reconciliation_summary.subjects_over_threshold,
             )
         if reconciliation_summary.variants_over_threshold:
-            print(
-                "Warning: sample-axis reconciliation caused >50% added missingness for "
-                f"{reconciliation_summary.variants_over_threshold} retained mapped variants.",
-                file=sys.stderr,
+            logger.warning(
+                "sample-axis reconciliation caused >50%% added missingness for %s retained mapped variants.",
+                reconciliation_summary.variants_over_threshold,
             )
     if missing_count:
-        print(
-            f"Warning: {missing_count} variants missing from source; filled with missing genotypes.",
-            file=sys.stderr,
-        )
+        logger.warning("%s variants missing from source; filled with missing genotypes.", missing_count)
     return 0
 
 

@@ -58,3 +58,20 @@ When behavior requires "first invalid row" semantics:
 - strict integer parsing to series + validity mask
 - first-true-index helper
 - batched allele-op composition
+
+## Telemetry guidance (non-normative)
+
+The telemetry contract is intentionally loose and is documented in [spec/telemetry.md](spec/telemetry.md).
+
+Practical guidance:
+
+- Prefer `stderr` for operational messages.
+- Keep message text stable only when tests or user workflows depend on specific phrasing.
+- For new tooling or refactors, favor concise start/finish messages with key counts.
+- Prefer warning-level messages for recoverable anomalies and error-level messages for fatal failures.
+- For expensive external/process-heavy stages, include elapsed time when useful.
+- Avoid over-standardizing per-tool templates unless cross-tool consistency materially improves supportability.
+- Let CLI entrypoints own INFO-level start/progress/completion messages.
+- Keep utility modules INFO-silent in normal flow; return counters/status for callers to summarize.
+- Reserve utility WARNING/ERROR for local anomalies that cannot be better contextualized by callers.
+- Avoid duplicate reporting of the same event from both utility and caller layers.

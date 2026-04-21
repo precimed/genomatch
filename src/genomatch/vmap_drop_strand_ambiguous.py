@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
+from ._cli_utils import run_cli
 from .contig_cleanup_utils import load_target_variant_object, write_variant_object_like_input
 from .vtable_utils import (
     complement_allele,
@@ -12,6 +13,8 @@ from .vtable_utils import (
     require_rows_match_contig_naming,
     validate_allele_value,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,16 +52,17 @@ def main() -> int:
     out_meta = dict(loaded.raw_metadata)
     write_variant_object_like_input(loaded, output_path, out_rows, out_meta)
     dropped = len(input_rows) - len(selection_rows)
-    print(
-        f"drop_strand_ambiguous.py: retained {len(selection_rows)} rows and dropped {dropped} strand-ambiguous rows.",
-        file=sys.stderr,
+    logger.info(
+        "drop_strand_ambiguous.py: retained %s rows and dropped %s strand-ambiguous rows.",
+        len(selection_rows),
+        dropped,
     )
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

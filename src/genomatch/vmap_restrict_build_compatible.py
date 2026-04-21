@@ -5,7 +5,6 @@ import argparse
 import json
 import shlex
 import subprocess
-import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import Dict, List, Sequence, Set, Tuple
 
 import pandas as pd
 
+from ._cli_utils import run_cli
 from .reference_utils import fetch_reference_bases, resolve_bcftools_binary, resolve_internal_reference_fasta
 from .haploid_utils import expected_ploidy_pair
 from .tabular_rows import VMapRowsTable, VariantRowsTable
@@ -969,8 +969,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(run_cli(main))

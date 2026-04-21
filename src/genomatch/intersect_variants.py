@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 from typing import List, Tuple
 
@@ -20,6 +20,8 @@ from .vtable_utils import (
     write_metadata,
     write_vtable,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def variant_key(row: VariantRow) -> Tuple[str, str, str, str]:
@@ -59,11 +61,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def print_loaded(path: Path, row_count: int) -> None:
-    print(f"intersect_variants.py: loaded {row_count} variants from {path}", file=sys.stderr)
+    logger.info("intersect_variants.py: loaded %s variants from %s", row_count, path)
 
 
 def print_remaining(path: Path, row_count: int) -> None:
-    print(f"intersect_variants.py: after intersecting {path}, {row_count} variants remain", file=sys.stderr)
+    logger.info("intersect_variants.py: after intersecting %s, %s variants remain", path, row_count)
 
 
 def format_metadata_summary(input_paths: list[Path], loaded_meta: list[dict]) -> str:

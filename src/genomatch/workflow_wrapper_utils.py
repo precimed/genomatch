@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from .vtable_utils import load_variant_object, metadata_path_for
+
+logger = logging.getLogger(__name__)
 
 
 def variant_object_path(prefix: Path, suffix: str = "") -> Path:
@@ -32,7 +35,7 @@ def print_command(cmd: list[str]) -> None:
         rendered = " ".join([command_label(cmd), *[str(part) for part in cmd[3:]]])
     else:
         rendered = " ".join(str(part) for part in cmd)
-    print(f"+ {rendered}", file=sys.stderr)
+    logger.info("+ %s", rendered)
 
 
 def command_label(cmd: list[str]) -> str:
@@ -52,9 +55,9 @@ def run_command(cmd: list[str]) -> None:
     print_command(cmd)
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.stdout:
-        print(result.stdout, end="", file=sys.stderr)
+        sys.stderr.write(result.stdout)
     if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
+        sys.stderr.write(result.stderr)
     if result.returncode != 0:
         raise ValueError(f"{command_label(cmd)} failed with exit code {result.returncode}")
 
@@ -105,14 +108,11 @@ def read_target_build(path: Path) -> str:
 
 
 def print_skip(wrapper_name: str, step_label: str, output_path: Path) -> None:
-    print(f"{wrapper_name}: skipping {step_label}; output exists at {output_path}", file=sys.stderr)
+    logger.info("%s: skipping %s; output exists at %s", wrapper_name, step_label, output_path)
 
 
 def print_skip_resolved_build(wrapper_name: str, path: Path) -> None:
-    print(
-        f"{wrapper_name}: skipping guess_build.py; genome_build is already resolved in {path}",
-        file=sys.stderr,
-    )
+    logger.info("%s: skipping guess_build.py; genome_build is already resolved in %s", wrapper_name, path)
 
 
 def run_command_if_needed(cmd: list[str], output_path: Path, *, resume: bool, wrapper_name: str) -> None:

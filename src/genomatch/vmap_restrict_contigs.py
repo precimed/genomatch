@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
+from ._cli_utils import run_cli
 from .contig_cleanup_utils import (
     build_target_restriction_selection_for_contigs,
     load_target_variant_object,
@@ -12,6 +13,8 @@ from .contig_cleanup_utils import (
     write_variant_object_like_input,
 )
 from .vtable_utils import parse_chr2use
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,13 +50,13 @@ def main() -> int:
         message += f" and dropped {dropped_chr2use} rows outside --chr2use"
     else:
         message += f" and dropped {dropped_chr2use} rows"
-    print(message + ".", file=sys.stderr)
+    logger.info("%s.", message)
     return 0
 
 
+def cli_main() -> int:
+    return run_cli(main)
+
+
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(cli_main())

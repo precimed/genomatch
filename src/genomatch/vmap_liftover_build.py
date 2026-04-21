@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import subprocess
-import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
+from ._cli_utils import run_cli
 from .contig_utils import UNKNOWN_CONTIG, canonical_contig_from_label
 from .reference_utils import fetch_reference_bases, resolve_bcftools_binary, resolve_liftover_assets
 from .haploid_utils import expected_ploidy_pair
@@ -71,6 +72,7 @@ ROW_LOOKUP_COLUMNS = (
 )
 
 WRITE_CHUNK_ROWS = 100_000
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -475,10 +477,7 @@ def liftover_debug_vcf_path(output_path: Path, *, kind: str) -> Path:
 
 
 def print_resume_skip(output_vcf: Path) -> None:
-    print(
-        f"liftover_build.py: skipping bcftools +liftover; retained output exists at {output_vcf}",
-        file=sys.stderr,
-    )
+    logger.info("liftover_build.py: skipping bcftools +liftover; retained output exists at %s", output_vcf)
 
 
 def main() -> int:
@@ -571,8 +570,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    raise SystemExit(run_cli(main))

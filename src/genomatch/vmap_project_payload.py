@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
 from ._cli_utils import run_cli
@@ -32,6 +32,7 @@ from .workflow_wrapper_utils import (
 
 WRAPPER_NAME = "project_payload.py"
 AUTO_PREFIX_TOKEN = "all_targets"
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -273,17 +274,14 @@ def build_union_target_sample(args: argparse.Namespace, prefix: Path, vmap_path:
         return None
     source_prefix = source_prefix_for_args(args)
     if "@" not in source_prefix:
-        print(
-            f"{WRAPPER_NAME}: --sample-axis union is a no-op for non-sharded source input",
-            file=sys.stderr,
-        )
+        logger.info("%s: --sample-axis union is a no-op for non-sharded source input", WRAPPER_NAME)
         return None
     vmap_rows = filtered_vmap_rows(read_vmap(vmap_path), only_mapped_target=not args.full_target)
     referenced_shards = sorted(build_needed_source_indices(vmap_rows))
     if len(referenced_shards) <= 1:
-        print(
-            f"{WRAPPER_NAME}: --sample-axis union is a no-op when only one referenced source shard remains",
-            file=sys.stderr,
+        logger.info(
+            "%s: --sample-axis union is a no-op when only one referenced source shard remains",
+            WRAPPER_NAME,
         )
         return None
     out_path = synthesized_target_sample_path(args, prefix)
@@ -371,10 +369,10 @@ def build_union_target_sample(args: argparse.Namespace, prefix: Path, vmap_path:
             lines.append("\t".join(parts))
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     if missing_plus_known_count:
-        print(
-            f"Warning: {WRAPPER_NAME} --sample-axis union kept known sex when merging with missing sex for "
-            f"{missing_plus_known_count} subject occurrences.",
-            file=sys.stderr,
+        logger.warning(
+            "%s --sample-axis union kept known sex when merging with missing sex for %s subject occurrences.",
+            WRAPPER_NAME,
+            missing_plus_known_count,
         )
     return out_path
 
@@ -436,9 +434,9 @@ def main() -> int:
         apply_vmap_path = matched_path
         matched_created = True
     else:
-        print(
-            f"{WRAPPER_NAME}: --source-vmap omitted and --target is a .vmap; skipping match_vmap_to_target.py",
-            file=sys.stderr,
+        logger.info(
+            "%s: --source-vmap omitted and --target is a .vmap; skipping match_vmap_to_target.py",
+            WRAPPER_NAME,
         )
         apply_vmap_path = Path(args.target)
 
@@ -456,7 +454,7 @@ def main() -> int:
 
     run_command(apply_command(args, apply_vmap_path))
 
-    print(f"{WRAPPER_NAME}: wrote {args.output}", file=sys.stderr)
+    logger.info("%s: wrote %s", WRAPPER_NAME, args.output)
     return 0
 
 

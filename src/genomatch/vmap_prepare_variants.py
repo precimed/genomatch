@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
 from ._cli_utils import run_cli
@@ -23,6 +23,7 @@ from .workflow_wrapper_utils import (
 )
 
 WRAPPER_NAME = "prepare_variants.py"
+logger = logging.getLogger(__name__)
 
 
 IMPORTER_BY_FORMAT = {
@@ -184,7 +185,7 @@ def main() -> int:
         require_outputs_absent(planned_variant_outputs)
 
     if args.resume and variant_object_exists(final_output):
-        print(f"{WRAPPER_NAME}: wrote {final_output}", file=sys.stderr)
+        logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
         return 0
 
     for path in planned_variant_outputs:
@@ -308,7 +309,7 @@ def main() -> int:
         current_path = contig_path
 
     copy_variant_object(current_path, final_output)
-    print(f"{WRAPPER_NAME}: wrote {final_output}", file=sys.stderr)
+    logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
     return 0
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import shutil
 import sys
@@ -39,6 +40,7 @@ from .vtable_utils import (
 SUPPORTED_CHANNEL_HARDCALL = "hardcall"
 SUPPORTED_CHANNEL_PHASE = "phase"
 SUPPORTED_CHANNEL_DOSAGE = "dosage"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -696,30 +698,24 @@ def main() -> int:
                 writer.close()
         reconciliation_summary = compute_reconciliation_missingness_summary(sample_axis_plan, vmap_rows)
         if reconciliation_summary is not None:
-            print(
+            logger.info(
                 "Sample-axis reconciliation summary: introduced "
                 f"{reconciliation_summary.total_missing_cells} missing row/sample cells across "
                 f"{reconciliation_summary.mapped_variant_count} retained mapped variants and "
-                f"{reconciliation_summary.output_sample_count} output subjects.",
-                file=sys.stderr,
+                f"{reconciliation_summary.output_sample_count} output subjects."
             )
             if reconciliation_summary.subjects_over_threshold:
-                print(
-                    "Warning: sample-axis reconciliation caused >50% added missingness for "
-                    f"{reconciliation_summary.subjects_over_threshold} output subjects.",
-                    file=sys.stderr,
+                logger.warning(
+                    "sample-axis reconciliation caused >50%% added missingness for %s output subjects.",
+                    reconciliation_summary.subjects_over_threshold,
                 )
             if reconciliation_summary.variants_over_threshold:
-                print(
-                    "Warning: sample-axis reconciliation caused >50% added missingness for "
-                    f"{reconciliation_summary.variants_over_threshold} retained mapped variants.",
-                    file=sys.stderr,
+                logger.warning(
+                    "sample-axis reconciliation caused >50%% added missingness for %s retained mapped variants.",
+                    reconciliation_summary.variants_over_threshold,
                 )
         if missing_count:
-            print(
-                f"Warning: {missing_count} variants missing from source; filled with missing payload rows.",
-                file=sys.stderr,
-            )
+            logger.warning("%s variants missing from source; filled with missing payload rows.", missing_count)
         ploidy_warning_parts: List[str] = []
         if diploid_het_in_haploid_count:
             ploidy_warning_parts.append(
@@ -738,12 +734,11 @@ def main() -> int:
                 f"found {nonmissing_dosage_in_absent_count} incompatible nonmissing dosages in absent target regions"
             )
         if ploidy_warning_parts:
-            print(f"Warning: {'; '.join(ploidy_warning_parts)}.", file=sys.stderr)
+            logger.warning("%s.", "; ".join(ploidy_warning_parts))
         if unknown_sex_unvalidated_count:
-            print(
-                "Warning: skipped ploidy validation for "
-                f"{unknown_sex_unvalidated_count} sex-dependent row/sample cells with unknown output sex.",
-                file=sys.stderr,
+            logger.warning(
+                "skipped ploidy validation for %s sex-dependent row/sample cells with unknown output sex.",
+                unknown_sex_unvalidated_count,
             )
         return 0
     finally:
