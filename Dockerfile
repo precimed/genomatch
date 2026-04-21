@@ -15,7 +15,6 @@ RUN micromamba install -y -n base -c conda-forge -c bioconda \
     pandas \
     scipy \
     pysam \
-    pytest \
     pyyaml \
     pgenlib \
     pip \

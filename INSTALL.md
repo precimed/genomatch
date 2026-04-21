@@ -2,6 +2,12 @@
 
 This document covers supported end-user installation paths. Development/source-checkout workflows are documented in [DEVELOPMENT.md](DEVELOPMENT.md). Reference assets, `config.yaml`, and `MATCH_CONFIG` are documented in [DOWNLOADS.md](DOWNLOADS.md).
 
+Runtime dependency model:
+
+- External tools: `bcftools`, `bcftools-liftover-plugin`, `samtools`
+- Python runtime: 3.12
+- Python package dependencies (`numpy`, `pandas`, `pgenlib`, `pysam`, `PyYAML`, `scipy`) are installed by `pip install genomatch` from `pyproject.toml`
+
 ## Option 1: `pip install genomatch`
 
 Create a user runtime environment with the external toolchain first:

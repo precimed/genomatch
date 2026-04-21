@@ -9,27 +9,15 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
-      release_version:
-        description: "Version to validate for manual runs; defaults to package version when omitted"
+      testpypi_release_label:
+        description: "TestPyPI release label (PEP 440 version). Leave empty to skip TestPyPI publish."
         required: false
+        default: ""
         type: string
-      pypi_target:
-        description: "Python package publish target for manual runs"
-        required: false
-        default: none
-        type: choice
-        options:
-          - none
-          - testpypi
-          - pypi
-      publish_ghcr:
-        description: "Push a container image tag to GHCR"
-        required: false
-        default: false
-        type: boolean
       ghcr_tag:
-        description: "Custom GHCR tag for manual runs, for example dev"
+        description: "Custom GHCR tag for manual runs. Leave empty to skip GHCR publish."
         required: false
+        default: ""
         type: string
 
 jobs:
@@ -53,28 +41,24 @@ jobs:
           set -euo pipefail
           pyproject_version="$(python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])")"
           module_version="$(python -c "from pathlib import Path; namespace = {}; exec(Path('src/genomatch/_version.py').read_text(encoding='utf-8'), namespace); print(namespace['__version__'])")"
-          manual_release_version="${{ github.event.inputs.release_version || '' }}"
-
-          if [ "$pyproject_version" != "$module_version" ]; then
-            echo "pyproject.toml version $pyproject_version does not match src/genomatch/_version.py version $module_version" >&2
-            exit 1
-          fi
-
-          release_version="$pyproject_version"
 
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            if [ "$pyproject_version" != "$module_version" ]; then
+              echo "pyproject.toml version $pyproject_version does not match src/genomatch/_version.py version $module_version" >&2
+              exit 1
+            fi
             tag_version="${GITHUB_REF_NAME#v}"
             if [ "$tag_version" != "$pyproject_version" ]; then
               echo "Tag version $tag_version does not match package version $pyproject_version" >&2
               exit 1
             fi
             release_version="$tag_version"
-          elif [ -n "$manual_release_version" ]; then
-            if [ "$manual_release_version" != "$pyproject_version" ]; then
-              echo "Manual input version $manual_release_version does not match package version $pyproject_version" >&2
-              exit 1
-            fi
-            release_version="$manual_release_version"
+          elif [ -n "${{ inputs.testpypi_release_label }}" ]; then
+            release_version="${{ inputs.testpypi_release_label }}"
+          elif [ -n "${{ inputs.ghcr_tag }}" ]; then
+            release_version="${{ inputs.ghcr_tag }}"
+          else
+            release_version="manual"
           fi
 
           echo "version=$release_version" >> "$GITHUB_OUTPUT"
@@ -137,7 +121,44 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: python -m pip install build twine setuptools wheel
+        run: python -m pip install build twine setuptools wheel packaging
+
+      - name: Override package version for manual TestPyPI publish
+        if: github.event_name == 'workflow_dispatch' && inputs.testpypi_release_label != ''
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib
+          import tomllib
+
+          from packaging.version import Version
+
+          manual_version = "${{ inputs.testpypi_release_label }}"
+          Version(manual_version)
+
+          pyproject_path = pathlib.Path("pyproject.toml")
+          pyproject_text = pyproject_path.read_text(encoding="utf-8")
+          current_version = tomllib.loads(pyproject_text)["project"]["version"]
+          updated_pyproject_text = pyproject_text.replace(
+              f'version = "{current_version}"',
+              f'version = "{manual_version}"',
+              1,
+          )
+          if updated_pyproject_text == pyproject_text:
+              raise SystemExit("failed to update pyproject.toml version")
+          pyproject_path.write_text(updated_pyproject_text, encoding="utf-8")
+
+          version_path = pathlib.Path("src/genomatch/_version.py")
+          version_text = version_path.read_text(encoding="utf-8")
+          updated_version_text = version_text.replace(
+              f'__version__ = "{current_version}"',
+              f'__version__ = "{manual_version}"',
+              1,
+          )
+          if updated_version_text == version_text:
+              raise SystemExit("failed to update src/genomatch/_version.py version")
+          version_path.write_text(updated_version_text, encoding="utf-8")
+          PY
 
       - name: Build wheel and sdist
         run: |
@@ -172,7 +193,7 @@ jobs:
     needs:
       - verify-version
       - build-python-artifacts
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.pypi_target == 'pypi')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -195,7 +216,7 @@ jobs:
     needs:
       - verify-version
       - build-python-artifacts
-    if: github.event_name == 'workflow_dispatch' && inputs.pypi_target == 'testpypi'
+    if: github.event_name == 'workflow_dispatch' && inputs.testpypi_release_label != ''
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -251,7 +272,7 @@ jobs:
       - verify-version
       - test
       - build-container
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_ghcr && inputs.ghcr_tag != ''
+    if: github.event_name == 'workflow_dispatch' && inputs.ghcr_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read

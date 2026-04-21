@@ -21,15 +21,17 @@ The canonical developer workflow is:
 4. run the CLI tools from that environment, including on real data
 
 The expected runtime environment is Python 3.12 plus external `bcftools`, the `bcftools-liftover-plugin`, and `samtools`.
+Development adds `plink`/`plink2` for payload/apply test coverage, plus Python packaging/test tools.
 
 Create and activate the environment:
 
 ```bash
 conda create -n match-liftover -c conda-forge -c bioconda \
-  python=3.12 bcftools bcftools-liftover-plugin samtools plink plink2 numpy pandas pysam pytest pyyaml pgenlib python-build twine scipy
+  python=3.12 bcftools bcftools-liftover-plugin samtools plink plink2 pip
 
 conda activate match-liftover
 python -m pip install -e .
+python -m pip install pytest build twine
 ```
 
 Validate the core toolchain:
@@ -40,7 +42,6 @@ samtools --version
 plink --version
 plink2 --version
 pytest --version
-python -c "import yaml; print('PyYAML OK')"
 prepare_variants.py --help
 python -m build --version
 python -m twine --version
@@ -104,7 +105,7 @@ Tag pushes matching `v*` publish:
 
 Manual `workflow_dispatch` runs are used to test the release path before tagging. They can publish:
 
-- `genomatch==<version>` to TestPyPI
+- `genomatch==<testpypi_release_label>` to TestPyPI
 - `ghcr.io/precimed/genomatch:<custom-tag>` to GHCR, for example `dev`
 
 ### Release readiness
@@ -122,25 +123,30 @@ Treat a release as ready when all of the following are true:
 - a manual `workflow_dispatch` publish test succeeds for the release surfaces you care about
 - the published manual workflow outputs are validated locally
 
-An optional dry run with `pypi_target=none` and `publish_ghcr=false` is a useful first check, but it is not required once the publish test path succeeds.
+An optional dry run with empty `testpypi_release_label` and empty `ghcr_tag` is a useful first check, but it is not required once the publish test path succeeds.
 
 ### Test the release workflow
 
 Use `Actions -> Release -> Run workflow`.
 
+Manual dispatch always runs tests, builds Python artifacts, and builds the local container image. Publishing is opt-in:
+
+- leave `testpypi_release_label` empty to skip TestPyPI publishing
+- set `testpypi_release_label` to a non-empty PEP 440 version to publish to TestPyPI
+- leave `ghcr_tag` empty to skip manual GHCR publishing
+- set `ghcr_tag` to a non-empty tag (for example `dev`) to publish that tag to GHCR
+
 To test the Python package path:
 
-1. set `pypi_target` to `testpypi`
-2. leave `publish_ghcr` unchecked unless you also want a container test
-3. optionally set `release_version` if you want the workflow to confirm an explicit version string
+1. set `testpypi_release_label` to a PEP 440 version (for example `0.1.0.dev1`)
+2. leave `ghcr_tag` empty unless you also want a container publish
 
 To test the container path:
 
-1. leave `pypi_target` as `none`, or set it to `testpypi` if you also want a package publish
-2. check `publish_ghcr`
-3. set `ghcr_tag` to `dev`
+1. set `ghcr_tag` to a custom tag (for example `dev`)
+2. leave `testpypi_release_label` empty unless you also want a TestPyPI publish
 
-Manual GHCR runs push only the custom tag you request. They do not push `latest`.
+Manual GHCR dispatch runs push only the custom tag you request. They do not push `latest`.
 
 If you expect to upload multiple test package builds, use a PEP 440 development version such as `0.1.0.dev1`, `0.1.0.dev2`, and so on. TestPyPI, like PyPI, does not let you overwrite an existing version.
 
@@ -156,7 +162,7 @@ conda activate genomatch-testpypi
 python -m pip install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple \
-  genomatch==<version>
+  genomatch==<testpypi_release_label>
 
 prepare_variants.py --help
 ```
