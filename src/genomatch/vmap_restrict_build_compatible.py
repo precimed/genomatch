@@ -272,7 +272,9 @@ def restrict_rows(
     ]
 
     out_rows: List[Tuple[VariantRow | None, str]] = []
-    # PERF: loop retained for per-row reference-aware allele reconciliation logic.
+    # PERF: loop retained; allele reconciliation logic is row-local with no cross-row state, so
+    # vectorization would require encoding the decision tree in masks without clarity benefit;
+    # expected cardinality matches caller's row count (SNV or indel subset, not full table).
     for row, ref_base in zip(row_list, frame["ref_base"].tolist()):
         if ref_base not in {"A", "C", "G", "T"}:
             out_rows.append((None, "identity"))

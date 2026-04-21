@@ -134,6 +134,13 @@ class EffectColumnMapping:
     frequency: List[Optional[int]]
 
 
+MISSING_VALUE_TOKENS: frozenset = frozenset({"", "nan", "none"})
+
+
+def is_missing_token_series(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.lower().isin(MISSING_VALUE_TOKENS)
+
+
 @dataclass(frozen=True)
 class SumstatsTable:
     path: Path

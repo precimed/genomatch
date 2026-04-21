@@ -19,6 +19,7 @@ from .contig_utils import canonical_contig_from_any_supported_label
 from .sumstats_utils import (
     extract_variant_field,
     find_metadata_value,
+    is_missing_token_series,
     load_metadata,
     read_sumstats_table,
     resolve_column,
@@ -32,13 +33,6 @@ from .vtable_utils import (
     validate_vtable_metadata,
     VariantRow,
 )
-
-
-MISSING_VALUE_TOKENS = {"", "nan", "none"}
-
-
-def is_missing_token_series(series: pd.Series) -> pd.Series:
-    return series.astype(str).str.strip().str.lower().isin(MISSING_VALUE_TOKENS)
 
 
 def parse_args() -> argparse.Namespace:
@@ -140,6 +134,7 @@ def main() -> int:
     sumstats_table = read_sumstats_table(input_path)
     header = list(sumstats_table.header)
     frame = sumstats_table.frame
+    source_index_series = sumstats_table.source_index
     if id_vtable_path is None:
         variant_columns = resolve_variant_columns(header, metadata, require_pos=True)
     else:
@@ -195,25 +190,25 @@ def main() -> int:
             reason.loc[malformed_mask] = "malformed_row"
 
         retained_mask = reason.isna()
-        retained_indices = retained_mask[retained_mask].index
+        retained_positions = retained_mask[retained_mask].index
         rows_frame = pd.DataFrame(
             {
-                "chrom": chrom_series.iloc[retained_indices].astype(str).values,
-                "pos": pos_series.iloc[retained_indices].astype(str).values,
-                "id": row_id_series.iloc[retained_indices].astype(str).values,
-                "a1": a1_series.iloc[retained_indices].astype(str).values,
-                "a2": a2_series.iloc[retained_indices].astype(str).values,
+                "chrom": chrom_series.iloc[retained_positions].astype(str).values,
+                "pos": pos_series.iloc[retained_positions].astype(str).values,
+                "id": row_id_series.iloc[retained_positions].astype(str).values,
+                "a1": a1_series.iloc[retained_positions].astype(str).values,
+                "a2": a2_series.iloc[retained_positions].astype(str).values,
                 "source_shard": ".",
-                "source_index": retained_indices.astype("int64"),
+                "source_index": source_index_series.iloc[retained_positions].values,
             },
             columns=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index"],
         )
-        qc_indices = reason[reason.notna()].index
+        qc_positions = reason[reason.notna()].index
         qc_rows_frame = pd.DataFrame(
             {
                 "source_shard": ".",
-                "source_index": qc_indices.astype("int64"),
-                "reason": reason.iloc[qc_indices].astype(str).values,
+                "source_index": source_index_series.iloc[qc_positions].values,
+                "reason": reason.iloc[qc_positions].astype(str).values,
             },
             columns=["source_shard", "source_index", "reason"],
         )
@@ -259,26 +254,26 @@ def main() -> int:
             reason.loc[missing_id_mask] = "id_not_found"
 
         retained_mask = reason.isna()
-        retained_indices = retained_mask[retained_mask].index
-        raw_id_retained = raw_id_series.iloc[retained_indices].astype(str)
+        retained_positions = retained_mask[retained_mask].index
+        raw_id_retained = raw_id_series.iloc[retained_positions].astype(str)
         rows_frame = pd.DataFrame(
             {
                 "chrom": raw_id_retained.map(lambda value: id_lookup_rows[value].chrom).values,
                 "pos": raw_id_retained.map(lambda value: id_lookup_rows[value].pos).values,
                 "id": raw_id_retained.values,
-                "a1": a1_series.iloc[retained_indices].astype(str).values,
-                "a2": a2_series.iloc[retained_indices].astype(str).values,
+                "a1": a1_series.iloc[retained_positions].astype(str).values,
+                "a2": a2_series.iloc[retained_positions].astype(str).values,
                 "source_shard": ".",
-                "source_index": retained_indices.astype("int64"),
+                "source_index": source_index_series.iloc[retained_positions].values,
             },
             columns=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index"],
         )
-        qc_indices = reason[reason.notna()].index
+        qc_positions = reason[reason.notna()].index
         qc_rows_frame = pd.DataFrame(
             {
                 "source_shard": ".",
-                "source_index": qc_indices.astype("int64"),
-                "reason": reason.iloc[qc_indices].astype(str).values,
+                "source_index": source_index_series.iloc[qc_positions].values,
+                "reason": reason.iloc[qc_positions].astype(str).values,
             },
             columns=["source_shard", "source_index", "reason"],
         )
