@@ -521,7 +521,7 @@ def test_import_sumstats_fails_on_headerless_input(tmp_path):
     assert "column not found for col_CHR" in result.stderr
 
 
-def test_import_sumstats_fails_on_duplicate_target_variant_identity(tmp_path):
+def test_import_sumstats_deduplicates_target_identity_first_wins_and_audits_dropped_rows(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     out = tmp_path / "ss.vmap"
@@ -552,8 +552,12 @@ def test_import_sumstats_fails_on_duplicate_target_variant_identity(tmp_path):
     )
 
     result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
-    assert result.returncode != 0
-    assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "533065", "rs1478401208", "T", "TA", ".", "0", "identity"]]
+    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
+        ["source_shard", "source_index", "reason"],
+        [".", "1", "duplicate_target"],
+    ]
 
 
 def test_import_sumstats_id_vtable_enriches_coordinates_and_inherits_metadata(tmp_path):
