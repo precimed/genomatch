@@ -5,7 +5,6 @@ import argparse
 import logging
 import os
 import shutil
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Set, Tuple
@@ -403,10 +402,10 @@ def plan_source_rows(vmap_rows, prepared_sources: Dict[str, PreparedSourceShard]
 
     if len(channels_seen) > 1:
         rendered = ", ".join(sorted(channels_seen))
-        print(
-            "Warning: retained mapped source rows have incoherent supported PFILE channel availability; "
-            f"preserving rows with channels: {rendered}.",
-            file=sys.stderr,
+        logger.warning(
+            "retained mapped source rows have incoherent supported PFILE channel availability; "
+            "preserving rows with channels: %s.",
+            rendered,
         )
     return plans
 
@@ -556,6 +555,7 @@ def main() -> int:
     vmap_path = Path(args.vmap)
     source_prefix = Path(args.source_prefix)
     output_prefix = Path(args.output_prefix)
+    logger.info("apply_vmap_to_pfile.py: applying %s to %s -> %s", vmap_path, source_prefix, output_prefix)
     source_pgen = pfile_component(source_prefix, ".pgen")
     source_pvar = pfile_component(source_prefix, ".pvar")
     source_psam = pfile_component(source_prefix, ".psam")
@@ -740,6 +740,7 @@ def main() -> int:
                 "skipped ploidy validation for %s sex-dependent row/sample cells with unknown output sex.",
                 unknown_sex_unvalidated_count,
             )
+        logger.info("apply_vmap_to_pfile.py: completed projection for %s retained target rows", len(vmap_rows))
         return 0
     finally:
         for reader in readers.values():

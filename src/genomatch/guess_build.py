@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
-import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -24,6 +24,7 @@ MIN_GUESS_MARGIN = 0.10
 HIGH_CONFIDENCE_COMPATIBILITY_RATE = 0.85
 DEFAULT_GUESS_SAMPLE_ROWS = 10_000
 DEFAULT_GUESS_SAMPLE_SEED = 1
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -122,6 +123,7 @@ def sample_rows_for_guess(rows: List[VariantRow], sample_rows: int) -> List[Vari
 def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
+    logger.info("guess_build.py: analyzing %s", input_path)
     if not input_path.exists():
         raise ValueError(f"input variant object not found: {input_path}")
 
@@ -167,6 +169,12 @@ def main() -> int:
     if args.write and metadata_can_change:
         write_metadata(input_path, output_meta)
         summary["metadata_updated"] = True
+    logger.info(
+        "guess_build.py: completed build guess=%s confidence=%s (rows used=%s)",
+        summary["genome_build"],
+        summary["confidence"],
+        summary["sample_rows_used"],
+    )
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0

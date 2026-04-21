@@ -104,6 +104,7 @@ def main() -> int:
     if len(args.inputs) < 2:
         raise ValueError("union_variants.py requires at least two inputs")
     input_paths = [Path(item) for item in args.inputs]
+    logger.info("union_variants.py: unioning %s inputs -> %s", len(input_paths), args.output)
     loaded_meta = [load_union_metadata(path) for path in input_paths]
     require_shared_metadata(input_paths, loaded_meta)
     first_meta = loaded_meta[0]
@@ -125,6 +126,7 @@ def main() -> int:
     sorted_rows = sort_target_rows_by_declared_coordinate(out_rows, contig_naming, label="variant table")
     write_vtable(Path(args.output), sorted_rows)
     write_metadata(Path(args.output), dict(first_meta))
+    logger.info("union_variants.py: wrote %s with %s union rows", args.output, len(sorted_rows))
     return 0
 
 

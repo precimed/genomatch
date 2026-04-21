@@ -603,6 +603,7 @@ def main() -> int:
     meta_path = Path(args.sumstats_metadata)
     vmap_path = Path(args.vmap)
     output_path = Path(args.output)
+    logger.info("apply_vmap_to_sumstats.py: applying %s to %s -> %s", vmap_path, args.input or "<metadata path>", output_path)
     if "@" in args.output:
         raise ValueError("apply_vmap_to_sumstats.py does not accept '@' paths")
     if not meta_path.exists():
@@ -687,7 +688,7 @@ def main() -> int:
         )
 
     if args.clean:
-        return run_clean_apply(
+        rc = run_clean_apply(
             args,
             metadata=metadata,
             preview_header=preview_header,
@@ -695,14 +696,17 @@ def main() -> int:
             rows_by_provenance=rows_by_provenance,
             output_path=output_path,
         )
-    return run_legacy_apply(
-        preview_header=preview_header,
-        preview_delimiter=preview_delimiter,
-        metadata=metadata,
-        vmap_rows=vmap_rows,
-        rows_by_provenance=rows_by_provenance,
-        output_path=output_path,
-    )
+    else:
+        rc = run_legacy_apply(
+            preview_header=preview_header,
+            preview_delimiter=preview_delimiter,
+            metadata=metadata,
+            vmap_rows=vmap_rows,
+            rows_by_provenance=rows_by_provenance,
+            output_path=output_path,
+        )
+    logger.info("apply_vmap_to_sumstats.py: wrote %s with %s retained target rows", output_path, len(vmap_rows))
+    return rc
 
 
 if __name__ == "__main__":

@@ -5,7 +5,6 @@ import argparse
 import logging
 import os
 import shutil
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Set, Tuple
@@ -275,6 +274,7 @@ def main() -> int:
     source_prefix = Path(args.source_prefix)
     vmap_path = Path(args.vmap)
     out_prefix = Path(args.output_prefix)
+    logger.info("apply_vmap_to_bfile.py: applying %s to %s -> %s", vmap_path, source_prefix, out_prefix)
 
     source_bim = bfile_component(source_prefix, ".bim")
     source_bed = bfile_component(source_prefix, ".bed")
@@ -462,6 +462,7 @@ def main() -> int:
             )
     if missing_count:
         logger.warning("%s variants missing from source; filled with missing genotypes.", missing_count)
+    logger.info("apply_vmap_to_bfile.py: completed projection for %s retained target rows", len(vmap_rows))
     return 0
 
 

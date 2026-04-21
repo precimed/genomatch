@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import shlex
 import subprocess
 import tempfile
@@ -48,6 +49,7 @@ NORM_STATUS_PRIORITY = (
 )
 
 ALLELE_COMPLEMENT_TABLE = str.maketrans("ACGT", "TGCA")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -810,6 +812,7 @@ def main() -> int:
     args = parse_args()
     source_path = Path(args.source)
     output_path = Path(args.output)
+    logger.info("restrict_build_compatible.py: restricting %s -> %s", source_path, output_path)
     if not source_path.exists():
         raise ValueError(f"source not found: {source_path}")
 
@@ -964,6 +967,12 @@ def main() -> int:
         "flip_rows": flip_count,
         "reference_fasta": str(fasta_path),
     }
+    logger.info(
+        "restrict_build_compatible.py: completed with %s input rows, %s output rows, %s dropped rows",
+        input_row_count,
+        output_row_count,
+        input_row_count - output_row_count,
+    )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

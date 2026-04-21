@@ -107,6 +107,7 @@ def main() -> int:
     source_path = Path(args.source)
     target_path = Path(args.target)
     output_path = Path(args.output)
+    logger.info("match_vmap_to_target.py: matching %s to %s -> %s", source_path, target_path, output_path)
     if "@" in args.source or "@" in args.target or "@" in args.output:
         raise ValueError("match_vmap_to_target.py does not accept '@' paths")
     if not source_path.exists():

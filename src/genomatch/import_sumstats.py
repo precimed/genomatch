@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
@@ -34,6 +34,8 @@ from .vtable_utils import (
     validate_vtable_metadata,
     VariantRow,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,10 +84,7 @@ def load_id_lookup_vtable(path: Path) -> tuple[Dict[str, VariantRow], Set[str], 
                 continue
             unique_matches[lookup_id] = row
     if ignored_ids:
-        print(
-            f"Warning: ignored {ignored_ids} --id-vtable rows whose id is missing, empty, or '.'",
-            file=sys.stderr,
-        )
+        logger.warning("ignored %s --id-vtable rows whose id is missing, empty, or '.'", ignored_ids)
     return unique_matches, ambiguous_ids, {
         "genome_build": metadata["genome_build"],
         "contig_naming": metadata.get("contig_naming"),
@@ -115,6 +114,7 @@ def main() -> int:
     args = parse_args()
     meta_path = Path(args.sumstats_metadata)
     output_path = Path(args.output)
+    logger.info("import_sumstats.py: importing sumstats -> %s", output_path)
     if args.input:
         reject_template_argument(args.input, label="import_sumstats.py --input")
     if args.id_vtable:
@@ -305,6 +305,12 @@ def main() -> int:
         created_by="import_sumstats.py",
         derived_from=input_path,
         qc_rows_frame=qc_rows_frame,
+    )
+    logger.info(
+        "import_sumstats.py: wrote %s with %s retained rows and %s QC rows",
+        output_path,
+        len(rows_frame),
+        len(qc_rows_frame),
     )
     return 0
 

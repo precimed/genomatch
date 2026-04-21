@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from ._cli_utils import run_cli
@@ -17,6 +18,8 @@ from .vtable_utils import (
     write_vtable,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Materialize the target side of a .vmap as a standalone .vtable.")
@@ -29,6 +32,7 @@ def main() -> int:
     args = parse_args()
     source_path = Path(args.source)
     output_path = Path(args.output)
+    logger.info("convert_vmap_to_target.py: materializing %s -> %s", source_path, output_path)
     if not source_path.exists():
         raise ValueError(f"source .vmap not found: {source_path}")
     metadata = load_metadata(source_path)
@@ -46,6 +50,7 @@ def main() -> int:
             provenance={"created_by": "convert_vmap_to_target.py", "derived_from": str(source_path)},
         ),
     )
+    logger.info("convert_vmap_to_target.py: wrote %s with %s rows", output_path, len(rows))
     return 0
 
 

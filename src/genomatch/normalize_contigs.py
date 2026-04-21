@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
 from ._cli_utils import run_cli
@@ -22,6 +22,7 @@ from .vtable_utils import (
     write_vtable_table,
 )
 
+logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Normalize contig labels in a .vtable or .vmap.")
@@ -35,6 +36,7 @@ def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
     output_path = Path(args.output)
+    logger.info("normalize_contigs.py: normalizing %s -> %s (to=%s)", input_path, output_path, args.to)
     if not input_path.exists():
         raise ValueError(f"input file not found: {input_path}")
     loaded = load_variant_object_tables(input_path)
@@ -71,10 +73,12 @@ def main() -> int:
     else:
         write_vtable_table(output_path, VariantRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
     write_metadata(output_path, normalized_output_metadata(loaded, args.to))
-    print(
-        f"normalize_contigs.py: normalized {result.normalized_count} rows to {args.to}; "
-        f"dropped {result.unknown_count} unresolved rows and {duplicate_target_count} duplicate target rows.",
-        file=sys.stderr,
+    logger.info(
+        "normalize_contigs.py: normalized %s rows to %s; dropped %s unresolved rows and %s duplicate target rows.",
+        result.normalized_count,
+        args.to,
+        result.unknown_count,
+        duplicate_target_count,
     )
     return 0
 

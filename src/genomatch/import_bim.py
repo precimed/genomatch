@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 from typing import List
 
@@ -18,6 +18,8 @@ from .importer_utils import (
 )
 from .vtable_utils import normalize_allele_token, VariantRow
 
+logger = logging.getLogger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Convert a PLINK .bim file to .vmap.")
@@ -31,6 +33,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     output_path = Path(args.output)
+    logger.info("import_bim.py: importing %s -> %s", args.input, output_path)
     rows: List[ImportedVariantRow] = []
     qc_rows: List[ImportQcRow] = []
     for shard in resolve_import_input_paths(args.input, kind_label=".bim"):
@@ -73,6 +76,7 @@ def main() -> int:
         derived_from=Path(args.input),
         qc_rows=qc_rows,
     )
+    logger.info("import_bim.py: wrote %s with %s retained rows and %s QC rows", output_path, len(rows), len(qc_rows))
     return 0
 
 

@@ -38,6 +38,7 @@ def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
     output_path = Path(args.output)
+    logger.info("drop_strand_ambiguous.py: filtering %s -> %s", input_path, output_path)
     if not input_path.exists():
         raise ValueError(f"input file not found: {input_path}")
 

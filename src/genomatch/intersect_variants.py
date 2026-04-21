@@ -98,6 +98,7 @@ def main() -> int:
     if len(args.inputs) < 2:
         raise ValueError("intersect_variants.py requires at least two inputs")
     input_paths = [Path(item) for item in args.inputs]
+    logger.info("intersect_variants.py: intersecting %s inputs -> %s", len(input_paths), args.output)
     loaded_meta = [load_intersect_metadata(path) for path in input_paths]
     require_shared_metadata(input_paths, loaded_meta)
     first_meta = loaded_meta[0]
@@ -114,6 +115,7 @@ def main() -> int:
     out_rows = [row for row in first_rows if variant_key(row) in common]
     write_vtable(Path(args.output), out_rows)
     write_metadata(Path(args.output), dict(first_meta))
+    logger.info("intersect_variants.py: wrote %s with %s intersected rows", args.output, len(out_rows))
     return 0
 
 

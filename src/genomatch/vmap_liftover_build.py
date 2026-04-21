@@ -487,6 +487,7 @@ def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
     output_path = Path(args.output)
+    logger.info("liftover_build.py: lifting %s -> %s (target_build=%s)", input_path, output_path, args.target_build)
     if not input_path.exists():
         raise ValueError(f"input not found: {input_path}")
 
@@ -566,6 +567,12 @@ def main() -> int:
         write_vtable_table(output_path, variant_table, assume_validated=True)
     write_metadata(output_path, out_meta)
     write_vmap_status_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_rows)
+    logger.info(
+        "liftover_build.py: wrote %s with %s output rows and %s QC rows",
+        output_path,
+        len(raw_rows_table),
+        len(qc_rows),
+    )
     return 0
 
 
