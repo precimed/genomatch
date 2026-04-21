@@ -17,6 +17,7 @@ from .sumstats_utils import (
     find_metadata_value,
     join_line,
     load_metadata,
+    MISSING_VALUE_TOKENS,
     open_text,
     read_sumstats_table,
     resolve_column,
@@ -170,14 +171,18 @@ def load_sumstats_rows_single_file(
         )
     frame = sumstats_table.frame
     if required_variant_columns:
-        missing_tokens = {"", "nan", "none"}
         field_missing: Dict[str, bool] = {}
         for field_name, col_idx in required_variant_columns.items():
             if col_idx >= len(frame.columns):
-                field_missing[field_name] = True
-                continue
+                raise ValueError(
+                    f"required variant column {field_name!r} index {col_idx} is out of range "
+                    f"for sumstats frame with {len(frame.columns)} columns: {sumstats_table.path}"
+                )
+            # Allowed redundancy: normalization repeats PN already done by extract_variant_field in
+            # import_sumstats, but apply_vmap operates on a different trust boundary (pre-vmap sumstats
+            # re-read at apply time, not at import time).
             column_values = frame.iloc[:, col_idx].astype(str).str.strip().str.lower()
-            field_missing[field_name] = bool(column_values.isin(missing_tokens).any())
+            field_missing[field_name] = bool(column_values.isin(MISSING_VALUE_TOKENS).any())
         if any(field_missing.values()):
             missing_fields = [name for name, is_missing in field_missing.items() if is_missing]
             raise ValueError(

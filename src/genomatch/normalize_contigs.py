@@ -43,6 +43,8 @@ def main() -> int:
     source_frame = (
         loaded.base_vmap_table.to_frame(copy=False) if is_vmap else loaded.target_rows_table.to_frame(copy=False)
     )
+    # Assumes: source_frame has canonical vmap/vtable columns; args.to is a valid contig naming token.
+    # Guarantees: result.frame has contig-normalized target rows; result.duplicate_mask flags chrom:pos:a1:a2 duplicates.
     result = normalize_target_table(source_frame, args.to, genome_build=genome_build)
     out_frame = result.frame
     duplicate_target_count = 0

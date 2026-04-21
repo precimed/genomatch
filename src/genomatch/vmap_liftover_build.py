@@ -34,7 +34,6 @@ from .vtable_utils import (
 )
 
 PREPARE_INPUT_COLUMNS = (
-    "row_idx",
     "row_id",
     "chrom",
     "pos",
@@ -46,7 +45,6 @@ PREPARE_INPUT_COLUMNS = (
     "upstream_allele_op",
 )
 PREPARED_COLUMNS = (
-    "row_idx",
     "row_id",
     "chrom",
     "pos",
@@ -181,7 +179,6 @@ def write_temp_vcf(
     row_lookup = ready_frame.loc[:, list(ROW_LOOKUP_COLUMNS)].set_index("row_id", drop=False)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("##fileformat=VCFv4.2\n")
-        handle.write('##INFO=<ID=SRC_IDX,Number=1,Type=Integer,Description="Source row index">\n')
         for chrom in sorted(set(ready_frame["chrom"].tolist()), key=chrom_sort_key):
             handle.write(f"##contig=<ID={chrom}>\n")
         handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
@@ -191,8 +188,7 @@ def write_temp_vcf(
             + ready_frame["row_id"].astype(str) + "\t"
             + ready_frame["ref"].fillna("").astype(str) + "\t"
             + ready_frame["alt"].fillna("").astype(str)
-            + "\t.\tPASS\tSRC_IDX="
-            + ready_frame["row_idx"].astype(int).astype(str) + "\n"
+            + "\t.\tPASS\t.\n"
         )
         # PERF: loop retained for bounded-memory emission; full-string materialization scales poorly.
         for start in range(0, len(lines), WRITE_CHUNK_ROWS):
@@ -519,7 +515,6 @@ def main() -> int:
     source_fasta, target_fasta, chain_path = resolve_liftover_assets(source_build, target_build)
     ucsc_rows = convert_rows_to_ucsc(source_rows_table, source_contig_naming)
     input_frame = ucsc_rows.to_frame(copy=True)
-    input_frame["row_idx"] = list(range(len(input_frame)))
     input_frame["row_id"] = [f"row{idx}" for idx in range(len(input_frame))]
     if loaded.base_vmap_table is not None:
         base_frame = loaded.base_vmap_table.to_frame(copy=False)

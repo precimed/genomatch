@@ -116,6 +116,7 @@ Importer-emitted `.vmap` is the normal starting artifact for provenance-preservi
 - payload-application tools consume that stored provenance exactly; for `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`, `source_shard` lookup is exact and is not chromosome interpretation
 - only `import_*` tools originate new provenance in v1
 - non-importer tools may preserve existing provenance on `.vmap` input, but they must not originate a new `.vmap` from a standalone `.vtable`
+- When any object (`.vmap`, `.vtable`, or any payload format such as sumstats, pfile/bfile/vcf) is represented in-memory as a DataFrame, `source_index` is a semantic provenance value assigned once by the parser/loader and stored in the corresponding table object (for example `SumstatsTable.source_index`, `VMapRowsTable`, `VariantRowsTable`). Downstream code must propagate provenance by reading from that stored field. Deriving provenance from the pandas structural index (`.index`, `RangeIndex`, `.iloc` position) is prohibited even when values are numerically identical — structural index is implementation-internal and carries no provenance guarantee. Resetting the structural DataFrame index (`reset_index`) is safe because it does not affect the provenance data column.
 
 The exact meaning of `source_shard` depends on the first provenance-bearing step:
 
