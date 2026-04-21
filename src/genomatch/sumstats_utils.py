@@ -243,14 +243,21 @@ def resolve_effect_columns(header: List[str], metadata: Dict[str, object]) -> Ef
 
 
 @contextmanager
-def open_sumstats_data(path: Path) -> Iterator[Tuple[TextIO, str, List[str], Optional[str]]]:
+def open_sumstats_data(path: Path) -> Iterator[Tuple[TextIO, str, List[str], Optional[str], int]]:
     with open_text(path, "rt") as handle:
-        for line in handle:
-            if not line.strip() or line.startswith("#"):
+        for line_number, line in enumerate(handle):
+            if not line.strip():
+                continue
+            # Preserve historical preamble behavior (`##...` and `# ...` are comments), but
+            # accept single-`#` tabular headers such as `#chrom\tpos\t...`.
+            if line.startswith("##") or line.startswith("# "):
                 continue
             header_line = line.rstrip("\n")
             delimiter = detect_delimiter(header_line)
-            yield handle, header_line, split_line(header_line, delimiter), delimiter
+            header = split_line(header_line, delimiter)
+            if header_line.startswith("#") and len(header) <= 1:
+                continue
+            yield handle, header_line, header, delimiter, line_number
             return
     raise ValueError(f"sumstats file is missing a header line: {path}")
 
@@ -261,7 +268,7 @@ def read_sumstats_table(path: Path) -> SumstatsTable:
     Performs: PN(parse delimiter/header and tabular rows via pandas as string-safe payload values), PV(header presence and deterministic source_index assignment).
     Guarantees: table rows preserve raw data-row order with source_index=0..N-1 over rows only (excluding comments/blanks/header), while semantic required-column validation is deferred to importer/apply kernels.
     """
-    with open_sumstats_data(path) as (_handle, header_line, header, delimiter):
+    with open_sumstats_data(path) as (_handle, header_line, header, delimiter, header_line_number):
         pass
 
     main_read_csv_kwargs = build_sumstats_read_csv_kwargs(
@@ -270,6 +277,10 @@ def read_sumstats_table(path: Path) -> SumstatsTable:
         keep_default_na=False,
         dtype=object,
     )
+    # Ensure we keep a tabular `#...` header token (e.g. `#chrom`) as a real column name.
+    main_read_csv_kwargs["header"] = None
+    main_read_csv_kwargs["names"] = header
+    main_read_csv_kwargs["skiprows"] = header_line_number + 1
     frame = pd.read_csv(**main_read_csv_kwargs)
 
     source_index = pd.Series(range(len(frame)), dtype="int64")

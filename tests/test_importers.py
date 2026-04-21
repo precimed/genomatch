@@ -356,6 +356,38 @@ def test_import_sumstats_source_index_ignores_blank_and_comment_lines(tmp_path):
     ]
 
 
+def test_import_sumstats_supports_hash_prefixed_chr_header(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(
+        sumstats,
+        [
+            "#chrom\tpos\tref\talt\trsids\tbeta",
+            "1\t13668\tG\tA\trs2691328\t0.2",
+            "1\t30000\tC\tT\trs2\t-0.1",
+        ],
+    )
+    write_lines(
+        meta,
+        [
+            'col_CHR: "#chrom"',
+            "col_POS: pos",
+            "col_SNP: rsids",
+            "col_EffectAllele: alt",
+            "col_OtherAllele: ref",
+            "col_BETA: beta",
+        ],
+    )
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["1", "13668", "rs2691328", "A", "G", ".", "0", "identity"],
+        ["1", "30000", "rs2", "T", "C", ".", "1", "identity"],
+    ]
+
+
 def test_import_sumstats_qc_reason_precedence_and_indices_with_mixed_rows(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
