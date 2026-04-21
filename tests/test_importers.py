@@ -521,6 +521,41 @@ def test_import_sumstats_fails_on_headerless_input(tmp_path):
     assert "column not found for col_CHR" in result.stderr
 
 
+def test_import_sumstats_fails_on_duplicate_target_variant_identity(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(
+        sumstats,
+        [
+            "chromosome\tbase_pair_location\teffect_allele\tother_allele\tbeta\tstandard_error\teffect_allele_frequency\tp_value\trs_id\tn",
+            "1\t533065\tT\tTA\t-0.0056\t0.0078\t0.9428\t0.4738\trs1478401208\t214677",
+            "1\t533065\tT\tTA\t-0.0056\t0.0078\t0.9428\t0.4738\trs1487311623\t214677",
+        ],
+    )
+    write_lines(
+        meta,
+        [
+            "col_CHR: chromosome",
+            "col_POS: base_pair_location",
+            "col_EffectAllele: effect_allele",
+            "col_OtherAllele: other_allele",
+            "col_BETA: beta",
+            "col_SE: standard_error",
+            "col_EAF: effect_allele_frequency",
+            "col_P: p_value",
+            "col_SNP: rs_id",
+            "col_N: n",
+            "stats_Model: linear",
+            "stats_neglog10P: false",
+        ],
+    )
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+    assert result.returncode != 0
+    assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
+
+
 def test_import_sumstats_id_vtable_enriches_coordinates_and_inherits_metadata(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
