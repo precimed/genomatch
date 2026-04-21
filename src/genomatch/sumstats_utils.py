@@ -40,6 +40,30 @@ def load_metadata(path: Path) -> Dict[str, object]:
     return data
 
 
+def resolve_sumstats_input_path(
+    input_path_raw: str | None,
+    *,
+    metadata_path: Path,
+    metadata: Dict[str, object],
+    consumer_label: str,
+) -> Path:
+    if input_path_raw:
+        return Path(input_path_raw)
+    value = find_metadata_value(metadata, "path_sumStats")
+    if value is None:
+        raise ValueError(f"{consumer_label} requires --input or metadata path_sumStats")
+    if not isinstance(value, str):
+        raise ValueError("metadata path_sumStats must be a string filename")
+    filename = value.strip()
+    if not filename:
+        raise ValueError("metadata path_sumStats must be a non-empty filename")
+    if "/" in filename or "\\" in filename:
+        raise ValueError("metadata path_sumStats must be a filename without '/'")
+    if "@" in filename:
+        raise ValueError("metadata path_sumStats must not contain '@'")
+    return metadata_path.parent / filename
+
+
 def metadata_key_index(data: Dict[str, object]) -> Dict[str, str]:
     by_lower: Dict[str, str] = {}
     for key in data:

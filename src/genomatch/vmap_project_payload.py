@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
             "and then applying it back to the original payload."
         )
     )
-    parser.add_argument("--input", required=True, help="Raw payload input")
+    parser.add_argument("--input", help="Raw payload input (optional for --input-format=sumstats or sumstats-clean)")
     parser.add_argument(
         "--input-format",
         required=True,
@@ -127,6 +127,8 @@ def require_supported_args(args: argparse.Namespace) -> None:
     elif args.sumstats_metadata:
         raise ValueError("--sumstats-metadata is supported only for --input-format=sumstats or sumstats-clean")
     else:
+        if not args.input:
+            raise ValueError(f"--input is required for --input-format={args.input_format}")
         if args.fill_mode != "column":
             raise ValueError("--fill-mode is supported only for --input-format=sumstats-clean")
         if args.use_af_inference:
@@ -181,10 +183,9 @@ def target_match_command(source_path: str, target_path: str, output_path: Path) 
 
 def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
     if args.input_format in {"sumstats", "sumstats-clean"}:
+        assert args.sumstats_metadata is not None
         cmd = tool_command(
             "apply_vmap_to_sumstats.py",
-            "--input",
-            args.input,
             "--sumstats-metadata",
             args.sumstats_metadata,
             "--vmap",
@@ -192,11 +193,14 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             "--output",
             args.output,
         )
+        if args.input is not None:
+            cmd.extend(["--input", args.input])
         if args.input_format == "sumstats-clean":
             cmd.extend(["--clean", "--fill-mode", args.fill_mode])
             if args.use_af_inference:
                 cmd.append("--use-af-inference")
     elif args.input_format == "bfile":
+        assert args.input is not None
         cmd = tool_command(
             "apply_vmap_to_bfile.py",
             "--source-prefix",
@@ -210,6 +214,7 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
         if args.target_fam:
             cmd.extend(["--target-fam", args.target_fam])
     else:
+        assert args.input is not None
         cmd = tool_command(
             "apply_vmap_to_pfile.py",
             "--source-prefix",
@@ -235,6 +240,8 @@ def synthesized_target_sample_path(args: argparse.Namespace, prefix: Path) -> Pa
 
 
 def source_prefix_for_args(args: argparse.Namespace) -> str:
+    if args.input is None:
+        raise ValueError(f"--input is required for --input-format={args.input_format}")
     if args.input_format == "bfile":
         return bfile_source_prefix(args.input)
     if args.input_format == "pfile":

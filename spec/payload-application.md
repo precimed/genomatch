@@ -93,6 +93,9 @@ This subsection is implementation guidance only; any implementation that preserv
 - `apply_vmap_to_sumstats.py` fails cleanly on out-of-range shard-local provenance
 - for single-file imported summary-stat payloads, `source_shard` is `.`
 - `apply_vmap_to_sumstats.py` supports single-file payloads only; it does not allow `@` for outputs
+- for `apply_vmap_to_sumstats.py`, `--input` may be omitted; in that case, use `path_sumStats` from `--sumstats-metadata`
+- when `apply_vmap_to_sumstats.py --input` is omitted, resolve `path_sumStats` as `<directory of --sumstats-metadata>/<path_sumStats>`
+- `path_sumStats` is filename-only (no `/`) and therefore resolves only within the metadata directory
 - `apply_vmap_to_sumstats.py` supports `--clean` to emit canonical cleaned summary statistics
 - `apply_vmap_to_sumstats.py` does not use source-side POS / SNP / effect-allele / other-allele columns in the input payload, even when defined by the metadata
 - joined source variant fields (`CHR:POS_A1_A2` or `CHR:POS`) described in the positional layout documented by `schemas/raw-sumstats-metadata.yaml` are also ignored in `apply_vmap_to_sumstats.py`; output variant columns are populated from target `.vmap` rows

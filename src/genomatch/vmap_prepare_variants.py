@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
             "chain, retaining stage outputs and copying the last retained stage to <output>.vmap."
         )
     )
-    parser.add_argument("--input", required=True, help="Raw importer input")
+    parser.add_argument("--input", help="Raw importer input (optional for --input-format=sumstats)")
     parser.add_argument("--input-format", required=True, choices=sorted(IMPORTER_BY_FORMAT), help="Importer selection")
     parser.add_argument("--sumstats-metadata", help="Summary-stat metadata YAML required for --input-format=sumstats")
     parser.add_argument("--id-vtable", help="Optional .vtable for --input-format=sumstats ID-based coordinate enrichment")
@@ -83,14 +83,19 @@ def parse_args() -> argparse.Namespace:
 
 def importer_command(args: argparse.Namespace, output_path: Path) -> list[str]:
     importer = IMPORTER_BY_FORMAT[args.input_format]
-    cmd = tool_command(importer, "--input", args.input, "--output", str(output_path))
+    cmd = tool_command(importer, "--output", str(output_path))
     if args.input_format == "sumstats":
         if not args.sumstats_metadata:
             raise ValueError("--sumstats-metadata is required for --input-format=sumstats")
+        if args.input:
+            cmd.extend(["--input", args.input])
         cmd.extend(["--sumstats-metadata", args.sumstats_metadata])
         if args.id_vtable:
             cmd.extend(["--id-vtable", args.id_vtable])
     else:
+        if not args.input:
+            raise ValueError(f"--input is required for --input-format={args.input_format}")
+        cmd.extend(["--input", args.input])
         if args.sumstats_metadata:
             raise ValueError("--sumstats-metadata is supported only for --input-format=sumstats")
         if args.id_vtable:

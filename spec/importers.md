@@ -100,6 +100,9 @@ Additional raw source fields or identifiers may be included when useful, but the
 - importers omit `contig_naming` and emit a warning when retained rows are mixed or invalid
 - importers infer the first compatible supported naming in priority order `ncbi`, `ucsc`, `plink`, `plink_splitx`
 - `import_sumstats.py` honors the cleansumstats metadata contract
+- for `import_sumstats.py`, `--input` may be omitted; in that case, use `path_sumStats` from `--sumstats-metadata`
+- when `import_sumstats.py --input` is omitted, resolve `path_sumStats` as `<directory of --sumstats-metadata>/<path_sumStats>`
+- `path_sumStats` is a filename-only field (no `/`) and therefore always resolves within the metadata directory
 
 The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`.
 

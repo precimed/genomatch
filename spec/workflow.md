@@ -63,6 +63,7 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 
 - `current_path` means the latest retained `.vmap` stage in the wrapper waterfall
 - accept raw `--input` and `--input-format`
+- for `--input-format sumstats`, `--input` may be omitted; when omitted, resolve the raw sumstats path from `path_sumStats` in `--sumstats-metadata` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - require `--sumstats-metadata` for `--input-format sumstats` and reject it for other importer formats
 - accept optional `--id-vtable` only for `--input-format sumstats` and pass it through to `import_sumstats.py`
 - when summary-stat metadata omits `CHR` / `POS`, require `--id-vtable`
@@ -158,7 +159,7 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 
 ### Contract
 
-- require raw `--input`
+- require raw `--input`, except for `--input-format sumstats` and `--input-format sumstats-clean` where `--input` may be omitted
 - require `--input-format`
 - require `--target`
 - `--target` always defines the target row set
@@ -185,6 +186,7 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 - reject `--sample-axis union` together with an explicit `--target-fam` or `--target-psam`
 - for `--input-format sumstats-clean`, accept optional `--fill-mode {column,row}` and `--use-af-inference` and pass them through unchanged to `apply_vmap_to_sumstats.py --clean`
 - require `--sumstats-metadata` for `sumstats` and `sumstats-clean` input and reject it for `bfile` and `pfile`
+- for `sumstats` and `sumstats-clean`, when `--input` is omitted, resolve input from `path_sumStats` in `--sumstats-metadata` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - support `sumstats`, `sumstats-clean`, `bfile`, and `pfile` input formats
 - exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, skip the match step and use `--target` directly as the mapping object for the apply step
 - dispatch to `apply_vmap_to_sumstats.py` for `sumstats` input

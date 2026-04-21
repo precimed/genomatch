@@ -443,6 +443,50 @@ def test_prepare_variants_sumstats_requires_metadata_and_rejects_otherwise(tmp_p
     assert "--id-vtable is supported only for --input-format=sumstats" in rejected_id_vtable.stderr
 
 
+def test_prepare_variants_sumstats_uses_metadata_path_sumstats_when_input_omitted(tmp_path):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "TTTTTT", "chr2": "TTTTTT", "chrX": "TTTTTT"},
+        grch38_sequences={"chr1": "CCCCCC", "chr2": "CCCCCC", "chrX": "CCCCCC"},
+    )
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    source = bundle / "study.tsv"
+    metadata = bundle / "study.yaml"
+    output = tmp_path / "prepared"
+    write_lines(source, ["CHR\tPOS\tSNP\tEA\tOA\tBETA", "1\t1\trs1\tA\tT\t0.5"])
+    write_lines(
+        metadata,
+        [
+            "path_sumStats: study.tsv",
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_SNP: SNP",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_BETA: BETA",
+        ],
+    )
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input-format",
+        "sumstats",
+        "--sumstats-metadata",
+        metadata,
+        "--output",
+        output,
+        "--dst-build",
+        "GRCh37",
+    )
+
+    assert result.returncode == 0, result.stderr
+    import_line = next(line for line in result.stderr.splitlines() if "import_sumstats.py" in line)
+    assert "--input" not in import_line
+    assert read_tsv(tmp_path / "prepared.vmap") == [["1", "1", "rs1", "A", "T", ".", "0", "identity"]]
+
+
 def test_prepare_variants_sumstats_passes_id_vtable_through_to_importer(tmp_path):
     env = base_env(
         tmp_path,

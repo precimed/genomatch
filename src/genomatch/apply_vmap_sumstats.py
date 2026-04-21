@@ -20,6 +20,7 @@ from .sumstats_utils import (
     MISSING_VALUE_TOKENS,
     open_text,
     read_sumstats_table,
+    resolve_sumstats_input_path,
     resolve_column,
     resolve_effect_columns,
     rewrite_variant_fields,
@@ -118,7 +119,7 @@ def maybe_invert_interval(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Apply a .vmap to summary statistics.")
-    parser.add_argument("--input", required=True, help="Input summary statistics file")
+    parser.add_argument("--input", help="Input summary statistics file (optional when metadata defines path_sumStats)")
     parser.add_argument("--sumstats-metadata", required=True, help="Cleansumstats-style metadata YAML")
     parser.add_argument("--vmap", required=True, help="Input .vmap")
     parser.add_argument("--output", required=True, help="Output summary statistics file")
@@ -597,20 +598,27 @@ def run_legacy_apply(
 
 def main() -> int:
     args = parse_args()
-    input_path = Path(args.input)
     meta_path = Path(args.sumstats_metadata)
     vmap_path = Path(args.vmap)
     output_path = Path(args.output)
-    if "@" in args.input or "@" in args.output:
+    if "@" in args.output:
         raise ValueError("apply_vmap_to_sumstats.py does not accept '@' paths")
-    if not input_path.exists():
-        raise ValueError(f"sumstats file not found: {input_path}")
     if not meta_path.exists():
         raise ValueError(f"metadata file not found: {meta_path}")
     if not vmap_path.exists():
         raise ValueError(f"vmap file not found: {vmap_path}")
 
     metadata: Dict[str, object] = load_metadata(meta_path)
+    input_path = resolve_sumstats_input_path(
+        args.input,
+        metadata_path=meta_path,
+        metadata=metadata,
+        consumer_label="apply_vmap_to_sumstats.py",
+    )
+    if "@" in str(input_path):
+        raise ValueError("apply_vmap_to_sumstats.py does not accept '@' paths")
+    if not input_path.exists():
+        raise ValueError(f"sumstats file not found: {input_path}")
     vmap_meta = load_variant_metadata(vmap_path)
     validate_vmap_metadata(vmap_meta)
     all_vmap_rows = read_vmap(vmap_path)

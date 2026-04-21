@@ -21,6 +21,7 @@ from .sumstats_utils import (
     find_metadata_value,
     is_missing_token_series,
     load_metadata,
+    resolve_sumstats_input_path,
     read_sumstats_table,
     resolve_column,
     resolve_variant_columns,
@@ -37,7 +38,7 @@ from .vtable_utils import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Extract a .vmap from summary statistics.")
-    parser.add_argument("--input", required=True, help="Input summary statistics file")
+    parser.add_argument("--input", help="Input summary statistics file (optional when metadata defines path_sumStats)")
     parser.add_argument("--output", required=True, help="Output .vmap file")
     parser.add_argument("--sumstats-metadata", required=True, help="Cleansumstats-style metadata YAML")
     parser.add_argument("--genome-build", default="unknown", help="Genome build for metadata")
@@ -112,20 +113,27 @@ def resolve_id_enrichment_columns(header: List[str], metadata: Dict[str, object]
 
 def main() -> int:
     args = parse_args()
-    input_path = Path(args.input)
     meta_path = Path(args.sumstats_metadata)
     output_path = Path(args.output)
-    reject_template_argument(args.input, label="import_sumstats.py --input")
+    if args.input:
+        reject_template_argument(args.input, label="import_sumstats.py --input")
     if args.id_vtable:
         reject_template_argument(args.id_vtable, label="import_sumstats.py --id-vtable")
-    if not input_path.exists():
-        raise ValueError(f"sumstats file not found: {input_path}")
     if not meta_path.exists():
         raise ValueError(f"metadata file not found: {meta_path}")
+    metadata: Dict[str, object] = load_metadata(meta_path)
+    input_path = resolve_sumstats_input_path(
+        args.input,
+        metadata_path=meta_path,
+        metadata=metadata,
+        consumer_label="import_sumstats.py",
+    )
+    reject_template_argument(str(input_path), label="import_sumstats.py --input")
+    if not input_path.exists():
+        raise ValueError(f"sumstats file not found: {input_path}")
     id_vtable_path: Optional[Path] = Path(args.id_vtable) if args.id_vtable else None
     if id_vtable_path is not None and not id_vtable_path.exists():
         raise ValueError(f"id-vtable not found: {id_vtable_path}")
-    metadata: Dict[str, object] = load_metadata(meta_path)
     id_lookup_rows: Dict[str, VariantRow] = {}
     ambiguous_lookup_ids: Set[str] = set()
     inherited_target_meta: Optional[Dict[str, object]] = None

@@ -189,6 +189,57 @@ def test_project_payload_sumstats_clean_dispatches_clean_apply(tmp_path):
     )
 
 
+def test_project_payload_sumstats_uses_metadata_path_sumstats_when_input_omitted(tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    source = bundle / "study.tsv"
+    metadata = bundle / "study.yaml"
+    source_vmap = tmp_path / "study.prepared.vmap"
+    target = tmp_path / "shared.vtable"
+    output = tmp_path / "aligned.tsv"
+
+    write_lines(
+        source,
+        [
+            "CHR\tPOS\tSNP\tEA\tOA\tBETA",
+            "1\t1\trs1\tG\tA\t0.5",
+        ],
+    )
+    write_lines(
+        metadata,
+        [
+            "path_sumStats: study.tsv",
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_SNP: SNP",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_BETA: BETA",
+        ],
+    )
+    write_vmap(source_vmap, ["1\t1\trs1\tG\tA\t.\t0\tidentity"])
+    write_vtable(target, ["1\t1\trs1\tG\tA"])
+
+    result = run_py(
+        "project_payload.py",
+        "--input-format",
+        "sumstats",
+        "--sumstats-metadata",
+        metadata,
+        "--source-vmap",
+        source_vmap,
+        "--target",
+        target,
+        "--output",
+        output,
+    )
+
+    assert result.returncode == 0, result.stderr
+    apply_line = next(line for line in result.stderr.splitlines() if "apply_vmap_to_sumstats.py" in line)
+    assert "--input" not in apply_line
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+
+
 def test_project_payload_sumstats_clean_passes_fill_mode_and_af_inference(tmp_path):
     source = tmp_path / "study.tsv"
     metadata = tmp_path / "study.yaml"
