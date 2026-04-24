@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.2.1] - 2026-04-24
+
+### Added
+- `--max-allele-length` flag (default 150) across all importers and `prepare_variants.py` wrapper. Rows where either allele exceeds the cap are dropped with QC reason `allele_too_long`.
+
 ## [v0.2.0] - 2026-04-21
 
 ### Added
