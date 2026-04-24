@@ -64,18 +64,19 @@ def _require_columns(frame: pd.DataFrame, required: Sequence[str], *, label: str
 
 def _rows_frame_from_dataclass_rows(rows: Iterable[ImportedVariantRow]) -> pd.DataFrame:
     rows_list = list(rows)
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
-            "chrom": [item.row.chrom for item in rows_list],
-            "pos": [item.row.pos for item in rows_list],
-            "id": [item.row.id for item in rows_list],
-            "a1": [item.row.a1 for item in rows_list],
-            "a2": [item.row.a2 for item in rows_list],
-            "source_shard": [item.source_shard for item in rows_list],
+            "chrom": pd.array([item.row.chrom for item in rows_list], dtype=object),
+            "pos": pd.array([item.row.pos for item in rows_list], dtype=object),
+            "id": pd.array([item.row.id for item in rows_list], dtype=object),
+            "a1": pd.array([item.row.a1 for item in rows_list], dtype=object),
+            "a2": pd.array([item.row.a2 for item in rows_list], dtype=object),
+            "source_shard": pd.array([item.source_shard for item in rows_list], dtype=object),
             "source_index": [item.source_index for item in rows_list],
         },
         columns=IMPORTED_ROWS_COLUMNS,
     )
+    return frame
 
 
 def _qc_frame_from_dataclass_rows(qc_rows: Sequence[ImportQcRow]) -> pd.DataFrame:

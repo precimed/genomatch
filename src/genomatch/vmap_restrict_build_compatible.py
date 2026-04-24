@@ -138,7 +138,7 @@ def restrict_rows_table(
 
     frame.loc[swap_mask, "keep"] = True
     frame.loc[swap_mask, "local_op"] = "swap"
-    frame.loc[swap_mask, ["out_a1", "out_a2"]] = frame.loc[swap_mask, ["a2", "a1"]].to_numpy()
+    frame.loc[swap_mask, ["out_a1", "out_a2"]] = frame.loc[swap_mask, ["a2", "a1"]].to_numpy(dtype=object)
 
     if allow_strand_flips:
         unresolved_mask = ref_ok & ~(identity_mask | swap_mask)
@@ -154,15 +154,15 @@ def restrict_rows_table(
         if not comp_identity_idx.empty:
             frame.loc[comp_identity_idx, "keep"] = True
             frame.loc[comp_identity_idx, "local_op"] = "flip"
-            frame.loc[comp_identity_idx, "out_a1"] = comp_a1.loc[comp_identity_idx].to_numpy()
-            frame.loc[comp_identity_idx, "out_a2"] = comp_a2.loc[comp_identity_idx].to_numpy()
+            frame.loc[comp_identity_idx, "out_a1"] = comp_a1.loc[comp_identity_idx].to_numpy(dtype=object)
+            frame.loc[comp_identity_idx, "out_a2"] = comp_a2.loc[comp_identity_idx].to_numpy(dtype=object)
 
         comp_swap_idx = comp_swap_mask[comp_swap_mask].index
         if not comp_swap_idx.empty:
             frame.loc[comp_swap_idx, "keep"] = True
             frame.loc[comp_swap_idx, "local_op"] = "flip_swap"
-            frame.loc[comp_swap_idx, "out_a1"] = comp_a2.loc[comp_swap_idx].to_numpy()
-            frame.loc[comp_swap_idx, "out_a2"] = comp_a1.loc[comp_swap_idx].to_numpy()
+            frame.loc[comp_swap_idx, "out_a1"] = comp_a2.loc[comp_swap_idx].to_numpy(dtype=object)
+            frame.loc[comp_swap_idx, "out_a2"] = comp_a1.loc[comp_swap_idx].to_numpy(dtype=object)
 
     return frame
 
@@ -796,11 +796,11 @@ def build_restriction_outcomes_table(
         outcomes.loc[indel_idx, "keep"] = keep_values
         outcomes.loc[indel_idx, "local_op"] = local_ops
         outcomes.loc[indel_idx, "status"] = statuses
-        outcomes.loc[indel_idx, "out_chrom"] = out_chrom
-        outcomes.loc[indel_idx, "out_pos"] = out_pos
-        outcomes.loc[indel_idx, "out_id"] = out_id
-        outcomes.loc[indel_idx, "out_a1"] = out_a1
-        outcomes.loc[indel_idx, "out_a2"] = out_a2
+        outcomes.loc[indel_idx, "out_chrom"] = pd.array(out_chrom, dtype=object)
+        outcomes.loc[indel_idx, "out_pos"] = pd.array(out_pos, dtype=object)
+        outcomes.loc[indel_idx, "out_id"] = pd.array(out_id, dtype=object)
+        outcomes.loc[indel_idx, "out_a1"] = pd.array(out_a1, dtype=object)
+        outcomes.loc[indel_idx, "out_a2"] = pd.array(out_a2, dtype=object)
 
     return outcomes
 
