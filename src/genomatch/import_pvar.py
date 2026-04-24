@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output .vmap file")
     parser.add_argument("--genome-build", default="unknown", help="Genome build for metadata")
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="Comma-separated chromosome list or ranges")
+    parser.add_argument("--max-allele-length", type=int, default=150, help="Maximum allele length; rows exceeding this are dropped (default: 150)")
     return parser.parse_args()
 
 
@@ -80,6 +81,10 @@ def main() -> int:
                     continue
                 if not is_canonical_import_allele(alt) or not is_canonical_import_allele(ref):
                     qc_rows.append(ImportQcRow(shard.source_shard, source_index, "non_actg_allele"))
+                    source_index += 1
+                    continue
+                if len(alt) > args.max_allele_length or len(ref) > args.max_allele_length:
+                    qc_rows.append(ImportQcRow(shard.source_shard, source_index, "allele_too_long"))
                     source_index += 1
                     continue
                 rows.append(

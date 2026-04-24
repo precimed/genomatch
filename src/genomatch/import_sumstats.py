@@ -46,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--genome-build", default="unknown", help="Genome build for metadata")
     parser.add_argument("--id-vtable", help="Optional .vtable for ID-based coordinate enrichment")
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="Comma-separated chromosome list or ranges")
+    parser.add_argument("--max-allele-length", type=int, default=150, help="Maximum allele length; rows exceeding this are dropped (default: 150)")
     return parser.parse_args()
 
 
@@ -191,6 +192,12 @@ def main() -> int:
             )
             reason.loc[non_actg_mask] = "non_actg_allele"
 
+            allele_too_long_mask = reason.isna() & (
+                (a1_series.map(len).fillna(0) > args.max_allele_length)
+                | (a2_series.map(len).fillna(0) > args.max_allele_length)
+            )
+            reason.loc[allele_too_long_mask] = "allele_too_long"
+
             malformed_mask = reason.isna() & (
                 chrom_series.astype(str).str.strip().eq("")
                 | ~pos_series.map(is_valid_import_position).fillna(False)
@@ -248,6 +255,12 @@ def main() -> int:
                 | ~a2_series.map(is_canonical_allele_token).fillna(False)
             )
             reason.loc[non_actg_mask] = "non_actg_allele"
+
+            allele_too_long_mask = reason.isna() & (
+                (a1_series.map(len).fillna(0) > args.max_allele_length)
+                | (a2_series.map(len).fillna(0) > args.max_allele_length)
+            )
+            reason.loc[allele_too_long_mask] = "allele_too_long"
 
             invalid_id_mask = reason.isna() & (
                 raw_id_series.astype(str).str.strip().eq("")

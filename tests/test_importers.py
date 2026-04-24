@@ -674,3 +674,115 @@ def test_import_sumstats_id_vtable_requires_metadata_to_omit_chr_and_pos(tmp_pat
 
     assert result.returncode != 0
     assert "--id-vtable requires metadata to omit col_CHR and col_POS" in result.stderr
+
+
+def test_import_bim_drops_alleles_exceeding_max_length(tmp_path):
+    source = tmp_path / "input.bim"
+    out = tmp_path / "out.vmap"
+    write_lines(source, [
+        "chr1\trs1\t0\t100\tA\tG",
+        "chr1\trs2\t0\t200\tAAAAAAAAAAAAAAAAA\tG",
+        "chr1\trs3\t0\t300\tA\tGGGGGGGGGGGGGGGGG",
+    ])
+
+    result = run_py("import_bim.py", "--input", source, "--output", out, "--max-allele-length", "10")
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["chr1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+    qc_file = out.with_name(out.name + ".qc.tsv")
+    assert qc_file.exists()
+    qc_lines = [line.split("\t") for line in qc_file.read_text(encoding="utf-8").split("\n") if line.strip()]
+    assert len(qc_lines) == 3  # header + 2 QC rows
+    assert qc_lines[1][2] == "allele_too_long"
+    assert qc_lines[2][2] == "allele_too_long"
+
+
+def test_import_pvar_drops_alleles_exceeding_max_length(tmp_path):
+    source = tmp_path / "input.pvar"
+    out = tmp_path / "out.vmap"
+    write_lines(source, [
+        "##fileformat=VCFv4.2",
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+        "1\t100\trs1\tA\tG\t.\t.\t.",
+        "1\t200\trs2\tAAAAAAAAAAAAAAAAAA\tG\t.\t.\t.",
+    ])
+
+    result = run_py("import_pvar.py", "--input", source, "--output", out, "--max-allele-length", "10")
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "G", "A", ".", "0", "identity"]]
+
+    qc_file = out.with_name(out.name + ".qc.tsv")
+    assert qc_file.exists()
+    qc_lines = [line.split("\t") for line in qc_file.read_text(encoding="utf-8").split("\n") if line.strip()]
+    assert len(qc_lines) == 2  # header + 1 QC row
+    assert qc_lines[1][2] == "allele_too_long"
+
+
+def test_import_vcf_drops_alleles_exceeding_max_length(tmp_path):
+    source = tmp_path / "input.vcf"
+    out = tmp_path / "out.vmap"
+    write_lines(source, [
+        "##fileformat=VCFv4.2",
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+        "1\t100\trs1\tA\tG\t.\t.\t.",
+        "1\t200\trs2\tA\tGGGGGGGGGGGGGGGGGGGG\t.\t.\t.",
+    ])
+
+    result = run_py("import_vcf.py", "--input", source, "--output", out, "--max-allele-length", "10")
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "G", "A", ".", "0", "identity"]]
+
+    qc_file = out.with_name(out.name + ".qc.tsv")
+    assert qc_file.exists()
+    qc_lines = [line.split("\t") for line in qc_file.read_text(encoding="utf-8").split("\n") if line.strip()]
+    assert len(qc_lines) == 2  # header + 1 QC row
+    assert qc_lines[1][2] == "allele_too_long"
+
+
+def test_import_sumstats_drops_alleles_exceeding_max_length(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, [
+        "CHR\tPOS\tSNP\tEA\tOA\tBETA",
+        "1\t100\trs1\tA\tG\t0.2",
+        "1\t200\trs2\tAAAAAAAAAAAAAAAAAAAA\tG\t0.3",
+    ])
+    write_lines(meta, [
+        "col_CHR: CHR",
+        "col_POS: POS",
+        "col_SNP: SNP",
+        "col_EffectAllele: EA",
+        "col_OtherAllele: OA",
+    ])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out, "--max-allele-length", "10")
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+    qc_file = out.with_name(out.name + ".qc.tsv")
+    assert qc_file.exists()
+    qc_lines = [line.split("\t") for line in qc_file.read_text(encoding="utf-8").split("\n") if line.strip()]
+    assert len(qc_lines) == 2  # header + 1 QC row
+    assert qc_lines[1][2] == "allele_too_long"
+
+
+def test_importers_use_default_max_allele_length_of_150(tmp_path):
+    source = tmp_path / "input.bim"
+    out = tmp_path / "out.vmap"
+    # Allele of length 200 should be dropped with default cap of 150
+    allele_200 = "A" * 200
+    write_lines(source, [
+        "chr1\trs1\t0\t100\tA\tG",
+        f"chr1\trs2\t0\t200\t{allele_200}\tG",
+    ])
+
+    result = run_py("import_bim.py", "--input", source, "--output", out)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["chr1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+    qc_file = out.with_name(out.name + ".qc.tsv")
+    assert qc_file.exists()
+    qc_lines = [line.split("\t") for line in qc_file.read_text(encoding="utf-8").split("\n") if line.strip()]
+    assert len(qc_lines) == 2  # header + 1 QC row for allele_too_long
+    assert qc_lines[1][2] == "allele_too_long"

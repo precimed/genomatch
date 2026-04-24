@@ -66,6 +66,7 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 - for `--input-format sumstats`, `--input` may be omitted; when omitted, resolve the raw sumstats path from `path_sumStats` in `--sumstats-metadata` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - require `--sumstats-metadata` for `--input-format sumstats` and reject it for other importer formats
 - accept optional `--id-vtable` only for `--input-format sumstats` and pass it through to `import_sumstats.py`
+- accept optional `--max-allele-length` (positive integer), defaulting to `150`, and pass it through unchanged to the selected `import_*` tool
 - when summary-stat metadata omits `CHR` / `POS`, require `--id-vtable`
 - accept optional `--prefix`, defaulting it to `--output`
 - require final `--output`
@@ -78,6 +79,7 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 - accept `--norm-indels` / `--no-norm-indels`, defaulting indel normalization to enabled
 - dispatch to the appropriate `import_*` tool for the selected input format
 - for `--input-format sumstats`, pass `--id-vtable` through unchanged when supplied
+- pass `--max-allele-length` through unchanged when supplied
 - skip `normalize_contigs.py` only when the current retained object already declares the requested `--dst-contig-naming`
 - run `normalize_contigs.py` when the current retained object omits `contig_naming` or declares a different naming than requested
 - exception: if `--dst-contig-naming=plink_splitx` and the current retained stage has `genome_build=unknown`, the wrapper must defer final `plink_splitx` normalization until build is known

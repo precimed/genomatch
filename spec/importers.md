@@ -10,6 +10,7 @@
 - Importers infer the first supported naming convention compatible with all retained rows in this fixed priority order: `ncbi`, `ucsc`, `plink`, `plink_splitx`.
 - If importer contigs are mixed or invalid, the importer preserves retained rows as-is, omits `contig_naming` from metadata, emits a warning, and instructs the user to run `normalize_contigs.py`.
 - All importers support `--chr2use` as an import-time row filter on retained target rows. `--contigs` is an alias.
+- All importers support optional `--max-allele-length` (positive integer), defaulting to `150`.
 - `import_bim.py`, `import_pvar.py`, and `import_vcf.py` may accept `@` in the raw input path as a shard-discovery convention.
 - `import_sumstats.py` does not accept `@`; summary statistics are expected to come from a single file.
 
@@ -38,8 +39,17 @@ Examples of rows that may be dropped at import time include:
 
 - `multiallelic`
 - `non_actg_allele`
+- `allele_too_long`
 - `malformed_row`
 - `filtered_by_chr2use`
+
+Import-time allele length cap contract:
+
+- apply the cap only at importer raw-input boundaries, using `--max-allele-length` (default `150`)
+- if either imported allele exceeds the active cap, drop the source row with auditable QC reason `allele_too_long`
+- this cap is importer-local and must not be re-validated by downstream transform tools, including `restrict_build_compatible.py` and `liftover_build.py` output parsing
+- this cap is not re-validated after downstream allele normalization steps
+- this cap is not re-validated when loading user-provided `.vtable` / `.vmap` objects
 
 The preserved contract is:
 

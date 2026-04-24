@@ -108,3 +108,7 @@ The following patterns are normative when applicable:
 - major stage boundaries must define required columns and validate them before use.
 
 1. Temporary helper columns should not leak across stage boundaries unless part of the stage contract.
+
+1. Variable-length string assignment must preserve object dtype:
+- when assigning potentially long/variable-length string data into DataFrame columns, avoid implicit NumPy fixed-width unicode materialization (for example `<U...>` from `np.array(list_of_strings)`).
+- use object-safe assignment paths (for example pandas object Series/arrays or `to_numpy(dtype=object)`) so one extreme string length cannot upcast the full column to huge fixed-width unicode buffers.

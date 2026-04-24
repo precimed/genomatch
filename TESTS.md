@@ -69,6 +69,8 @@ The migrated suite must keep coverage for:
 - importer QC must cover at least representative dropped-row reasons such as `multiallelic`, `non_actg_allele`, `malformed_row`, and `filtered_by_chr2use`
 - `import_sumstats.py` honors the cleansumstats metadata contract
 - `import_sumstats.py` rejects `@` input paths
+- `import_sumstats.py` supports optional `--max-allele-length` with default `150`
+- in the summary-stats import path, source rows whose `EffectAllele` or `OtherAllele` exceeds the active cap are dropped with QC reason `allele_too_long`
 - `import_sumstats.py --id-vtable` is valid only when summary-stat metadata defines `SNP`, `EffectAllele`, and `OtherAllele`, and does not define `CHR` or `POS`
 - `import_sumstats.py --id-vtable` fills imported target-side `chrom` and `pos` from matched `.vtable.id` rows while keeping imported `a1/a2` from raw `EffectAllele` / `OtherAllele`
 - `import_sumstats.py --id-vtable` inherits imported `genome_build` and `contig_naming` from the lookup `.vtable` metadata
@@ -377,6 +379,7 @@ The migrated suite must keep coverage for:
 - `prepare_variants.py` requires one final `--output`
 - `prepare_variants.py` dispatches to the appropriate `import_*` tool for the selected input format
 - `prepare_variants.py` accepts optional `--id-vtable` only for `--input-format=sumstats` and passes it through unchanged to `import_sumstats.py`
+- `prepare_variants.py` accepts optional `--max-allele-length` (default `150`) and passes it through unchanged to the selected importer
 - `prepare_variants.py` defaults `--dst-build` to `GRCh38`
 - `prepare_variants.py` defaults `--dst-contig-naming` to `ncbi`
 - `prepare_variants.py` accepts `--allow-strand-flips` / `--no-allow-strand-flips` and defaults strand-flip allowance to on
@@ -432,6 +435,7 @@ The migrated suite must keep coverage for:
 - test that `prepare_variants.py --no-allow-strand-flips --no-norm-indels` omits both flags
 - test that `prepare_variants.py` passes `--sort` to `restrict_build_compatible.py` when liftover is skipped
 - test that `prepare_variants.py --input-format sumstats --id-vtable` passes `--id-vtable` through to `import_sumstats.py`
+- test that `prepare_variants.py --input-format sumstats --max-allele-length` passes `--max-allele-length` through to `import_sumstats.py`
 - test that `prepare_variants.py` does not invoke `sort_variants.py` and does not retain `.sorted.vmap`
 - test that `prepare_variants.py` keeps the retained stage path `<prefix>.build_compatible.vmap` for all four flag combinations
 - test that `prepare_variants.py --norm-indels` still completes the wrapper with the single retained build-compatible stage when the retained rows are pure SNPs

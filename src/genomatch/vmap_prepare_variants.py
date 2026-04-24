@@ -72,6 +72,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--drop-strand-ambiguous", action="store_true", help="Run drop_strand_ambiguous.py")
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="If set, run restrict_contigs.py with this value")
+    parser.add_argument("--max-allele-length", type=int, default=150, help="Maximum allele length (default: 150); passed through to selected importer")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--resume", action="store_true", help="Resume by skipping already completed retained stages")
     mode_group.add_argument(
@@ -101,6 +102,7 @@ def importer_command(args: argparse.Namespace, output_path: Path) -> list[str]:
             raise ValueError("--sumstats-metadata is supported only for --input-format=sumstats")
         if args.id_vtable:
             raise ValueError("--id-vtable is supported only for --input-format=sumstats")
+    cmd.extend(["--max-allele-length", str(args.max_allele_length)])
     return cmd
 
 
