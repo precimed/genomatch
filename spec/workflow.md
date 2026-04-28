@@ -1,6 +1,6 @@
 # Workflow wrappers
 
-This file is the authoritative wrapper-spec document for `prepare_variants.py` and `project_payload.py`.
+This file is the authoritative wrapper-spec document for `prepare_variants.py`, `prepare_variants_sharded.py`, and `project_payload.py`.
 
 These wrappers are orchestration only. They compose canonical tools into a common workflow and do not define alternate import, normalization, contig, metadata, liftover, matching, intersection, or payload-application semantics. Those semantics remain defined by the underlying canonical-tool specs, especially [importers.md](importers.md), [contigs-and-metadata.md](contigs-and-metadata.md), [variant-transforms.md](variant-transforms.md), [mapping.md](mapping.md), and [payload-application.md](payload-application.md).
 
@@ -15,6 +15,7 @@ The common wrapper workflow ties together:
 In that workflow:
 
 - `prepare_variants.py` emits one prepared `.vmap` per raw input, while retaining stage-by-stage wrapper outputs
+- `prepare_variants_sharded.py` is the memory-bounded sharded-input variant of `prepare_variants.py`; it emits one final prepared `.vmap` while retaining per-shard stage outputs
 - `intersect_variants.py` consumes prepared `.vmap` or `.vtable` inputs and emits one shared `.vtable`
 - `project_payload.py` matches a prepared source `.vmap` to that shared target `.vtable` and rewrites the original payload into target-row order
 - exact intersection, matching, and payload-application semantics remain defined by the canonical tools rather than by the wrappers
@@ -128,6 +129,33 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 - In `--resume` mode, if the final `<output>.vmap` already exists, there is nothing left to do.
 - `--force` means: delete all wrapper-managed outputs for the planned invocation first, then run cleanly from scratch.
 - for `prepare_variants.py`, `--force` deletes the full retained stage namespace under `<prefix>.*.vmap` plus the final `<output>.vmap`, even for optional stages that the current invocation would skip, including deferred final `plink_splitx` normalization
+
+## `prepare_variants_sharded.py`
+
+`prepare_variants_sharded.py` is a workflow wrapper for sharded raw genotype variant inputs. It runs the full `prepare_variants.py` stage graph independently for each discovered raw input shard, then concatenates and sorts the per-shard final `.vmap` outputs into one final `<output>.vmap`.
+
+It is orchestration only. Stage semantics are exactly those of `prepare_variants.py` and the canonical tools it invokes.
+
+### Contract
+
+- accept the same user-facing preparation controls as `prepare_variants.py`, except as narrowed below
+- require `--input` and require it to contain `@`
+- support `--input-format` values `bim`, `pvar`, and `vcf`; reject `sumstats`
+- require `--prefix` and require it to contain `@`
+- require final `--output`, treat it as an output stem, and reject `@` in `--output`
+- discover shards from the `--input` template using the shared raw-importer `@` discovery contract
+- process discovered shards in deterministic lexical path order
+- for each shard, invoke `prepare_variants.py` with a temporary one-shard `@` input template so the importer preserves the exact discovered shard token as `source_shard`
+- for each shard token, replace `@` in wrapper `--prefix` with that exact token and use the resulting stem for both the per-shard retained prefix and per-shard final output
+- pass all preparation controls through unchanged to each per-shard `prepare_variants.py` invocation, including build, contig naming, strand, indel, contig-filter, allele-length, `--resume`, and `--force` controls
+- before final concatenation, validate that all per-shard final `.vmap` metadata agree on target `genome_build` and target `contig_naming`; mismatches fail clearly and no partial concatenated output is retained
+- concatenate per-shard final `.vmap` rows in discovered shard order
+- sort the concatenated rows with `sort_variants.py --drop-duplicates` into final `<output>.vmap`
+- for the final `sort_variants.py` call, pass an explicit non-sharded sort scratch `--prefix` derived from wrapper `--prefix` by replacing each `@` with `all_targets` and then appending a sort-specific suffix such as `.sort_tmp`
+- copy final metadata from the first shard's final `.vmap`, then set `derived_from` to the original `--input` `@` template
+- leave per-shard QC sidecars in place under each per-shard retained prefix; do not concatenate them and do not write a top-level QC sidecar for the final `<output>.vmap`
+- under `--resume`, if final `<output>.vmap` already exists, do nothing; otherwise skip any shard whose per-shard final `.vmap` already exists and redo final concatenation plus sort if any shard was processed
+- under `--force`, first delete wrapper-managed per-shard variant objects and sidecars for all discovered shard tokens, plus final `<output>.vmap` and its metadata sidecar, then rerun cleanly
 
 ## `project_payload.py`
 

@@ -38,8 +38,8 @@ This file defines exact matching and set-operation semantics. Target-side row-tr
 - `intersect_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
 - output IDs come from the first input
-- without `--sort`, output order follows the first input and is not re-sorted by declared coordinate order
-- with `--sort`, retained output order is declared contig order, then numeric position, with stable input order for ties
+- output order follows the first input and is not re-sorted by declared coordinate order
+- `intersect_variants.py` does not provide a sort mode; users who need sorted intersection output should sort the desired first input before intersection
 - `intersect_variants.py` emits `.vtable`
 
 ## Unions

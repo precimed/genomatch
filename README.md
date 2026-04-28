@@ -4,7 +4,7 @@ This toolkit harmonizes genetic variant data across common research formats and 
 
 ## Table of contents
 
-This README starts with end-user setup pointers, then introduces the core mental model, the common `prepare_variants.py` / `intersect_variants.py` / `project_payload.py` workflow, and the canonical tool surface. It finishes with the detailed object and tool summaries that point to [spec/workflow.md](spec/workflow.md) and the rest of the spec for authoritative semantics.
+This README starts with end-user setup pointers, then introduces the core mental model, the common `prepare_variants.py` / `prepare_variants_sharded.py` / `intersect_variants.py` / `project_payload.py` workflow, and the canonical tool surface. It finishes with the detailed object and tool summaries that point to [spec/workflow.md](spec/workflow.md) and the rest of the spec for authoritative semantics.
 
 - [Getting started](#getting-started)
 - [Core mental model](#core-mental-model)
@@ -54,12 +54,12 @@ For exact schema and edge-case rules, see [SPEC.md](SPEC.md), [core-objects.md](
 You can use this toolkit at two levels:
 
 - use the canonical tools when you need explicit control over import, normalization, liftover, matching, intersection, and payload application
-- use `prepare_variants.py`, `intersect_variants.py`, `union_variants.py`, and `project_payload.py` workflow when you want to
+- use `prepare_variants.py` / `prepare_variants_sharded.py`, `intersect_variants.py`, `union_variants.py`, and `project_payload.py` workflow when you want to
   - prepare several inputs (e.g. cohort, reference, and summary-statistics payloads) into the same build and contig naming
   - intersect a subset of inputs to get one shared variant table, or union prepared inputs when that is the desired target set
   - project all original payloads into that shared target table
 
-For individual-level data, `prepare_variants.py` and `project_payload.py` can be executed
+For individual-level data, `prepare_variants.py`, `prepare_variants_sharded.py`, and `project_payload.py` can be executed
 within trusted research environments hosting sensitive data.
 `prepare_variants.py` produces only lists of variants which can be copied to a joint location for
 `intersect_variants.py`.
@@ -82,6 +82,16 @@ Use the tables below as a quick wrapper reference. The authoritative canonical-t
 | `--drop-strand-ambiguous` | Optional removal of strand-ambiguous variants after build compatibility / liftover |
 | `--chr2use` / `--contigs` | Optional restriction of final prepared output to selected contigs. `--contigs` is an alias for `--chr2use`. For non-autosomes and ploidy-related behavior, see [spec/ploidy-model.md](spec/ploidy-model.md) |
 | `--prefix` | Optional retained-intermediate stem; defaults to `--output` |
+| `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
+
+`prepare_variants_sharded.py` is the memory-bounded sharded-input variant of `prepare_variants.py`. It accepts `bim`, `pvar`, and `vcf` inputs whose `--input` contains `@`, runs the full `prepare_variants.py` stage graph once per discovered shard, and then concatenates and sorts the per-shard final `.vmap` files into one final `<output>.vmap`. Its stage semantics are inherited from `prepare_variants.py`; see [spec/workflow.md](spec/workflow.md).
+
+| `prepare_variants_sharded.py` argument | Meaning |
+| --- | --- |
+| `--input`, `--input-format` | Required sharded raw input. `--input` must contain `@`; `--input-format` may be `bim`, `pvar`, or `vcf` |
+| `--output` | Required non-sharded output stem. The final prepared output is `<output>.vmap` |
+| `--prefix` | Required retained-intermediate stem and must contain `@`; per-shard retained outputs replace `@` with the discovered shard token |
+| Other preparation flags | Same meaning as `prepare_variants.py` and passed through to each per-shard invocation |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
 
 `project_payload.py` is the convenience wrapper for projecting an original payload into an already prepared target `.vtable` or `.vmap`. `--target` always defines the target row set. If `--source-vmap` is supplied, the wrapper first matches source provenance onto that target and retains `<prefix>.vmap`; if `--source-vmap` is omitted, `--target` itself must be a `.vmap` and is applied directly. For genotype payloads, the wrapper can also restrict, reorder, or reconcile subject axes via explicit target sample files or wrapper-level union synthesis. For the exact projection flow, output retention rules, and target-sample reconciliation semantics, see [spec/workflow.md](spec/workflow.md).
@@ -114,9 +124,10 @@ prepare_variants.py \
 Prepare a sharded reference `.bim` payload, split across multiple inputs:
 
 ```bash
-prepare_variants.py \
+prepare_variants_sharded.py \
   --input reference.@.bim \
   --input-format bim \
+  --prefix work/reference.@.prepared \
   --output work/reference.prepared
 ```
 
@@ -130,11 +141,13 @@ prepare_variants.py \
   --output work/study.prepared
 ```
 
-Here `--output` is a stem, so these commands retain stage-specific `.vmap` outputs under prefixes that default to the chosen `--output`, and also copy the final prepared objects to:
+Here `--output` is a stem, so these commands write the final prepared objects to:
 
 - `work/cohort.prepared.vmap`
 - `work/reference.prepared.vmap`
 - `work/study.prepared.vmap`
+
+`prepare_variants.py` retains stage-specific `.vmap` outputs under a prefix that defaults to `--output`. `prepare_variants_sharded.py` requires an explicit sharded `--prefix` and retains per-shard stage-specific `.vmap` outputs by replacing `@` with each discovered shard token.
 
 #### Step 2: intersect the prepared outputs
 
@@ -220,7 +233,7 @@ Downstream transforms other than `normalize_contigs.py` require declared `contig
 | Normalize / metadata | `drop_strand_ambiguous.py` | `.vmap` or `.vtable` | same as input | Drops strand-ambiguous target rows |
 | Validate / liftover | `restrict_build_compatible.py` | `.vmap` or `.vtable` | same as input | Same-build, reference-aware filtering; key flags are `--allow-strand-flips`, `--norm-indels`, and `--sort` |
 | Validate / liftover | `liftover_build.py` | `.vmap` or `.vtable` | same as input | Explicit build conversion to `--target-build`; preserves `.vmap` provenance and re-sorts into declared coordinate order |
-| Order  | `sort_variants.py` | `.vmap` or `.vtable` | same as input | Explicit standalone target-row sorting by declared contig order, then numeric position |
+| Order  | `sort_variants.py` | `.vmap` or `.vtable` | same as input | Explicit standalone target-row sorting by declared contig order, then numeric position; optional `--drop-duplicates` drops duplicate target identities after sorting |
 | Match / intersect / materialize | `match_vmap_to_target.py` | source `.vmap` plus target `.vtable` or `.vmap` | `.vmap` | Exact same-build mapping onto target rows; target `.vmap` provenance is ignored with a warning |
 | Match / intersect / materialize | `intersect_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact intersection; output order follows the first input |
 | Match / intersect / materialize | `union_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact union with first-occurrence deduplication; output is re-sorted into declared coordinate order |
@@ -242,13 +255,14 @@ Downstream transforms other than `normalize_contigs.py` require declared `contig
 - import tools do not repair mixed or invalid contig labels. Use `normalize_contigs.py` for cleanup.
 - `restrict_build_compatible.py` is the same-build, reference-aware canonicalization step: it filters to reference-compatible rows, can optionally re-sort into declared coordinate order, and can optionally normalize supported indels via retained `bcftools norm` intermediates while still emitting canonical biallelic `a1=non-reference`, `a2=reference` rows; it does not liftover.
 - `liftover_build.py` supports SNVs and one-side-multibase reference-anchored rows, but not lifted outputs where both final alleles remain multi-base.
-- `intersect_variants.py` preserves first-input order. `union_variants.py` first deduplicates by first occurrence across the full input stream and then uses declared coordinate order. `match_vmap_to_target.py` follows target-side order. `liftover_build.py` and `sort_variants.py` use declared coordinate order: declared contig order, then numeric position, with stable input order for ties.
+- `intersect_variants.py` preserves first-input order. If you need sorted intersection output, sort the desired first input before intersecting. `union_variants.py` first deduplicates by first occurrence across the full input stream and then uses declared coordinate order. `match_vmap_to_target.py` follows target-side order. `liftover_build.py` and `sort_variants.py` use declared coordinate order: declared contig order, then numeric position, with stable input order for ties.
 - coordinate-changing transforms and genotype-payload application follow the shared expected-ploidy contract in [spec/ploidy-model.md](spec/ploidy-model.md).
 - genotype-payload `apply_vmap_*` tools apply `.vmap` provenance back to the original payload, support `@` source discovery and `@` target-contig output sharding, and follow the shared ploidy contract.
 - both genotype-payload `apply_vmap_*` tools support explicit target sample files plus `--sample-id-mode {fid_iid,iid}` for subject restriction, reordering, and reconciliation. Explicit target sample files define output subject order exactly and drive reconciliation-added missingness reporting.
 - `apply_vmap_to_bfile.py` uses `--target-fam`; `apply_vmap_to_pfile.py` uses `--target-psam`. Without explicit target sample files, sharded source payloads must still have identical sample metadata across referenced shards.
 - `project_payload.py --sample-axis union` is a wrapper-only convenience for sharded genotype payloads. It unions subject keys across referenced retained mapped shards only, synthesizes and retains `<prefix>.target_samples.fam` or `<prefix>.target_samples.psam`, then calls the canonical apply tool with that explicit target sample file. For non-sharded input, or when only one referenced shard remains, it warns and is a no-op.
 - `@` sharding is supported for heavy raw inputs and genotype payloads; summary-stat payloads, `.vmap`, and `.vtable` objects are single-file.
+- for filename-based `@` discovery, shard processing order follows deterministic lexical path order; this order is authoritative for first-wins behaviors in workflows that deduplicate duplicates across shards (for example, lexical labels like `chr10` sort before `chr2`).
 
 ### Usage example for canonical tools
 

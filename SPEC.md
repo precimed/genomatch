@@ -79,9 +79,10 @@ The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`
 ## Workflow tools surface
 
 - `prepare_variants.py`
+- `prepare_variants_sharded.py`
 - `project_payload.py`
 
-Wrapper behavior for `prepare_variants.py` and `project_payload.py` is defined in [workflow.md](spec/workflow.md). Those wrappers are orchestration only and reuse the canonical-tool semantics defined in the topic-specific spec files.
+Wrapper behavior for `prepare_variants.py`, `prepare_variants_sharded.py`, and `project_payload.py` is defined in [workflow.md](spec/workflow.md). Those wrappers are orchestration only and reuse the canonical-tool semantics defined in the topic-specific spec files.
 
 ## Reference model
 

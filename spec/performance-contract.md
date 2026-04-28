@@ -112,3 +112,15 @@ The following patterns are normative when applicable:
 1. Variable-length string assignment must preserve object dtype:
 - when assigning potentially long/variable-length string data into DataFrame columns, avoid implicit NumPy fixed-width unicode materialization (for example `<U...>` from `np.array(list_of_strings)`).
 - use object-safe assignment paths (for example pandas object Series/arrays or `to_numpy(dtype=object)`) so one extreme string length cannot upcast the full column to huge fixed-width unicode buffers.
+
+1. External sort is allowed for row-ordering tools:
+- tools such as `sort_variants.py` may use multi-pass external sorting with bounded chunk size and bounded merge fan-in, provided stable declared-coordinate ordering and all file-format / metadata semantics are preserved.
+- external-sort temporary files must be isolated from canonical output artifacts and finalized by temp-then-atomic-rename so failed runs do not leave partial canonical outputs.
+
+1. Streaming set operations are allowed when first-input semantics are preserved:
+- `intersect_variants.py` may hold the first input in memory, stream later inputs, and intersect by per-input membership sets.
+- streaming must preserve first-input output order, first-input IDs, metadata validation, and exact `chrom:pos:a1:a2` intersection semantics.
+
+1. Streaming source-to-target matching is allowed when target-order semantics are preserved:
+- `match_vmap_to_target.py` may hold target rows in memory and stream source `.vmap` rows.
+- streaming must preserve target-row output order, target duplicate rejection, source provenance preservation, first-match-wins behavior, and swap-aware allele classification.
