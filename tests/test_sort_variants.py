@@ -1,4 +1,7 @@
 import json
+import os
+
+import pytest
 
 from utils import read_tsv, run_py, run_py_with_env, write_json, write_lines
 
@@ -144,6 +147,38 @@ def test_sort_variants_rejects_invalid_chunk_env(tmp_path):
 
     assert result.returncode != 0
     assert "GENOMATCH_SORT_CHUNK_LINES must be a positive integer" in result.stderr
+
+
+def test_sort_variants_unwritable_scratch_prefix_fails_clearly(tmp_path):
+    source = tmp_path / "source.vtable"
+    out = tmp_path / "sorted.vtable"
+    scratch_parent = tmp_path / "scratch"
+    scratch_parent.mkdir()
+    write_lines(source, ["1\t2\tr2\tC\tT", "1\t1\tr1\tA\tG"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    scratch_parent.chmod(0o500)
+    try:
+        if os.access(scratch_parent, os.W_OK):
+            pytest.skip("scratch directory remains writable in this environment")
+        result = run_py(
+            "sort_variants.py",
+            "--input",
+            source,
+            "--output",
+            out,
+            "--prefix",
+            scratch_parent / "sort_tmp",
+        )
+    finally:
+        scratch_parent.chmod(0o700)
+
+    assert result.returncode != 0
+    assert "Permission denied" in result.stderr
+    assert not out.exists()
 
 
 def test_sort_variants_external_sort_merges_many_runs(tmp_path):

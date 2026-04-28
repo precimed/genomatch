@@ -37,6 +37,7 @@ dependencies = [
 "match_vmap_to_target.py" = "genomatch.match_vmap_to_target:cli_main"
 "normalize_contigs.py" = "genomatch.normalize_contigs:cli_main"
 "prepare_variants.py" = "genomatch.prepare_variants:cli_main"
+"prepare_variants_sharded.py" = "genomatch.prepare_variants_sharded:cli_main"
 "project_payload.py" = "genomatch.project_payload:cli_main"
 "restrict_build_compatible.py" = "genomatch.restrict_build_compatible:cli_main"
 "restrict_contigs.py" = "genomatch.restrict_contigs:cli_main"
