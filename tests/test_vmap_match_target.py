@@ -176,6 +176,27 @@ def test_match_vmap_to_target_uses_first_source_duplicate_match(tmp_path):
     assert read_tsv(out) == [["1", "100", "t1", "A", "G", "shard1", "8", "identity"]]
 
 
+def test_match_vmap_to_target_preserves_swap_across_source_chunks(tmp_path):
+    source = tmp_path / "src.vmap"
+    target = tmp_path / "tgt.vtable"
+    out = tmp_path / "map.vmap"
+    with open(source, "w", encoding="utf-8", newline="\n") as handle:
+        for idx in range(1, 100001):
+            handle.write(f"1\t{idx}\tfiller{idx}\tA\tC\tshard1\t{idx}\tidentity\n")
+        handle.write("1\t200000\twanted\tA\tG\tshard2\t200000\tidentity\n")
+    write_lines(target, ["1\t200000\tt1\tG\tA"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+    write_json(target.with_name(target.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+
+    result = run_py("match_vmap_to_target.py", "--source", source, "--target", target, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "200000", "t1", "G", "A", "shard2", "200000", "swap"]]
+
+
 def test_match_vmap_to_target_skips_missing_provenance_duplicate_when_later_match_exists(tmp_path):
     source = tmp_path / "src.vmap"
     target = tmp_path / "tgt.vtable"
