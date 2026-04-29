@@ -67,9 +67,11 @@ def test_prepare_variants_sharded_prepares_shards_and_sorts_final_target(tmp_pat
     assert metadata["derived_from"] == str(source_template)
 
     sort_prefix = tmp_path / "work" / "reference.all_targets.prepared.sort_tmp"
+    merge_prefix = tmp_path / "work" / "reference.all_targets.prepared.merge_tmp."
     assert "sort_variants.py" in result.stderr
     assert "--drop-duplicates" in result.stderr
     assert str(sort_prefix) in result.stderr
+    assert str(merge_prefix) in result.stderr
     assert "dropped 1 duplicate target rows" in result.stderr
 
 

@@ -201,3 +201,25 @@ def test_sort_variants_external_sort_merges_many_runs(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [[str(1), str(idx), f"r{idx}", "A", "G"] for idx in range(1, 131)]
+
+
+def test_sort_variants_default_scratch_is_output_adjacent(tmp_path):
+    source = tmp_path / "source.vtable"
+    out = tmp_path / "nested" / "sorted.vtable"
+    write_lines(source, ["1\t2\tr2\tC\tT", "1\t1\tr1\tA\tG"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "sort_variants.py",
+        {"GENOMATCH_SORT_CHUNK_LINES": "1"},
+        "--input",
+        source,
+        "--output",
+        out,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert str(out.with_name(out.name + ".sort_tmp.")) in result.stderr

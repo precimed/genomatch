@@ -45,10 +45,12 @@ For `.vmap` input, if contig normalization collapses multiple retained rows to t
 
 `restrict_contigs.py` is the explicit target-filtering step after normalization. It accepts either a `.vtable` or a `.vmap`, filters target rows by explicit contig selection such as `--chr2use` / `--contigs`, preserves retained target order, and emits the same artifact type as the input. For `.vmap` input it preserves original source provenance. For `.vtable` input it remains provenance-free and emits `.vtable`.
 
-All downstream tools other than `normalize_contigs.py` fail if:
+Downstream tools that interpret contig labels for declared coordinate order, reference access, ploidy, or contig filtering fail if:
 
 - metadata declares `contig_naming` but any target row is inconsistent with it
 - metadata omits `contig_naming`
+
+Exact matching and exact set membership tools (`match_vmap_to_target.py` and `intersect_variants.py`) still require declared matching `contig_naming` metadata, but they compare stored `chrom` labels exactly and do not validate each row label against the declared naming.
 
 The intended cleanup workflow is:
 

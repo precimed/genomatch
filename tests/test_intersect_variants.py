@@ -57,6 +57,38 @@ def test_intersect_variants_checks_metadata_before_loading_rows(tmp_path):
     assert "invalid vtable row" not in result.stderr
 
 
+def test_intersect_variants_validates_later_vtable_like_first_input(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t100\t\tA\tG"])
+    write_json(first.with_name(first.name + ".meta.json"), meta)
+    write_json(second.with_name(second.name + ".meta.json"), meta)
+
+    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+
+    assert result.returncode != 0
+    assert "row is missing id" in result.stderr
+
+
+def test_intersect_variants_does_not_canonicalize_contig_spellings(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    write_lines(first, ["chr1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t100\tid2\tA\tG"])
+    write_json(first.with_name(first.name + ".meta.json"), meta)
+    write_json(second.with_name(second.name + ".meta.json"), meta)
+
+    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == []
+
+
 def test_intersect_variants_does_not_accept_sort_flag(tmp_path):
     first = tmp_path / "a.vtable"
     second = tmp_path / "b.vtable"

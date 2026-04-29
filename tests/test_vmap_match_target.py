@@ -111,7 +111,7 @@ def test_match_vmap_to_target_rejects_duplicate_target_rows(tmp_path):
     assert "duplicate chrom:pos:a1:a2" in result.stderr.lower()
 
 
-def test_match_vmap_to_target_rejects_unknown_target_contig(tmp_path):
+def test_match_vmap_to_target_uses_stored_target_contig_labels_exactly(tmp_path):
     source = tmp_path / "src.vmap"
     target = tmp_path / "tgt.vtable"
     out = tmp_path / "map.vmap"
@@ -123,11 +123,11 @@ def test_match_vmap_to_target_rejects_unknown_target_contig(tmp_path):
     write_json(target.with_name(target.name + ".meta.json"), meta_vtable)
 
     result = run_py("match_vmap_to_target.py", "--source", source, "--target", target, "--output", out)
-    assert result.returncode != 0
-    assert "normalize_contigs.py" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["unknown", "100", "t1", "A", "G", ".", "-1", "missing"]]
 
 
-def test_match_vmap_to_target_rejects_rows_inconsistent_with_declared_contig_naming(tmp_path):
+def test_match_vmap_to_target_does_not_canonicalize_contig_spellings(tmp_path):
     source = tmp_path / "src.vmap"
     target = tmp_path / "tgt.vtable"
     out = tmp_path / "map.vmap"
@@ -137,8 +137,8 @@ def test_match_vmap_to_target_rejects_rows_inconsistent_with_declared_contig_nam
     write_json(target.with_name(target.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
 
     result = run_py("match_vmap_to_target.py", "--source", source, "--target", target, "--output", out)
-    assert result.returncode != 0
-    assert "normalize_contigs.py" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "t1", "A", "G", ".", "-1", "missing"]]
 
 
 def test_match_vmap_to_target_ignores_rsid_for_matching_and_preserves_provenance(tmp_path):
@@ -164,6 +164,27 @@ def test_match_vmap_to_target_uses_first_source_duplicate_match(tmp_path):
         [
             "1\t100\trs_first\tA\tG\tshard1\t8\tidentity",
             "1\t100\trs_second\tG\tA\tshard2\t9\tidentity",
+        ],
+    )
+    write_lines(target, ["1\t100\tt1\tA\tG"])
+    write_json(source.with_name(source.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_json(target.with_name(target.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+
+    result = run_py("match_vmap_to_target.py", "--source", source, "--target", target, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "t1", "A", "G", "shard1", "8", "identity"]]
+
+
+def test_match_vmap_to_target_uses_first_source_row_when_target_coordinates_are_identical(tmp_path):
+    source = tmp_path / "src.vmap"
+    target = tmp_path / "tgt.vtable"
+    out = tmp_path / "map.vmap"
+    write_lines(
+        source,
+        [
+            "1\t100\trs_first\tA\tG\tshard1\t8\tidentity",
+            "1\t100\trs_second\tA\tG\tshard2\t9\tidentity",
         ],
     )
     write_lines(target, ["1\t100\tt1\tA\tG"])

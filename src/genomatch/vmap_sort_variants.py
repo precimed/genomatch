@@ -5,7 +5,6 @@ import argparse
 import heapq
 import logging
 import os
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,12 +14,12 @@ from ._cli_utils import run_cli
 from .contig_utils import UNKNOWN_CONTIG, canonical_contig_from_label
 from .vtable_utils import (
     CANONICAL_CONTIG_RANK,
-    MISSING_SOURCE_SHARD,
-    SIGNED_INT_TOKEN_PATTERN,
-    VALID_ALLELE_OPS,
     ensure_parent_dir,
+    iter_vmap_rows,
+    iter_vtable_rows,
     load_metadata,
     require_contig_naming,
+    variant_row_identity,
     validate_vmap_metadata,
     validate_vtable_metadata,
     write_metadata,
@@ -31,9 +30,6 @@ logger = logging.getLogger(__name__)
 SORT_CHUNK_LINES = 1_000_000
 SORT_MERGE_FAN_IN = 64
 SORT_CHUNK_LINES_ENV = "GENOMATCH_SORT_CHUNK_LINES"
-POSITIVE_INT_TOKEN_RE = re.compile(r"\+?0*[1-9]\d*\Z")
-SIGNED_INT_TOKEN_RE = re.compile(SIGNED_INT_TOKEN_PATTERN + r"\Z")
-VALID_NONMISSING_ALLELE_OPS = VALID_ALLELE_OPS - {"missing"}
 
 
 @dataclass(frozen=True)
@@ -106,103 +102,37 @@ def load_sort_metadata(path: Path) -> tuple[dict, str]:
     return metadata, contig_naming
 
 
-def require_positive_pos(token: str, *, label: str) -> int:
-    if not POSITIVE_INT_TOKEN_RE.fullmatch(token):
-        raise ValueError(f"{label} row has invalid pos: {token!r}")
-    value = int(token)
-    if value <= 0:
-        raise ValueError(f"{label} row has invalid pos: {token!r}")
-    return value
-
-
-def normalize_allele(value: str, *, label: str) -> str:
-    allele = value.strip().upper()
-    if not allele or re.fullmatch(r"[ACGT]+", allele) is None:
-        raise ValueError(f"invalid allele code in {label}: {value!r}")
-    return allele
-
-
-def parse_source_index(token: str, *, label: str) -> int:
-    stripped = token.strip()
-    if not SIGNED_INT_TOKEN_RE.fullmatch(stripped):
-        raise ValueError(f"invalid {label} row")
-    return int(stripped)
-
-
-def parse_variant_line(
-    line: str,
-    *,
-    object_type: str,
-    contig_naming: str,
-    path: Path,
-) -> ParsedSortRow:
-    label = "vtable" if object_type == "variant_table" else "vmap"
-    parts = line.rstrip("\n").split("\t")
-    expected_columns = 5 if object_type == "variant_table" else 8
-    if len(parts) != expected_columns:
-        raise ValueError(f"invalid {label} row in {path}")
-
-    chrom, pos, row_id = parts[0], parts[1], parts[2]
-    if not chrom:
-        raise ValueError(f"{label} row is missing chrom")
-    if object_type == "variant_table" and not row_id:
-        raise ValueError(f"{label} row is missing id")
-    canonical = canonical_contig_from_label(chrom, contig_naming)
-    if canonical is None or canonical == UNKNOWN_CONTIG:
-        raise ValueError(
-            f"variant object has contigs inconsistent with declared contig_naming={contig_naming!r}: {chrom!r}. "
-            "Run normalize_contigs.py first"
-        )
-    pos_int = require_positive_pos(pos, label=label)
-    a1 = normalize_allele(parts[3], label=label)
-    a2 = normalize_allele(parts[4], label=label)
-    normalized_parts = [chrom, pos, row_id, a1, a2]
-
-    if object_type == "variant_map":
-        source_shard = parts[5]
-        source_index = parse_source_index(parts[6], label=label)
-        allele_op = parts[7]
-        if source_index == -1:
-            if source_shard != MISSING_SOURCE_SHARD:
-                raise ValueError("vmap row with source_index=-1 must have source_shard='.'")
-            if allele_op != "missing":
-                raise ValueError("vmap row with source_index=-1 must have allele_op=missing")
-        elif source_index < 0:
-            raise ValueError("vmap row source_index out of range")
-        else:
-            if not source_shard:
-                raise ValueError("vmap row with source_index>=0 must define source_shard")
-            if allele_op not in VALID_NONMISSING_ALLELE_OPS:
-                raise ValueError(f"invalid allele_op in vmap row: {allele_op!r}")
-        normalized_parts.extend([source_shard, str(source_index), allele_op])
-
-    return ParsedSortRow(
-        line="\t".join(normalized_parts) + "\n",
-        rank=CANONICAL_CONTIG_RANK[canonical],
-        pos_int=pos_int,
-        identity=(chrom, pos, a1, a2),
-    )
-
-
 def iter_parsed_rows(path: Path, *, object_type: str, contig_naming: str) -> Iterator[ParsedSortRow]:
     # Assumes: metadata has already been validated and contig_naming is declared.
-    # Performs: PN(allele uppercasing, source_index integer rendering) and PV/SV(row shape,
-    # coordinate sortability, declared contig compatibility, vmap provenance fields).
+    # Performs: PN/PV via iter_vtable_rows/iter_vmap_rows, SV(declared contig compatibility).
     # Guarantees: parsed rows have stable line payloads and declared-coordinate sort keys.
-    with open(path, "r", encoding="utf-8", newline="") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            yield parse_variant_line(line, object_type=object_type, contig_naming=contig_naming, path=path)
+    row_iter = iter_vtable_rows(path) if object_type == "variant_table" else iter_vmap_rows(path)
+    for row in row_iter:
+        canonical = canonical_contig_from_label(row.chrom, contig_naming)
+        if canonical is None or canonical == UNKNOWN_CONTIG:
+            raise ValueError(
+                f"variant object has contigs inconsistent with declared contig_naming={contig_naming!r}: {row.chrom!r}. "
+                "Run normalize_contigs.py first"
+            )
+        if object_type == "variant_table":
+            parts = [row.chrom, row.pos, row.id, row.a1, row.a2]
+        else:
+            parts = [row.chrom, row.pos, row.id, row.a1, row.a2, row.source_shard, str(row.source_index), row.allele_op]
+        yield ParsedSortRow(
+            line="\t".join(parts) + "\n",
+            rank=CANONICAL_CONTIG_RANK[canonical],
+            pos_int=int(row.pos),
+            identity=variant_row_identity(row),
+        )
 
 
-def scratch_directory(prefix: str | None) -> tempfile.TemporaryDirectory[str]:
-    if prefix is None:
-        return tempfile.TemporaryDirectory(prefix="genomatch-sort.")
-    scratch_prefix = Path(prefix)
+def scratch_directory(prefix: str | None, *, output_path: Path) -> tempfile.TemporaryDirectory[str]:
+    scratch_prefix = Path(prefix) if prefix is not None else output_path.with_name(output_path.name + ".sort_tmp")
     scratch_dir = scratch_prefix.parent if str(scratch_prefix.parent) else Path(".")
     scratch_dir.mkdir(parents=True, exist_ok=True)
-    return tempfile.TemporaryDirectory(prefix=scratch_prefix.name + ".", dir=str(scratch_dir))
+    temp_dir = tempfile.TemporaryDirectory(prefix=scratch_prefix.name + ".", dir=str(scratch_dir))
+    logger.info("sort_variants.py: using scratch directory %s", temp_dir.name)
+    return temp_dir
 
 
 def write_run(path: Path, rows: list[ParsedSortRow]) -> None:
@@ -240,15 +170,18 @@ def create_sorted_runs(
     return runs, row_count
 
 
-def read_next_from_run(cursor: RunCursor, *, object_type: str, contig_naming: str, path: Path) -> tuple | None:
+def read_next_from_run(cursor: RunCursor, *, contig_naming: str) -> tuple | None:
+    # Run files contain already-validated normalized lines; only sort keys need re-extraction.
     while True:
         line = cursor.handle.readline()
         if not line:
             return None
         if not line.strip():
             continue
-        row = parse_variant_line(line, object_type=object_type, contig_naming=contig_naming, path=path)
-        heap_item = (row.rank, row.pos_int, cursor.run_index, cursor.row_index, row.line, row.identity, cursor)
+        parts = line.rstrip("\n").split("\t")
+        chrom, pos, a1, a2 = parts[0], parts[1], parts[3], parts[4]
+        canonical = canonical_contig_from_label(chrom, contig_naming)
+        heap_item = (CANONICAL_CONTIG_RANK[canonical], int(pos), cursor.run_index, cursor.row_index, line, (chrom, pos, a1, a2), cursor)
         cursor.row_index += 1
         return heap_item
 
@@ -257,7 +190,6 @@ def merge_runs_once(
     *,
     run_paths: list[Path],
     output_path: Path,
-    object_type: str,
     contig_naming: str,
     drop_duplicates: bool,
     enforce_vmap_uniqueness: bool,
@@ -268,7 +200,7 @@ def merge_runs_once(
         handle = open(run_path, "r", encoding="utf-8", newline="")
         cursor = RunCursor(run_index=run_index, handle=handle)
         cursors.append(cursor)
-        first = read_next_from_run(cursor, object_type=object_type, contig_naming=contig_naming, path=run_path)
+        first = read_next_from_run(cursor, contig_naming=contig_naming)
         if first is not None:
             heapq.heappush(heap, first)
 
@@ -295,7 +227,7 @@ def merge_runs_once(
                     emitted += 1
                     seen_identities_for_coordinate.add(identity)
 
-                next_item = read_next_from_run(cursor, object_type=object_type, contig_naming=contig_naming, path=run_paths[cursor.run_index])
+                next_item = read_next_from_run(cursor, contig_naming=contig_naming)
                 if next_item is not None:
                     heapq.heappush(heap, next_item)
     finally:
@@ -328,7 +260,6 @@ def merge_runs_bounded(
             merge_runs_once(
                 run_paths=group,
                 output_path=merged_path,
-                object_type=object_type,
                 contig_naming=contig_naming,
                 drop_duplicates=False,
                 enforce_vmap_uniqueness=False,
@@ -340,7 +271,6 @@ def merge_runs_bounded(
     return merge_runs_once(
         run_paths=current_runs,
         output_path=final_output_path,
-        object_type=object_type,
         contig_naming=contig_naming,
         drop_duplicates=drop_duplicates,
         enforce_vmap_uniqueness=object_type == "variant_map" and not drop_duplicates,
@@ -363,7 +293,7 @@ def write_sorted_output(
     if temp_output.exists():
         temp_output.unlink()
     try:
-        with scratch_directory(prefix) as scratch_dir_raw:
+        with scratch_directory(prefix, output_path=output_path) as scratch_dir_raw:
             scratch_path = Path(scratch_dir_raw)
             runs, _row_count = create_sorted_runs(
                 input_path=input_path,

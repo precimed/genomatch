@@ -117,6 +117,10 @@ The following patterns are normative when applicable:
 - tools such as `sort_variants.py` may use multi-pass external sorting with bounded chunk size and bounded merge fan-in, provided stable declared-coordinate ordering and all file-format / metadata semantics are preserved.
 - external-sort temporary files must be isolated from canonical output artifacts and finalized by temp-then-atomic-rename so failed runs do not leave partial canonical outputs.
 
+1. System temporary directory use must remain small:
+- `tempfile` / system temporary-directory use is allowed only for a few small helper objects, approximately 1 MB total per process.
+- Large intermediate files must be placed under a user-controlled output or scratch prefix because HPC environments may have small or quota-limited `/tmp` partitions.
+
 1. Streaming set operations are allowed when first-input semantics are preserved:
 - `intersect_variants.py` may hold the first input in memory, stream later inputs, and intersect by per-input membership sets.
 - streaming must preserve first-input output order, first-input IDs, metadata validation, and exact `chrom:pos:a1:a2` intersection semantics.

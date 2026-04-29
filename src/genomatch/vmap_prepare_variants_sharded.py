@@ -80,6 +80,16 @@ def sort_scratch_prefix(prefix_template: Path) -> Path:
     return Path(str(prefix_template).replace("@", "all_targets") + ".sort_tmp")
 
 
+def merge_scratch_prefix(prefix_template: Path) -> Path:
+    return Path(str(prefix_template).replace("@", "all_targets") + ".merge_tmp")
+
+
+def temporary_directory_from_prefix(prefix: Path) -> tempfile.TemporaryDirectory[str]:
+    scratch_dir = prefix.parent if str(prefix.parent) else Path(".")
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    return tempfile.TemporaryDirectory(prefix=prefix.name + ".", dir=str(scratch_dir))
+
+
 def one_shard_template(input_template: Path, shard: DiscoveredInputShard, workspace: Path) -> Path:
     name_prefix, name_suffix = input_template.name.split("@", 1)
     template = workspace / input_template.name
@@ -230,7 +240,7 @@ def main() -> int:
         logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
         return 0
 
-    with tempfile.TemporaryDirectory(prefix="genomatch-prepare-sharded-merge.") as merge_workspace_raw:
+    with temporary_directory_from_prefix(merge_scratch_prefix(prefix_template)) as merge_workspace_raw:
         concatenated_path = Path(merge_workspace_raw) / "concatenated.vmap"
         write_concatenated_vmap(concatenated_path, final_paths, metadata, args.input)
         sort_final_vmap(args, concatenated_path=concatenated_path, final_output=final_output)

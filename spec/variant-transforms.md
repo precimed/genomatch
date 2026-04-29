@@ -44,6 +44,7 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - `.vmap` metadata carries target-side metadata only
 - `convert_vmap_to_target.py` materializes target rows and breaks provenance intentionally
 - `sort_variants.py` accepts `.vtable` or `.vmap`, sorts target rows into declared coordinate order, emits the same type as the input, and does not normalize contigs, validate against reference, liftover, change alleles, or change provenance
+- `sort_variants.py` validates target rows against the declared `contig_naming` to compute declared coordinate order, but preserves stored `chrom` labels exactly and does not treat different contig spellings as equivalent target identities
 - `sort_variants.py` may accept optional `--prefix` to control where external-sort scratch files are written; this prefix is for temporary sort artifacts only and is not a variant-object output stem
 - `sort_variants.py` may accept optional `--drop-duplicates`; when supplied, duplicate target identities are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
 - `sort_variants.py --drop-duplicates` retains the first occurrence according to the stable declared-coordinate sort order and logs one dropped-duplicate row count

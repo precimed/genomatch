@@ -5,7 +5,7 @@ import gzip
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -204,6 +204,63 @@ def read_vtable(path: Path) -> List[VariantRow]:
     return read_vtable_table(path).to_rows()
 
 
+def variant_row_identity(row: VariantRow | VMapRow) -> Tuple[str, str, str, str]:
+    return (row.chrom, row.pos, row.a1, row.a2)
+
+
+def iter_vtable_rows(path: Path, *, label: str = "vtable") -> Iterator[VariantRow]:
+    reader = pd.read_table(
+        path,
+        sep="\t",
+        header=None,
+        names=["chrom", "pos", "id", "a1", "a2"],
+        dtype="object",
+        keep_default_na=False,
+        na_values=[],
+        skip_blank_lines=True,
+        compression="infer",
+        chunksize=WRITE_CHUNK_ROWS,
+    )
+    for chunk in reader:
+        if chunk.isna().any(axis=None):
+            raise ValueError(f"invalid {label} row in {path}")
+        chunk["a1"] = chunk["a1"].str.strip().str.upper()
+        chunk["a2"] = chunk["a2"].str.strip().str.upper()
+        _validate_vtable_frame(chunk, label, assume_normalized_alleles=True)
+        for row in chunk.itertuples(index=False):
+            yield VariantRow(row.chrom, row.pos, row.id, row.a1, row.a2)
+
+
+def iter_vmap_rows(path: Path) -> Iterator[VMapRow]:
+    reader = pd.read_table(
+        path,
+        sep="\t",
+        header=None,
+        names=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"],
+        dtype="object",
+        keep_default_na=False,
+        na_values=[],
+        skip_blank_lines=True,
+        compression="infer",
+        chunksize=WRITE_CHUNK_ROWS,
+    )
+    for chunk in reader:
+        if chunk.isna().any(axis=None):
+            raise ValueError(f"invalid vmap row in {path}")
+        source_index = chunk["source_index"].str.strip()
+        source_index_numeric = pd.to_numeric(source_index, errors="coerce")
+        valid_tokens = source_index.str.fullmatch(SIGNED_INT_TOKEN_PATTERN).fillna(False)
+        if (~valid_tokens | source_index_numeric.isna()).any():
+            raise ValueError(f"invalid vmap row in {path}")
+        chunk = chunk.copy()
+        chunk["source_index"] = source_index_numeric.astype("int64")
+        chunk["a1"] = chunk["a1"].str.strip().str.upper()
+        chunk["a2"] = chunk["a2"].str.strip().str.upper()
+        _validate_vmap_frame(chunk, assume_normalized_alleles=True, check_duplicates=False)
+        for row in chunk.itertuples(index=False):
+            yield VMapRow(row.chrom, row.pos, row.id, row.a1, row.a2, row.source_shard, int(row.source_index), row.allele_op)
+
+
 def read_vtable_table(path: Path) -> VariantRowsTable:
     # Assumes: path points to a tab-delimited vtable payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
@@ -384,6 +441,7 @@ def _validate_vmap_frame(
     frame: pd.DataFrame,
     *,
     assume_normalized_alleles: bool = False,
+    check_duplicates: bool = True,
 ) -> None:
     validate_allele_values(
         pd.concat([frame["a1"], frame["a2"]], ignore_index=True),
@@ -394,9 +452,10 @@ def _validate_vmap_frame(
     if invalid_pos.any():
         first_idx = int(invalid_pos.idxmax())
         raise ValueError(f"vmap row has invalid pos: {frame.at[first_idx, 'pos']!r}")
-    duplicate_mask = frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
-    if duplicate_mask.any():
-        raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
+    if check_duplicates:
+        duplicate_mask = frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
+        if duplicate_mask.any():
+            raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
     missing_match = frame["source_index"].eq(-1)
     bad_missing_shard = missing_match & frame["source_shard"].ne(MISSING_SOURCE_SHARD)
     if bad_missing_shard.any():
@@ -428,8 +487,12 @@ def validate_vmap_rows(rows: Sequence[VMapRow]) -> None:
     _validate_vmap_frame(VMapRowsTable.from_rows(list(rows), keep_row_idx=False).to_frame(copy=False))
 
 
+def variant_row_from_vmap_row(row: VMapRow) -> VariantRow:
+    return VariantRow(row.chrom, row.pos, row.id, row.a1, row.a2)
+
+
 def variant_rows_from_vmap_rows(rows: Sequence[VMapRow]) -> List[VariantRow]:
-    return [VariantRow(row.chrom, row.pos, row.id, row.a1, row.a2) for row in rows]
+    return [variant_row_from_vmap_row(row) for row in rows]
 
 
 
@@ -542,6 +605,15 @@ def duplicate_target_rows_mask_table(frame: pd.DataFrame) -> pd.Series:
         missing_csv = ",".join(missing)
         raise ValueError(f"target frame is missing required columns: {missing_csv}")
     return frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep=False)
+
+
+def require_unique_target_rows(rows: Sequence[VariantRow], *, message: str = "duplicate chrom:pos:a1:a2 in target rows") -> None:
+    seen: set[Tuple[str, str, str, str]] = set()
+    for row in rows:
+        identity = variant_row_identity(row)
+        if identity in seen:
+            raise ValueError(message)
+        seen.add(identity)
 
 
 def sort_target_table_by_declared_coordinate(frame: pd.DataFrame, contig_naming: str, *, label: str) -> pd.DataFrame:

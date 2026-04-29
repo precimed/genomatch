@@ -15,6 +15,7 @@ This file defines exact matching and set-operation semantics. Target-side row-tr
 - Build mismatch is an error; no implicit liftover is performed
 - `guess_build.py` is the only build-guessing entrypoint
 - `.vmap` provenance is `source_shard + source_index`, where `source_index` is shard-local and `source_shard` is stored exactly as emitted by the provenance-bearing source step
+- Exact matching and exact set membership operations do not normalize contigs, validate row-level contig labels, or perform canonicalized contig-equivalence matching. After validating that all inputs declare the same `contig_naming`, tools compare exact stored `chrom`, `pos`, `a1`, and `a2` values.
 - Declared coordinate order is defined in [core-objects.md](core-objects.md) and is reused by both `sort_variants.py` and `liftover_build.py`
 
 ## Mapping
@@ -51,6 +52,6 @@ This file defines exact matching and set-operation semantics. Target-side row-tr
 - mismatched build or contig naming fails clearly
 - duplicate exact rows are deduplicated by first occurrence across the full input stream, scanning inputs in CLI order and rows in file order
 - output IDs come from that first retained occurrence
-- after deduplication, `union_variants.py` emits declared coordinate order using the same sorting contract as `sort_variants.py`
+- after exact deduplication, `union_variants.py` emits declared coordinate order using the same sorting contract as `sort_variants.py`; this final sort still validates row-level contig labels against declared `contig_naming`
 - stable ordering for ties is inherited from that declared-coordinate sort, so rows with the same declared contig and numeric position retain first-occurrence order
 - `union_variants.py` emits `.vtable`
