@@ -45,8 +45,8 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - `convert_vmap_to_target.py` materializes target rows and breaks provenance intentionally
 - `sort_variants.py` accepts `.vtable` or `.vmap`, reads the input object in memory, sorts target rows into declared coordinate order, emits the same type as the input, and does not normalize contigs, validate against reference, liftover, change alleles, or change provenance
 - `sort_variants.py` validates target rows against the declared `contig_naming` to compute declared coordinate order, but preserves stored `chrom` labels exactly and does not treat different contig spellings as equivalent target identities
-- `sort_variants.py` may accept optional `--drop-duplicates`; when supplied, duplicate target identities are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
-- `sort_variants.py --drop-duplicates` retains the first occurrence according to the stable declared-coordinate sort order and logs one dropped-duplicate row count
+- `sort_variants.py` must accept optional `--drop-duplicates`; when supplied, duplicate target identities are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
+- `sort_variants.py --drop-duplicates` drops duplicate exact target identities after sorting; because the sort is stable and exact duplicates have identical declared-coordinate sort keys, the retained duplicate representative is the first occurrence from the input
 - `sort_variants.py --drop-duplicates` does not write a QC sidecar; it is intended for explicit whole-object duplicate cleanup rather than row-level import or transform auditing
 - `liftover_build.py` resolves chain and FASTA assets from config + metadata only
 - `liftover_build.py` accepts declared `ncbi`, `ucsc`, and `plink` input contig naming while using UCSC internal reference assets

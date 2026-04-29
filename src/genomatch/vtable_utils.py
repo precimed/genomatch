@@ -346,7 +346,7 @@ def read_vmap(path: Path) -> List[VMapRow]:
     return read_vmap_table(path).to_rows()
 
 
-def read_vmap_table(path: Path) -> VMapRowsTable:
+def read_vmap_table(path: Path, *, check_duplicates: bool = True) -> VMapRowsTable:
     # Assumes: path points to a tab-delimited vmap payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
     # Guarantees: VMapRowsTable with canonical uppercase a1/a2, int64 source_index, and validated vmap invariants.
@@ -364,7 +364,7 @@ def read_vmap_table(path: Path) -> VMapRowsTable:
     frame = table.to_frame(copy=False)
     frame["a1"] = frame["a1"].str.strip().str.upper()
     frame["a2"] = frame["a2"].str.strip().str.upper()
-    _validate_vmap_frame(frame, assume_normalized_alleles=True)
+    _validate_vmap_frame(frame, assume_normalized_alleles=True, check_duplicates=check_duplicates)
     return table
 
 
