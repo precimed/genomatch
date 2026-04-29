@@ -62,6 +62,8 @@ def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_ran
         prefix,
         "--output",
         output,
+        "--shards",
+        "10,2,NONPAR,nonpar",
         "--dst-build",
         "GRCh37",
         "--no-norm-indels",

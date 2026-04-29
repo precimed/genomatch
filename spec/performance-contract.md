@@ -115,7 +115,7 @@ The following patterns are normative when applicable:
 
 1. Standalone row-ordering tools may be in-memory:
 - `sort_variants.py` reads one canonical `.vtable` or `.vmap` object, sorts it in memory, and writes the same object type.
-- wrappers that need scalability for raw sharded genotype inputs must obtain it from shard-level orchestration rather than from `sort_variants.py` external-sort scratch behavior.
+- wrappers that need scalability for raw sharded genotype inputs must obtain it from shard-level orchestration.
 
 1. System temporary directory use must remain small:
 - `tempfile` / system temporary-directory use is allowed only for a few small helper objects, approximately 1 MB total per process.

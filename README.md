@@ -84,14 +84,14 @@ Use the tables below as a quick wrapper reference. The authoritative canonical-t
 | `--prefix` | Optional retained-intermediate stem; defaults to `--output` |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
 
-`prepare_variants_sharded.py` is the memory-bounded sharded-input variant of `prepare_variants.py`. It accepts `bim`, `pvar`, and `vcf` inputs whose `--input` contains `@`, runs the full `prepare_variants.py` stage graph once per discovered shard, and then concatenates and sorts the per-shard final `.vmap` files into one final `<output>.vmap`. Its stage semantics are inherited from `prepare_variants.py`; see [spec/workflow.md](spec/workflow.md).
+`prepare_variants_sharded.py` is the memory-bounded sharded-input variant of `prepare_variants.py`. It accepts `bim`, `pvar`, and `vcf` inputs whose `--input` contains `@`, groups selected input shards by unambiguous target contig, runs the full `prepare_variants.py` stage graph once per target-contig group, and concatenates the per-contig-group final `.vmap` files into one final `<output>.vmap`. Its stage semantics are inherited from `prepare_variants.py`; see [spec/workflow.md](spec/workflow.md).
 
 | `prepare_variants_sharded.py` argument | Meaning |
 | --- | --- |
 | `--input`, `--input-format` | Required sharded raw input. `--input` must contain `@`; `--input-format` may be `bim`, `pvar`, or `vcf` |
 | `--output` | Required non-sharded output stem. The final prepared output is `<output>.vmap` |
-| `--prefix` | Required retained-intermediate stem and must contain `@`; per-shard retained outputs replace `@` with the discovered shard token |
-| Other preparation flags | Same meaning as `prepare_variants.py` and passed through to each per-shard invocation |
+| `--prefix` | Required retained-intermediate stem and must contain `@`; per-contig-group retained outputs replace `@` with the target contig group token |
+| Other preparation flags | Same meaning as `prepare_variants.py` and passed through to each per-contig-group invocation |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
 
 `project_payload.py` is the convenience wrapper for projecting an original payload into an already prepared target `.vtable` or `.vmap`. `--target` always defines the target row set. If `--source-vmap` is supplied, the wrapper first matches source provenance onto that target and retains `<prefix>.vmap`; if `--source-vmap` is omitted, `--target` itself must be a `.vmap` and is applied directly. For genotype payloads, the wrapper can also restrict, reorder, or reconcile subject axes via explicit target sample files or wrapper-level union synthesis. For the exact projection flow, output retention rules, and target-sample reconciliation semantics, see [spec/workflow.md](spec/workflow.md).
@@ -147,7 +147,7 @@ Here `--output` is a stem, so these commands write the final prepared objects to
 - `work/reference.prepared.vmap`
 - `work/study.prepared.vmap`
 
-`prepare_variants.py` retains stage-specific `.vmap` outputs under a prefix that defaults to `--output`. `prepare_variants_sharded.py` requires an explicit sharded `--prefix` and retains per-shard stage-specific `.vmap` outputs by replacing `@` with each discovered shard token.
+`prepare_variants.py` retains stage-specific `.vmap` outputs under a prefix that defaults to `--output`. `prepare_variants_sharded.py` requires an explicit sharded `--prefix` and retains per-contig-group stage-specific `.vmap` outputs by replacing `@` with each target contig group token.
 
 #### Step 2: intersect the prepared outputs
 

@@ -109,7 +109,7 @@ Importer-emitted `.vmap` is the normal starting artifact for provenance-preservi
 - `.vmap` target duplicates by `chrom:pos:a1:a2` are not allowed.
 - Source duplicates are tolerated; first occurrence wins.
 - If `source_index == -1`, then `source_shard` must be `.` and `allele_op` must be `missing`.
-- If metadata declares `contig_naming`, every target row must be valid under that convention.
+- If metadata declares `contig_naming`, every target row must be valid under that convention. This is an object invariant; downstream tools are not required to re-validate it at every boundary.
 - `.vmap` metadata is target-side only.
 - `.vmap` provenance is stored on disk in each row as `(source_shard, source_index)`.
 - `source_shard` must be stored exactly as discovered or assigned by the producing tool. It must not be normalized, canonicalized, or reinterpreted biologically.

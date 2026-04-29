@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ._cli_utils import run_cli
 from .contig_utils import SUPPORTED_CONTIG_NAMINGS, contig_label_for_naming, normalize_chrom_label
-from .importer_utils import DiscoveredInputShard
+from .importer_utils import DiscoveredInputShard, resolve_import_input_paths
 from .vmap_prepare_variants import all_retained_stage_outputs
 from .vtable_utils import CANONICAL_CONTIG_RANK, load_metadata, metadata_path_for, write_metadata
 from .workflow_wrapper_utils import (
@@ -26,32 +26,6 @@ INPUT_FORMATS = ("bim", "pvar", "vcf")
 logger = logging.getLogger(__name__)
 
 
-def _discovery_tokens() -> list[str]:
-    autosomes = [str(idx) for idx in range(1, 23)]
-    chr_autosomes = [f"chr{idx}" for idx in range(1, 23)]
-    extras = [
-        "X",
-        "chrX",
-        "XY",
-        "chrXY",
-        "PAR",
-        "par",
-        "NONPAR",
-        "nonpar",
-        "23",
-        "25",
-        "Y",
-        "chrY",
-        "24",
-        "M",
-        "MT",
-        "chrM",
-        "chrMT",
-        "26",
-    ]
-    return autosomes + chr_autosomes + extras
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -61,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--input", required=True, help="Sharded raw importer input template containing @")
     parser.add_argument("--input-format", required=True, choices=INPUT_FORMATS, help="Importer selection")
+    parser.add_argument("--shards", help="Optional comma-separated explicit shard tokens for @ inputs")
     parser.add_argument("--output", required=True, help="Non-sharded output stem; final artifact is <output>.vmap")
     parser.add_argument("--prefix", required=True, help="Sharded retained-intermediate prefix containing @")
     parser.add_argument("--dst-build", default="GRCh38", help="Destination genome build (default: GRCh38)")
@@ -90,17 +65,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def discover_input_shards(input_template: Path) -> list[DiscoveredInputShard]:
-    discovered: list[DiscoveredInputShard] = []
-    for token in _discovery_tokens():
-        candidate = Path(str(input_template).replace("@", token))
-        if candidate.is_file():
-            discovered.append(DiscoveredInputShard(path=candidate, source_shard=token))
-    if not discovered:
-        raise ValueError(f"no input shards found for template: {input_template}")
-    return sorted(discovered, key=lambda shard: str(shard.path))
-
-
 def group_shards_by_canonical(shards: list[DiscoveredInputShard]) -> dict[str, list[DiscoveredInputShard]]:
     grouped: dict[str, list[DiscoveredInputShard]] = {}
     for shard in shards:
@@ -109,6 +73,14 @@ def group_shards_by_canonical(shards: list[DiscoveredInputShard]) -> dict[str, l
             raise ValueError(f"{WRAPPER_NAME}: unsupported shard token for grouping: {shard.source_shard!r}")
         grouped.setdefault(canonical, []).append(shard)
     return grouped
+
+
+def select_input_shards(input_template: Path, explicit_shards_csv: str | None) -> list[DiscoveredInputShard]:
+    return resolve_import_input_paths(
+        str(input_template),
+        kind_label="sharded raw input",
+        explicit_shards_csv=explicit_shards_csv,
+    )
 
 
 def ordered_group_labels(grouped: dict[str, list[DiscoveredInputShard]]) -> list[str]:
@@ -194,7 +166,8 @@ def validate_group_metadata(final_paths: list[Path], *, input_template_raw: str)
         if not variant_object_exists(path):
             raise ValueError(f"missing required per-group final .vmap: {path}")
 
-    first_metadata = load_metadata(final_paths[0])
+    metadata_by_path = {path: load_metadata(path) for path in final_paths}
+    first_metadata = metadata_by_path[final_paths[0]]
     first_target = read_target_metadata(final_paths[0])
     first_derived_from = first_metadata.get("derived_from")
     if first_derived_from != input_template_raw:
@@ -202,7 +175,7 @@ def validate_group_metadata(final_paths: list[Path], *, input_template_raw: str)
 
     for path in final_paths[1:]:
         target = read_target_metadata(path)
-        metadata = load_metadata(path)
+        metadata = metadata_by_path[path]
         if target.get("genome_build") != first_target.get("genome_build"):
             raise ValueError("per-group final .vmap files have mismatched genome_build")
         if target.get("contig_naming") != first_target.get("contig_naming"):
@@ -210,7 +183,15 @@ def validate_group_metadata(final_paths: list[Path], *, input_template_raw: str)
         if metadata.get("derived_from") != first_derived_from:
             raise ValueError("per-group final .vmap files have mismatched derived_from")
 
+    for path in final_paths:
+        if vmap_has_rows(path):
+            return metadata_by_path[path]
     return first_metadata
+
+
+def vmap_has_rows(path: Path) -> bool:
+    with open(path, "r", encoding="utf-8", newline="") as handle:
+        return bool(handle.readline())
 
 
 def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict) -> None:
@@ -264,7 +245,7 @@ def main() -> int:
     prefix_template = Path(args.prefix)
     final_output = variant_object_path(Path(args.output))
 
-    shards = discover_input_shards(input_template)
+    shards = select_input_shards(input_template, args.shards)
     grouped = group_shards_by_canonical(shards)
     group_labels = ordered_group_labels(grouped)
 

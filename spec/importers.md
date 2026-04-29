@@ -71,29 +71,16 @@ For importer-emitted `.vmap`:
 
 `source_shard` is a locator string, not a biology field. Importers must store it verbatim and must not interpret it as chromosome identity.
 
-## `@` shard discovery for raw importer inputs
+## `@` shard selection for raw importer inputs
 
-When `@` is present in the input path to `import_bim.py`, `import_pvar.py`, or `import_vcf.py`, the tool treats the input as a set of raw shards.
+For `import_bim.py`, `import_pvar.py`, and `import_vcf.py`, shard selection for `@` paths, including explicit `--shards` and discovery mode, follows [shard-discovery.md](shard-discovery.md).
 
-If `--shards` is omitted, the importer applies the shared filename discovery contract from [shard-discovery.md](shard-discovery.md).
+Importer-specific order and provenance rules:
 
-If `--shards` is supplied:
-
-- interpret it as a comma-separated list of exact replacement tokens
-- do not glob-discover first and do not validate tokens against what filename discovery would have found
-- construct each raw shard path by replacing `@` in the input template with the exact token
-- fail clearly if any requested constructed path does not exist
-- process requested shards in user-provided `--shards` order
-- store the exact requested token as that shard's `source_shard`
-- do not interpret, normalize, or validate shard tokens as chromosome labels
-
-Import order rules:
-
-- when `--shards` is omitted, concatenate discovered shards in deterministic lexical path order
-- when `--shards` is supplied, concatenate requested shards in user-provided order
+- import rows in resolved shard order from the shared shard-selection contract
 - preserve row order within each shard
-- store the exact discovered or requested replacement token as that shard's `source_shard`
-- assign `source_index` from the row order within each discovered or requested shard
+- store the exact resolved replacement token as that row's `source_shard`
+- assign `source_index` from row order within each resolved shard
 
 For both single-file and sharded importer inputs, `--chr2use` / `--contigs` filters retained target rows by canonical contig while preserving retained row order. Rows dropped by that filter must be auditable in import QC.
 

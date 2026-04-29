@@ -135,41 +135,54 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 
 ## `prepare_variants_sharded.py`
 
-`prepare_variants_sharded.py` is a workflow wrapper for chromosome-semantic sharded raw genotype variant inputs. It groups discovered raw input shards by target contig, runs the full `prepare_variants.py` stage graph independently for each contig group, restricts each group result to that target contig, then concatenates the per-group final `.vmap` outputs into one final `<output>.vmap`.
+`prepare_variants_sharded.py` is a workflow wrapper for chromosome-semantic sharded raw genotype variant inputs. It first resolves the selected filename shard tokens, maps those tokens to unambiguous target contigs using the same contig interpretation as `normalize_contigs.py`, then runs the full `prepare_variants.py` stage graph once per target-contig group. The final output is one concatenated `<output>.vmap`.
 
 It is orchestration only. Stage semantics are exactly those of `prepare_variants.py` and the canonical tools it invokes.
 
 ### Contract
+
+Inputs and user-facing options:
 
 - accept the same user-facing preparation controls as `prepare_variants.py`, except as narrowed below
 - require `--input` and require it to contain `@`
 - support `--input-format` values `bim`, `pvar`, and `vcf`; reject `sumstats`
 - require `--prefix` and require it to contain `@`
 - require final `--output`, treat it as an output stem, and reject `@` in `--output`
-- reject `--dst-contig-naming=plink_splitx`; sharded preparation does not support split-X target output
-- do not accept user-facing `--chr2use` / `--contigs`; per-group contig filtering is wrapper-controlled
-- do not accept user-facing `--shards`; shard selection is auto-discovered from `--input`
-- discover shards from the `--input` template by probing the exact shard tokens accepted by `normalize_chrom_label()`
-- process discovered shards in deterministic lexical path order
-- require every discovered shard token to normalize with `normalize_chrom_label()` to one supported target-contig group; fail clearly otherwise
-- the shard-token-to-target-group mapping is specific to `prepare_variants_sharded.py`; it does not change the general `.vmap` rule that `source_shard` is provenance, not biology
-- `normalize_chrom_label()` is the authoritative mapper from discovered shard token to canonical target-contig group for this wrapper; it must support `nonpar` / `NONPAR` as X
-- tokens that normalize to autosomes `1` through `22` each map 1:1 to the corresponding autosomal target-contig group
-- tokens that normalize to `MT` map to the mitochondrial target-contig group
-- tokens that normalize to `Y` map 1:1 to the Y target-contig group
-- tokens that normalize to `X`, including X, XY, PAR, and nonPAR spellings, map to one shared X target-contig group and must be processed together when present
-- for each target-contig group, invoke `prepare_variants.py` with the original `@` input template, `--shards <comma-separated exact discovered tokens in deterministic lexical discovery order>`, and wrapper-controlled `--contigs <mapped target contig>` so the importer preserves exact discovered shard tokens as `source_shard` and the per-group final `.vmap` contains only that target contig
-- for each target-contig group, replace `@` in wrapper `--prefix` with the canonical group token (`1` through `22`, `X`, `Y`, or `MT`) and use the resulting stem for both the retained prefix and group final output
-- pass all preparation controls through unchanged to each per-group `prepare_variants.py` invocation, including build, contig naming, strand, indel, allele-length, `--resume`, and `--force` controls; contig filtering and `--shards` are supplied by `prepare_variants_sharded.py`
-- before final concatenation, validate that all per-group final `.vmap` metadata agree on target `genome_build` and target `contig_naming`; mismatches fail clearly and no partial concatenated output is retained
-- validate that all per-group final `.vmap` metadata agree on `derived_from`, which must be the original `--input` `@` template; mismatches fail clearly
-- concatenate per-group final `.vmap` rows in declared target-contig order by sorting groups on the canonical rank of the mapped target contig, not by raw shard-token or discovery order; preserve row order within each group
-- allow a per-group final `.vmap` to contain zero rows after filtering
+- do not accept user-facing `--chr2use` / `--contigs`; per-contig-group filtering is wrapper-controlled
+- accept optional user-facing `--shards`; otherwise discover from `--input`
+- shard selection (with and without `--shards`) follows [shard-discovery.md](shard-discovery.md)
+- reject `--dst-contig-naming=plink_splitx`; this wrapper requires every input shard token to map to exactly one target contig, but `plink_splitx` can split one source X shard into multiple target labels such as `X` and `XY` (or `23` and `25` in numeric PLINK-style terms), which is ambiguous for per-contig-group orchestration
+
+Shard-to-contig grouping:
+
+- selected shard tokens are filename tokens first; importer-emitted `source_shard` still stores the exact selected token for strict provenance
+- for wrapper grouping only, interpret each selected shard token with the same contig-label normalization semantics used by `normalize_contigs.py`, but in this context apply them to shard tokens
+- each selected shard token must normalize to exactly one supported target-contig group; fail clearly if any token is invalid, unsupported, or would map to more than one target contig
+- autosomal tokens that normalize to `1` through `22` map 1:1 to the corresponding autosomal target-contig groups
+- tokens that normalize to `X`, including `X`, `XY`, PAR, and nonPAR spellings, map to one shared `X` target-contig group and must be processed together when present
+- tokens that normalize to `Y` map 1:1 to the `Y` target-contig group
+- tokens that normalize to `MT` map 1:1 to the `MT` target-contig group
+- the wrapper's main loop is over target-contig groups with one or more selected input shards, not over raw shard tokens
+- within each target-contig group, pass the group's exact selected shard tokens to `prepare_variants.py`; shard ordering then follows the normal `prepare_variants.py` / importer shard-selection contract
+
+Per-contig-group execution:
+
+- for each target-contig group, replace `@` in wrapper `--prefix` with the canonical group token (`1` through `22`, `X`, `Y`, or `MT`); all wrapper-managed retained intermediates and temporary files for that invocation must be under this per-contig-group stem
+- invoke `prepare_variants.py` once per target-contig group with the original `@` input template, `--shards <comma-separated exact selected shard tokens for this target-contig group>`, wrapper-controlled `--contigs <target contig label for this group>`, and the per-contig-group stem as both `--prefix` and group final `--output`
+- pass all other preparation controls through unchanged to each per-contig-group `prepare_variants.py` invocation, including build, contig naming, strand, indel, allele-length, `--resume`, and `--force` controls
+- the importer invoked inside `prepare_variants.py` must preserve each exact selected shard token as `source_shard`
+- the wrapper-controlled contig filter ensures each per-contig-group final `.vmap` contains only that target contig; a group final may contain zero rows after filtering
+
+Final concatenation:
+
+- before final concatenation, validate that all per-contig-group final `.vmap` metadata agree on target `genome_build` and target `contig_naming`; mismatches fail clearly and no partial concatenated output is retained
+- validate that all per-contig-group final `.vmap` metadata agree on `derived_from`, which must be the original `--input` `@` template; mismatches fail clearly
+- concatenate per-contig-group final `.vmap` rows in declared target-contig order by sorting groups on the canonical rank of the mapped target contig, not by raw shard-token or discovery order; preserve row order within each group
 - do not sort, deduplicate, or explicitly validate cross-shard duplicate target identities during final concatenation; non-overlap is guaranteed by the chromosome-semantic shard contract
-- copy final metadata from the first target-contig group's final `.vmap`
-- leave per-group QC sidecars in place under each retained group prefix; do not concatenate them and do not write a top-level QC sidecar for the final `<output>.vmap`
+- copy final metadata from the first non-empty target-contig group's final `.vmap`, or from the first target-contig group's final `.vmap` if all groups are empty
+- leave per-contig-group QC sidecars in place under each retained group prefix; do not concatenate them and do not write a top-level QC sidecar for the final `<output>.vmap`
 - under `--resume`, if final `<output>.vmap` already exists, do nothing; otherwise skip any target-contig group whose final `.vmap` already exists and run final concatenation from the available group finals after all missing groups are produced
-- under `--force`, first delete wrapper-managed per-group variant objects and sidecars for all discovered target-contig groups, plus final `<output>.vmap` and its metadata sidecar, then rerun cleanly
+- under `--force`, first delete wrapper-managed per-contig-group variant objects and sidecars for all selected target-contig groups, plus final `<output>.vmap` and its metadata sidecar, then rerun cleanly
 
 ## `project_payload.py`
 

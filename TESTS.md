@@ -82,7 +82,7 @@ The migrated suite must keep coverage for:
 ### Metadata and contigs
 
 - metadata sidecars are required by transformation tools
-- metadata is authoritative once present; downstream tools reject target rows inconsistent with declared `contig_naming`
+- metadata is authoritative once present; valid target rows under declared `contig_naming` are an object invariant, but downstream tools are not required to re-validate every row-level contig label at every boundary
 - `guess_build.py` accepts `.vtable` and `.vmap`
 - `guess_build.py` emits the same type as the input
 - for `.vmap` input, `guess_build.py` updates target-side metadata only and does not change source provenance
@@ -132,7 +132,7 @@ The migrated suite must keep coverage for:
 - `match_vmap_to_target.py` emits `.vmap`
 - matching uses the target side of the source `.vmap` only and output must preserve provenance from the incoming `.vmap`
 - if the target input is a `.vmap`, matching uses only its target side, ignores its provenance entirely, and emits a warning
-- `match_vmap_to_target.py` rejects unknown target contigs and target rows inconsistent with declared `contig_naming`
+- `match_vmap_to_target.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-matching contract
 - duplicate target-side rows in the source `.vmap` are invalid before matching
 - `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
 - `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles

@@ -45,12 +45,7 @@ For `.vmap` input, if contig normalization collapses multiple retained rows to t
 
 `restrict_contigs.py` is the explicit target-filtering step after normalization. It accepts either a `.vtable` or a `.vmap`, filters target rows by explicit contig selection such as `--chr2use` / `--contigs`, preserves retained target order, and emits the same artifact type as the input. For `.vmap` input it preserves original source provenance. For `.vtable` input it remains provenance-free and emits `.vtable`.
 
-Downstream tools that interpret contig labels for declared coordinate order, reference access, ploidy, or contig filtering fail if:
-
-- metadata declares `contig_naming` but any target row is inconsistent with it
-- metadata omits `contig_naming`
-
-Exact matching and exact set membership tools (`match_vmap_to_target.py` and `intersect_variants.py`) still require declared matching `contig_naming` metadata, but they compare stored `chrom` labels exactly and do not validate each row label against the declared naming.
+All downstream tools fail if metadata omits `contig_naming`. Valid row labels under the declared `contig_naming` remain an object invariant, but downstream tools are not required to re-validate that invariant at every boundary; tools may fail if they encounter inconsistent stored contig labels while performing their own required work.
 
 The intended cleanup workflow is:
 
@@ -106,8 +101,6 @@ In the intended v1 CLI surface, `--chr2use` / `--contigs` belongs only to:
 - `restrict_contigs.py`, where it filters target rows after contig cleanup
 
 It is not part of `apply_vmap_*` tools and is not carried across the rest of the canonical `.vtable` / `.vmap` transformation surface.
-
-Workflow wrappers may expose contig filtering only as orchestration of these canonical tools. `prepare_variants.py` may pass `--chr2use` / `--contigs` through to its final `restrict_contigs.py` stage. `prepare_variants_sharded.py` must not expose user-facing `--chr2use` / `--contigs`; it supplies per-shard contig filters itself under its chromosome-semantic shard contract.
 
 ## `plink_splitx`
 
