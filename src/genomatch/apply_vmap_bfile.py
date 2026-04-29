@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Set, Tuple
 
 from ._cli_utils import run_cli
-from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows, output_variant_id
 from .bfile_utils import (
     HAPLOID_SCHEMA,
     BimRow,
@@ -71,11 +71,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Drop target rows with source_index=-1 instead of writing unmatched target rows with missing genotypes",
     )
+    parser.add_argument(
+        "--retain-snp-id",
+        action="store_true",
+        help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a1:a2 IDs",
+    )
     return parser.parse_args()
 
 
-def vmap_rows_to_bim_rows(vmap_rows) -> List[BimRow]:
-    return [BimRow(row.chrom, row.id, "0", row.pos, row.a1, row.a2) for row in vmap_rows]
+def vmap_rows_to_bim_rows(vmap_rows, *, retain_snp_id: bool) -> List[BimRow]:
+    return [
+        BimRow(row.chrom, output_variant_id(row, retain_snp_id=retain_snp_id), "0", row.pos, row.a1, row.a2)
+        for row in vmap_rows
+    ]
 
 
 def bfile_component(prefix: Path, suffix: str) -> Path:
@@ -290,7 +298,7 @@ def main() -> int:
 
     target_build, vmap_rows = load_retained_vmap_rows(vmap_path, only_mapped_target=args.only_mapped_target)
 
-    target_rows = vmap_rows_to_bim_rows(vmap_rows)
+    target_rows = vmap_rows_to_bim_rows(vmap_rows, retain_snp_id=args.retain_snp_id)
     validate_alleles(target_rows, "target")
     needed_by_shard = build_needed_source_indices(vmap_rows)
     prepared_sources, source_tables = prepare_source_payloads(

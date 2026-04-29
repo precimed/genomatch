@@ -116,10 +116,40 @@ def test_apply_vmap_to_pfile_basic_mapped_row_without_swap(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_output_pvar(out_prefix.with_suffix(".pvar")) == [
         ["CHROM", "POS", "ID", "REF", "ALT"],
-        ["1", "100", "t1", "A", "G"],
+        ["1", "100", "1:100:G:A", "A", "G"],
     ]
     assert read_pfile_genotypes(out_prefix, 2, 0) == [0, 1]
     assert out_prefix.with_suffix(".psam").read_text(encoding="utf-8") == source_prefix.with_suffix(".psam").read_text(encoding="utf-8")
+
+
+def test_apply_vmap_to_pfile_retain_snp_id_uses_vmap_id(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_pfile(
+        source_prefix,
+        ["1\t100\trs_source\tA\tG"],
+        ["S1"],
+        [{"channel": "hardcall", "alleles": [0, 0]}],
+    )
+    write_vmap(vmap, ["1\t100\ttarget_id\tG\tA\t.\t0\tidentity"])
+
+    result = run_py(
+        "apply_vmap_to_pfile.py",
+        "--source-prefix",
+        source_prefix,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--retain-snp-id",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_output_pvar(out_prefix.with_suffix(".pvar")) == [
+        ["CHROM", "POS", "ID", "REF", "ALT"],
+        ["1", "100", "target_id", "A", "G"],
+    ]
 
 
 def test_apply_vmap_to_pfile_swap_updates_genotypes(tmp_path):
@@ -211,7 +241,7 @@ def test_apply_vmap_to_pfile_only_mapped_target_drops_unmatched_rows(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_output_pvar(out_prefix.with_suffix(".pvar")) == [
         ["CHROM", "POS", "ID", "REF", "ALT"],
-        ["1", "100", "t1", "A", "G"],
+        ["1", "100", "1:100:G:A", "A", "G"],
     ]
 
 

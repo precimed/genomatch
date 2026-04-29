@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from ._cli_utils import run_cli
-from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows, output_variant_id
 from .sumstats_clean import harmonize_clean_sumstats, resolve_clean_metadata_columns
 from .sumstats_utils import (
     find_metadata_value,
@@ -133,6 +133,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Drop target rows with source_index=-1 instead of writing unmatched target rows with missing payload values",
     )
+    parser.add_argument(
+        "--retain-snp-id",
+        action="store_true",
+        help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a1:a2 IDs",
+    )
     return parser.parse_args()
 
 
@@ -240,14 +245,16 @@ def build_missing_payload_row(
     output_idx_id: Optional[int],
     output_idx_a1: Optional[int],
     output_idx_a2: Optional[int],
+    retain_snp_id: bool,
 ) -> List[str]:
     cols = [NA_NUMERIC] * output_width
+    out_id = output_variant_id(vrow, retain_snp_id=retain_snp_id)
     variant_rewrites: Dict[int, Dict[str, str]] = {}
     variant_rewrites.setdefault(idx_chr, {})["CHR"] = vrow.chrom
     if idx_pos is not None:
         variant_rewrites.setdefault(idx_pos, {})["POS"] = vrow.pos
     if idx_id is not None:
-        cols[idx_id] = vrow.id
+        cols[idx_id] = out_id
     if idx_a1 is not None:
         variant_rewrites.setdefault(idx_a1, {})["EffectAllele"] = vrow.a1
     if idx_a2 is not None:
@@ -257,7 +264,7 @@ def build_missing_payload_row(
     if idx_pos is None and output_idx_pos is not None:
         cols[output_idx_pos] = vrow.pos
     if idx_id is None and output_idx_id is not None:
-        cols[output_idx_id] = vrow.id
+        cols[output_idx_id] = out_id
     if idx_a1 is None and output_idx_a1 is not None:
         cols[output_idx_a1] = vrow.a1
     if idx_a2 is None and output_idx_a2 is not None:
@@ -440,7 +447,7 @@ def run_clean_apply(
     output_df = pd.DataFrame({
         'CHR': [vmap_rows[i].chrom for i in retained_indices],
         'POS': [vmap_rows[i].pos for i in retained_indices],
-        'SNP': [vmap_rows[i].id for i in retained_indices],
+        'SNP': [output_variant_id(vmap_rows[i], retain_snp_id=args.retain_snp_id) for i in retained_indices],
         'EffectAllele': [vmap_rows[i].a1 for i in retained_indices],
         'OtherAllele': [vmap_rows[i].a2 for i in retained_indices],
     })
@@ -466,6 +473,7 @@ def run_legacy_apply(
     vmap_rows,
     rows_by_provenance: Dict[Tuple[str, int], List[str]],
     output_path: Path,
+    retain_snp_id: bool,
 ) -> int:
     col_name_chr = metadata_column_name(metadata, "col_CHR")
     col_name_pos = metadata_column_name(metadata, "col_POS")
@@ -529,18 +537,20 @@ def run_legacy_apply(
                     output_idx_id,
                     output_idx_a1,
                     output_idx_a2,
+                    retain_snp_id,
                 )
                 handle.write(join_line(cols, preview_delimiter) + "\n")
                 continue
             cols = list(rows_by_provenance[(vrow.source_shard, vrow.source_index)])
             if len(cols) < len(output_header):
                 cols.extend([""] * (len(output_header) - len(cols)))
+            out_id = output_variant_id(vrow, retain_snp_id=retain_snp_id)
             variant_rewrites: Dict[int, Dict[str, str]] = {}
             variant_rewrites.setdefault(idx_chr, {})["CHR"] = vrow.chrom
             if idx_pos is not None:
                 variant_rewrites.setdefault(idx_pos, {})["POS"] = vrow.pos
             if idx_id is not None:
-                cols[idx_id] = vrow.id
+                cols[idx_id] = out_id
             if idx_a1 is not None:
                 variant_rewrites.setdefault(idx_a1, {})["EffectAllele"] = vrow.a1
             if idx_a2 is not None:
@@ -550,7 +560,7 @@ def run_legacy_apply(
             if idx_pos is None and output_idx_pos is not None:
                 cols[output_idx_pos] = vrow.pos
             if idx_id is None and output_idx_id is not None:
-                cols[output_idx_id] = vrow.id
+                cols[output_idx_id] = out_id
             if idx_a1 is None and output_idx_a1 is not None:
                 cols[output_idx_a1] = vrow.a1
             if idx_a2 is None and output_idx_a2 is not None:
@@ -704,6 +714,7 @@ def main() -> int:
             vmap_rows=vmap_rows,
             rows_by_provenance=rows_by_provenance,
             output_path=output_path,
+            retain_snp_id=args.retain_snp_id,
         )
     logger.info("apply_vmap_to_sumstats.py: wrote %s with %s retained target rows", output_path, len(vmap_rows))
     return rc

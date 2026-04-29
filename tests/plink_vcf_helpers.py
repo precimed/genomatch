@@ -407,7 +407,8 @@ def build_vmap(source_vmap: Path, target_vtable: Path, output_path: Path) -> Non
     assert_py_ok(result)
 
 
-def apply_vmap_to_bfile(source_prefix: Path, vmap_path: Path, output_prefix: Path):
+def apply_vmap_to_bfile(source_prefix: Path, vmap_path: Path, output_prefix: Path, *, retain_snp_id: bool = False):
+    extra = ["--retain-snp-id"] if retain_snp_id else []
     return run_py(
         "apply_vmap_to_bfile.py",
         "--source-prefix",
@@ -416,6 +417,7 @@ def apply_vmap_to_bfile(source_prefix: Path, vmap_path: Path, output_prefix: Pat
         vmap_path,
         "--output-prefix",
         output_prefix,
+        *extra,
     )
 
 

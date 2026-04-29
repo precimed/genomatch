@@ -242,6 +242,7 @@ Final concatenation:
 - reject `--sample-axis union` for `sumstats` and `sumstats-clean` input
 - reject `--sample-axis union` together with an explicit `--target-fam` or `--target-psam`
 - for `--input-format sumstats-clean`, accept optional `--fill-mode {column,row}` and `--use-af-inference` and pass them through unchanged to `apply_vmap_to_sumstats.py --clean`
+- accept optional `--retain-snp-id` and pass it through unchanged to the underlying `apply_vmap_*` tool; by default, final projected payload IDs are generated from retained `.vmap` target rows as defined in [payload-application.md](payload-application.md#output-variant-ids)
 - require `--sumstats-metadata` for `sumstats` and `sumstats-clean` input and reject it for `bfile` and `pfile`
 - for `sumstats` and `sumstats-clean`, when `--input` is omitted, resolve input from `path_sumStats` in `--sumstats-metadata` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - support `sumstats`, `sumstats-clean`, `bfile`, and `pfile` input formats
@@ -254,6 +255,7 @@ Final concatenation:
 - if `--full-target` is supplied, omit that wrapper-added `--only-mapped-target`
 - if `--target-fam` or `--target-psam` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - if `--sample-id-mode` is supplied for `bfile` or `pfile` input, pass it through unchanged to the underlying `apply_vmap_*` tool
+- if `--retain-snp-id` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - for `sumstats` and `sumstats-clean` input, treat `--output` as the exact rewritten payload path and reject `@`
 - for `bfile` and `pfile` input, treat `--output` as the PLINK output prefix and allow `@`
 - `--prefix` must not contain `@`

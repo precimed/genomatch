@@ -271,6 +271,8 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py` fails cleanly on out-of-range shard-local provenance
 - `apply_vmap_to_sumstats.py` keeps unmatched target rows in output by default and drops them only when `--only-mapped-target` is supplied
 - `apply_vmap_to_sumstats.py` defines output variant columns, including `CHR`, from target `.vmap` rows
+- `apply_vmap_to_sumstats.py` writes output `SNP` as `chrom:pos:a1:a2` from the retained `.vmap` target row by default
+- `apply_vmap_to_sumstats.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `SNP`
 - `apply_vmap_to_sumstats.py` does not require source-side POS / SNP / effect-allele / other-allele payload columns
 - without `--clean`, `apply_vmap_to_sumstats.py` preserves the input delimiter in output
 - `apply_vmap_to_sumstats.py` writes gzip-compressed output when `--output` ends with `.gz`
@@ -309,6 +311,8 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_bfile.py` `@` shard discovery accepts PLINK split-X PAR shard filename aliases `XY` and `chrXY`
 - `apply_vmap_to_bfile.py` fails cleanly when every retained target row is unmatched rather than emitting an all-missing PLINK payload
 - `apply_vmap_to_bfile.py` defines output `.bim` rows entirely from target `.vmap` rows with genetic position / cM fixed to `0`
+- `apply_vmap_to_bfile.py` writes output `.bim` SNP IDs as `chrom:pos:a1:a2` from retained `.vmap` target rows by default
+- `apply_vmap_to_bfile.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `.bim` SNP IDs
 - `apply_vmap_to_bfile.py` propagates the payload `.fam` to every emitted output when `--target-fam` is not supplied
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
 - with `--target-fam`, `apply_vmap_to_bfile.py` copies that target `.fam` exactly to every emitted output and uses it as the output sample axis
@@ -338,6 +342,8 @@ The migrated suite must keep coverage for:
 - bounded-chunk behavior must hold for both single-file and `@`-sharded PLINK payloads without changing output semantics, including cases where target order interleaves rows from multiple source shards
 - `apply_vmap_to_pfile.py` applies the same shared genotype-payload `apply_vmap_*` contract to PLINK 2 `.pgen/.pvar/.psam`
 - `apply_vmap_to_pfile.py` defines output `.pvar` rows and allele columns from retained target `.vmap` rows, not from source `.pvar`
+- `apply_vmap_to_pfile.py` writes output `.pvar` IDs as `chrom:pos:a1:a2` from retained `.vmap` target rows by default
+- `apply_vmap_to_pfile.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `.pvar` IDs
 - `apply_vmap_to_pfile.py` propagates the payload `.psam` to every emitted output when `--target-psam` is not supplied
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`
 - with `--target-psam`, `apply_vmap_to_pfile.py` copies that target `.psam` exactly to every emitted output and uses it as the output sample axis
@@ -489,6 +495,7 @@ The migrated suite must keep coverage for:
 - `project_payload.py` passes `--only-mapped-target` to the format-appropriate `apply_vmap_*` tool by default
 - `project_payload.py --full-target` suppresses that wrapper-added `--only-mapped-target`
 - `project_payload.py --target-fam`, `--target-psam`, and `--sample-id-mode` are passed through unchanged to the format-appropriate canonical apply tool
+- `project_payload.py --retain-snp-id` is passed through unchanged to the format-appropriate canonical apply tool; without it, projected payload IDs use the apply-time corrected target ID default
 - `project_payload.py` prints the invoked subcommands
 - for `sumstats` and `sumstats-clean` input, `project_payload.py --output` is the exact rewritten payload path and must not contain `@`
 - for `bfile` and `pfile` input, `project_payload.py --output` is the PLINK output prefix, may contain `@`, and is passed through to the canonical apply tool

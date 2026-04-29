@@ -13,7 +13,7 @@ import numpy as np
 import pgenlib
 
 from ._cli_utils import run_cli
-from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows, output_variant_id
 from .contig_utils import supported_exact_contig_tokens
 from .haploid_utils import expected_ploidy_pair, is_sex_dependent_ploidy
 from .sample_axis_utils import (
@@ -86,6 +86,11 @@ def parse_args() -> argparse.Namespace:
         "--only-mapped-target",
         action="store_true",
         help="Drop target rows with source_index=-1 instead of writing unmatched target rows with missing payload data",
+    )
+    parser.add_argument(
+        "--retain-snp-id",
+        action="store_true",
+        help="Use retained target-side .vmap id values as output IDs instead of generated chrom:pos:a1:a2 IDs",
     )
     return parser.parse_args()
 
@@ -436,8 +441,11 @@ def write_output_pvar(path: Path, rows: Sequence[VariantRow]) -> None:
             handle.write(f"{row.chrom}\t{row.pos}\t{row.id}\t{row.a2}\t{row.a1}\n")
 
 
-def target_variant_rows(vmap_rows) -> List[VariantRow]:
-    return [VariantRow(row.chrom, row.pos, row.id, row.a1, row.a2) for row in vmap_rows]
+def target_variant_rows(vmap_rows, *, retain_snp_id: bool) -> List[VariantRow]:
+    return [
+        VariantRow(row.chrom, row.pos, output_variant_id(row, retain_snp_id=retain_snp_id), row.a1, row.a2)
+        for row in vmap_rows
+    ]
 
 
 def resolve_target_ploidy_rows(rows: Sequence[VariantRow], *, target_build: str) -> List[Tuple[int, int]]:
@@ -601,7 +609,7 @@ def main() -> int:
     hardcall_phase_present = any(plan.channel == SUPPORTED_CHANNEL_PHASE for plan in source_row_plans.values())
     dosage_present = any(plan.channel == SUPPORTED_CHANNEL_DOSAGE for plan in source_row_plans.values())
     chunk_size = resolve_chunk_size()
-    target_rows = target_variant_rows(vmap_rows)
+    target_rows = target_variant_rows(vmap_rows, retain_snp_id=args.retain_snp_id)
     ploidy_rows = resolve_target_ploidy_rows(target_rows, target_build=target_build)
     diploid_het_in_haploid_count = 0
     malformed_partial_count = 0

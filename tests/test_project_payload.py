@@ -130,8 +130,48 @@ def test_project_payload_sumstats_defaults_prefix_to_output_and_retains_matched_
     assert "match_vmap_to_target.py" in result.stderr
     assert "apply_vmap_to_sumstats.py" in result.stderr
     assert (tmp_path / "aligned.tsv.vmap").exists()
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
     assert_wrote(result, output)
+
+
+def test_project_payload_retain_snp_id_passes_through_to_apply(tmp_path):
+    source = tmp_path / "study.tsv"
+    metadata = tmp_path / "study.yaml"
+    source_vmap = tmp_path / "study.prepared.vmap"
+    target = tmp_path / "shared.vtable"
+    output = tmp_path / "aligned.tsv"
+
+    write_lines(
+        source,
+        [
+            "CHR\tPOS\tSNP\tEA\tOA\tBETA",
+            "1\t1\trs_source\tG\tA\t0.5",
+        ],
+    )
+    write_sumstats_metadata(metadata)
+    write_vmap(source_vmap, ["1\t1\tretained_target_id\tG\tA\t.\t0\tidentity"])
+    write_vtable(target, ["1\t1\tretained_target_id\tG\tA"])
+
+    result = run_py(
+        "project_payload.py",
+        "--input",
+        source,
+        "--input-format",
+        "sumstats",
+        "--sumstats-metadata",
+        metadata,
+        "--source-vmap",
+        source_vmap,
+        "--target",
+        target,
+        "--output",
+        output,
+        "--retain-snp-id",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--retain-snp-id" in result.stderr
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\tretained_target_id\tG\tA\t0.5\n"
 
 
 def test_project_payload_sumstats_clean_dispatches_clean_apply(tmp_path):
@@ -185,7 +225,7 @@ def test_project_payload_sumstats_clean_dispatches_clean_apply(tmp_path):
     assert "--clean" in result.stderr
     assert output.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE\n"
-        "1\t1\trs1\tG\tA\t0.05\t1.95996398454005\t0.5\t0.255106728462327\n"
+        "1\t1\t1:1:G:A\tG\tA\t0.05\t1.95996398454005\t0.5\t0.255106728462327\n"
     )
 
 
@@ -237,7 +277,7 @@ def test_project_payload_sumstats_uses_metadata_path_sumstats_when_input_omitted
     assert result.returncode == 0, result.stderr
     apply_line = next(line for line in result.stderr.splitlines() if "apply_vmap_to_sumstats.py" in line)
     assert "--input" not in apply_line
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_sumstats_clean_passes_fill_mode_and_af_inference(tmp_path):
@@ -297,7 +337,7 @@ def test_project_payload_sumstats_clean_passes_fill_mode_and_af_inference(tmp_pa
     assert "--use-af-inference" in result.stderr
     assert output.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tN\tBETA\tSE\tEAF\n"
-        "1\t1\trs1\tG\tA\t0.0455002638963584\t2\t29.3333333333333\t0.5\t0.25\t0.4\n"
+        "1\t1\t1:1:G:A\tG\tA\t0.0455002638963584\t2\t29.3333333333333\t0.5\t0.25\t0.4\n"
     )
 
 
@@ -337,7 +377,7 @@ def test_project_payload_defaults_to_only_mapped_target_in_apply_step(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "--only-mapped-target" in result.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_full_target_opt_out_keeps_unmatched_rows(tmp_path):
@@ -377,7 +417,7 @@ def test_project_payload_full_target_opt_out_keeps_unmatched_rows(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "--only-mapped-target" not in result.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n1\t2\trs2\tC\tA\tn/a\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n1\t2\t1:2:C:A\tC\tA\tn/a\n"
 
 
 def test_project_payload_accepts_vmap_target_and_propagates_match_warning(tmp_path):
@@ -416,7 +456,7 @@ def test_project_payload_accepts_vmap_target_and_propagates_match_warning(tmp_pa
 
     assert result.returncode == 0, result.stderr
     assert "target .vmap provenance is ignored" in result.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_skips_match_when_target_vmap_used_directly_without_source_vmap(tmp_path):
@@ -454,7 +494,7 @@ def test_project_payload_skips_match_when_target_vmap_used_directly_without_sour
     assert "+ " + str((Path(__file__).resolve().parents[1] / "src" / "genomatch" / "match_vmap_to_target.py")) not in result.stderr
     assert "apply_vmap_to_sumstats.py" in result.stderr
     assert not (tmp_path / "aligned.tsv.vmap").exists()
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_same_vmap_paths_still_run_match_when_source_vmap_supplied(tmp_path):
@@ -493,7 +533,7 @@ def test_project_payload_same_vmap_paths_still_run_match_when_source_vmap_suppli
     assert "match_vmap_to_target.py" in result.stderr
     assert "target .vmap provenance is ignored" in result.stderr
     assert (tmp_path / "aligned.tsv.vmap").exists()
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_bfile_uses_explicit_prefix_and_allows_sharded_output_prefix(tmp_path):
@@ -534,8 +574,8 @@ def test_project_payload_bfile_uses_explicit_prefix_and_allows_sharded_output_pr
     assert (tmp_path / "matched.vmap").exists()
     assert (tmp_path / "aligned.1.bim").exists()
     assert (tmp_path / "aligned.2.bim").exists()
-    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["rs1"]
-    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["rs2"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:G:A"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:C:A"]
     assert read_bed_matrix(tmp_path / "aligned.1.bed", 1, 1) == [[0]]
     assert read_bed_matrix(tmp_path / "aligned.2.bed", 1, 1) == [[3]]
     assert_wrote(result, output)
@@ -953,7 +993,7 @@ def test_project_payload_force_deletes_wrapper_managed_outputs_first_and_reruns(
     )
 
     assert second.returncode == 0, second.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\trs1\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_sharded_bfile_force_deletes_only_target_contig_outputs(tmp_path):
@@ -997,8 +1037,8 @@ def test_project_payload_sharded_bfile_force_deletes_only_target_contig_outputs(
     )
 
     assert result.returncode == 0, result.stderr
-    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["rs1"]
-    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["rs2"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:G:A"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:C:A"]
     assert (tmp_path / "aligned.unrelated.bim").read_text(encoding="utf-8") == "keep\n"
     assert (tmp_path / "aligned.unrelated.bed").read_text(encoding="utf-8") == "keep\n"
     assert (tmp_path / "aligned.unrelated.fam").read_text(encoding="utf-8") == "keep\n"
@@ -1038,8 +1078,8 @@ def test_project_payload_sharded_bfile_ignores_unrelated_existing_outputs_withou
     )
 
     assert result.returncode == 0, result.stderr
-    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["rs1"]
-    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["rs2"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:G:A"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:C:A"]
     assert (tmp_path / "aligned.unrelated.bim").read_text(encoding="utf-8") == "keep\n"
 
 

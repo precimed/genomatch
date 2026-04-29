@@ -77,6 +77,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep unmatched target rows in the apply step instead of the wrapper default mapped-only projection",
     )
+    parser.add_argument(
+        "--retain-snp-id",
+        action="store_true",
+        help="Pass through to apply_vmap_* to write retained target-side .vmap IDs in the projected payload",
+    )
     parser.add_argument("--target-fam", help="Explicit target .fam for bfile input")
     parser.add_argument("--target-psam", help="Explicit target .psam for pfile input")
     parser.add_argument(
@@ -230,6 +235,8 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             cmd.extend(["--target-psam", args.target_psam])
     if not args.full_target:
         cmd.append("--only-mapped-target")
+    if args.retain_snp_id:
+        cmd.append("--retain-snp-id")
     return cmd
 
 

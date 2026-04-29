@@ -17,3 +17,9 @@ def filtered_vmap_rows(vmap_rows: Iterable[object], *, only_mapped_target: bool)
     if not only_mapped_target:
         return list(vmap_rows)
     return [row for row in vmap_rows if int(row.source_index) != -1]
+
+
+def output_variant_id(vmap_row: object, *, retain_snp_id: bool) -> str:
+    if retain_snp_id:
+        return str(vmap_row.id)
+    return f"{vmap_row.chrom}:{vmap_row.pos}:{vmap_row.a1}:{vmap_row.a2}"

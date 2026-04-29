@@ -131,6 +131,6 @@ def test_end_to_end_sumstats_liftover_match_apply_real(tmp_path: Path) -> None:
     expected_vmap.append(target_rows[-1] + [".", "-1", "missing"])
     assert read_tsv(final_vmap) == expected_vmap
 
-    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", final_vmap, "--output", output)
+    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", final_vmap, "--output", output, "--retain-snp-id")
     assert result.returncode == 0, result.stderr
     assert read_tsv(output) == build_expected_output(entries, source_rows, target_rows)

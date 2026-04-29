@@ -1,5 +1,16 @@
 # Payload application
 
+## Output variant IDs
+
+This section applies to all `apply_vmap_*` tools.
+
+- payload-application tools write corrected output variant IDs by default
+- the default corrected output ID is generated from the retained `.vmap` target row as `chrom:pos:a1:a2`
+- default output IDs are generated from the retained `.vmap` target rows that are emitted; `.vmap` `id` values are not authoritative for the default final payload IDs
+- this rule affects only the payload output ID fields: summary-stat `SNP`, PLINK 1 `.bim` column 2, and PLINK 2 `.pvar` `ID`
+- matching, provenance lookup, allele operations, and row ordering continue to ignore `id` and operate on target coordinates, alleles, and stored source provenance
+- all `apply_vmap_*` tools accept optional `--retain-snp-id`; when supplied, every retained output row uses the retained target-side `.vmap` `id` value instead of the generated corrected target ID
+
 ## Shared `apply_vmap_*` contract for genotype payloads
 
 This section applies to `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`.
@@ -106,7 +117,7 @@ This subsection is implementation guidance only; any implementation that preserv
 - `apply_vmap_to_sumstats.py` defines output variant columns from the `.vmap` target rows, not from source payload values; these columns are named and derived as follows:
   - `CHR` from target `chrom`
   - `POS` from target `pos`
-  - `SNP` from target `id`
+  - `SNP` from the shared output-ID rule above
   - `EffectAllele` from target `a1`
   - `OtherAllele` from target `a2`
 - in `--clean` mode, a transformation of payload columns is performed according to `spec/sumstats-harmonization.md`,
@@ -141,7 +152,7 @@ This subsection is implementation guidance only; any implementation that preserv
 Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined in [ploidy-model.md](ploidy-model.md).
 
 - the payload type is PLINK 1 BED/BIM/FAM
-- `apply_vmap_to_bfile.py` defines output `.bim` rows entirely from retained target-side `.vmap` rows and writes genetic-position / cM as `0`
+- `apply_vmap_to_bfile.py` defines output `.bim` rows from retained target-side `.vmap` rows, writes genetic-position / cM as `0`, and writes the SNP field according to the shared output-ID rule above
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
 - if `--target-fam` is not supplied, `apply_vmap_to_bfile.py` must propagate the source payload `.fam` to every emitted output `.fam`
 - if `--target-fam` is not supplied, all referenced source shards in one invocation must have identical `.fam` contents; implementations may enforce this as a single global precheck across all referenced shards
@@ -180,7 +191,7 @@ Expected ploidy and payload-validation rules are defined in [ploidy-model.md](pl
 
 - `apply_vmap_to_pfile.py` applies a `.vmap` to a PLINK 2 PFILE payload (`.pgen/.pvar/.psam`)
 - every emitted PFILE output must include `.pgen`, `.pvar`, and `.psam`
-- output `.pvar` rows are defined from retained target-side `.vmap` rows, not copied from source `.pvar`
+- output `.pvar` rows are defined from retained target-side `.vmap` rows, not copied from source `.pvar`, with `ID` written according to the shared output-ID rule above
 - output allele columns in `.pvar` must match retained target-side `a1/a2`
 - if a mapped row uses `swap` or `flip_swap`, the genotype payload must be rewritten to stay consistent with the target-side allele order encoded in output `.pvar`
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`

@@ -67,7 +67,7 @@ def test_apply_vmap_to_bfile_vcf_roundtrip_order_and_swaps(tmp_path: Path, n_sam
         for idx, row in enumerate(target_rows)
     ]
 
-    result = apply_vmap_to_bfile(source_prefix, vmap_path, out_prefix)
+    result = apply_vmap_to_bfile(source_prefix, vmap_path, out_prefix, retain_snp_id=True)
     assert result.returncode == 0, result.stderr
 
     recode_bfile_to_vcf(plink_cmd, out_prefix)

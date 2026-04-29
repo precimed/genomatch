@@ -280,7 +280,7 @@ def test_apply_vmap_to_sumstats_selected_regressions(tmp_path: Path, case_name: 
     assert result.returncode == 0, result.stderr
     assert sum(1 for row in read_tsv(final_vmap) if row[6] != "-1") == len(expected_rows)
 
-    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", final_vmap, "--output", output)
+    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", final_vmap, "--output", output, "--retain-snp-id")
     assert result.returncode == 0, result.stderr
 
     output_table = read_tsv(output)
