@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.2.2] - 2026-04-29
+
+### Added
+- `prepare_variants_sharded.py` for memory-bounded preparation of sharded BIM/PVAR/VCF inputs.
+- `sort_variants.py --drop-duplicates` to explicitly retain the first row for duplicate target identities after sorting.
+- `apply_vmap_*` and `project_payload.py --retain-snp-id` to opt out of generated projected payload IDs.
+
+### Changed
+- Projected payloads now write corrected output variant IDs as `chrom:pos:a1:a2` by default.
+- Reduced peak memory use in `intersect_variants.py` and `match_vmap_to_target.py`; the effect is largest when the first input to `intersect_variants.py` is small, or when the target table for `match_vmap_to_target.py` is small.
+
 ## [v0.2.1] - 2026-04-24
 
 ### Added
