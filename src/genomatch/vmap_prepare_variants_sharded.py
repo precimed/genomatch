@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import tempfile
 from pathlib import Path
 
 from ._cli_utils import run_cli
-from .importer_utils import DiscoveredInputShard, resolve_import_input_paths
+from .contig_utils import SUPPORTED_CONTIG_NAMINGS, contig_label_for_naming, normalize_chrom_label
+from .importer_utils import DiscoveredInputShard
 from .vmap_prepare_variants import all_retained_stage_outputs
-from .contig_utils import SUPPORTED_CONTIG_NAMINGS
-from .vtable_utils import load_metadata, write_metadata
+from .vtable_utils import CANONICAL_CONTIG_RANK, load_metadata, metadata_path_for, write_metadata
 from .workflow_wrapper_utils import (
     delete_variant_object,
     planned_existing_variant_outputs,
@@ -24,20 +22,41 @@ from .workflow_wrapper_utils import (
 
 WRAPPER_NAME = "prepare_variants_sharded.py"
 INPUT_FORMATS = ("bim", "pvar", "vcf")
-KIND_LABEL_BY_FORMAT = {
-    "bim": ".bim",
-    "pvar": ".pvar",
-    "vcf": "VCF",
-}
 
 logger = logging.getLogger(__name__)
+
+
+def _discovery_tokens() -> list[str]:
+    autosomes = [str(idx) for idx in range(1, 23)]
+    chr_autosomes = [f"chr{idx}" for idx in range(1, 23)]
+    extras = [
+        "X",
+        "chrX",
+        "XY",
+        "chrXY",
+        "PAR",
+        "par",
+        "NONPAR",
+        "nonpar",
+        "23",
+        "25",
+        "Y",
+        "chrY",
+        "24",
+        "M",
+        "MT",
+        "chrM",
+        "chrMT",
+        "26",
+    ]
+    return autosomes + chr_autosomes + extras
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Prepare sharded raw input variants by running prepare_variants.py per discovered shard, "
-            "then concatenating and sorting the per-shard final .vmap outputs."
+            "Prepare chromosome-sharded raw input variants by running prepare_variants.py per target-contig group, "
+            "then concatenating per-group final .vmap outputs in declared contig order."
         )
     )
     parser.add_argument("--input", required=True, help="Sharded raw importer input template containing @")
@@ -64,51 +83,66 @@ def parse_args() -> argparse.Namespace:
         help="Pass through to prepare_variants.py (default: enabled)",
     )
     parser.add_argument("--drop-strand-ambiguous", action="store_true", help="Pass through to prepare_variants.py")
-    parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="Pass through to prepare_variants.py")
     parser.add_argument("--max-allele-length", type=int, default=150, help="Pass through to prepare_variants.py")
     mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument("--resume", action="store_true", help="Resume by skipping completed per-shard finals")
+    mode_group.add_argument("--resume", action="store_true", help="Resume by skipping completed per-group finals")
     mode_group.add_argument("--force", action="store_true", help="Delete wrapper-managed outputs first, then rerun")
     return parser.parse_args()
 
 
-def shard_prefix(prefix_template: Path, source_shard: str) -> Path:
-    return Path(str(prefix_template).replace("@", source_shard))
+def discover_input_shards(input_template: Path) -> list[DiscoveredInputShard]:
+    discovered: list[DiscoveredInputShard] = []
+    for token in _discovery_tokens():
+        candidate = Path(str(input_template).replace("@", token))
+        if candidate.is_file():
+            discovered.append(DiscoveredInputShard(path=candidate, source_shard=token))
+    if not discovered:
+        raise ValueError(f"no input shards found for template: {input_template}")
+    return sorted(discovered, key=lambda shard: str(shard.path))
 
 
-def sort_scratch_prefix(prefix_template: Path) -> Path:
-    return Path(str(prefix_template).replace("@", "all_targets") + ".sort_tmp")
+def group_shards_by_canonical(shards: list[DiscoveredInputShard]) -> dict[str, list[DiscoveredInputShard]]:
+    grouped: dict[str, list[DiscoveredInputShard]] = {}
+    for shard in shards:
+        canonical = normalize_chrom_label(shard.source_shard)
+        if canonical not in CANONICAL_CONTIG_RANK:
+            raise ValueError(f"{WRAPPER_NAME}: unsupported shard token for grouping: {shard.source_shard!r}")
+        grouped.setdefault(canonical, []).append(shard)
+    return grouped
 
 
-def merge_scratch_prefix(prefix_template: Path) -> Path:
-    return Path(str(prefix_template).replace("@", "all_targets") + ".merge_tmp")
+def ordered_group_labels(grouped: dict[str, list[DiscoveredInputShard]]) -> list[str]:
+    return sorted(grouped, key=lambda canonical: CANONICAL_CONTIG_RANK[canonical])
 
 
-def temporary_directory_from_prefix(prefix: Path) -> tempfile.TemporaryDirectory[str]:
-    scratch_dir = prefix.parent if str(prefix.parent) else Path(".")
-    scratch_dir.mkdir(parents=True, exist_ok=True)
-    return tempfile.TemporaryDirectory(prefix=prefix.name + ".", dir=str(scratch_dir))
+def group_prefix(prefix_template: Path, canonical_group: str) -> Path:
+    return Path(str(prefix_template).replace("@", canonical_group))
 
 
-def one_shard_template(input_template: Path, shard: DiscoveredInputShard, workspace: Path) -> Path:
-    name_prefix, name_suffix = input_template.name.split("@", 1)
-    template = workspace / input_template.name
-    link_path = workspace / f"{name_prefix}{shard.source_shard}{name_suffix}"
-    link_path.symlink_to(shard.path.resolve())
-    return template
-
-
-def prepare_command(args: argparse.Namespace, *, input_template: Path, shard_output_prefix: Path) -> list[str]:
+def prepare_command(
+    args: argparse.Namespace,
+    *,
+    input_template: Path,
+    output_prefix: Path,
+    canonical_group: str,
+    group_shards: list[DiscoveredInputShard],
+) -> list[str]:
+    target_contig = contig_label_for_naming(canonical_group, args.dst_contig_naming)
+    shard_tokens = ",".join(shard.source_shard for shard in group_shards)
     cmd = tool_command(
         "prepare_variants.py",
         "--input",
         str(input_template),
         "--input-format",
         args.input_format,
+        "--shards",
+        shard_tokens,
+        "--contigs",
+        target_contig,
         "--prefix",
-        str(shard_output_prefix),
+        str(output_prefix),
         "--output",
-        str(shard_output_prefix),
+        str(output_prefix),
         "--dst-build",
         args.dst_build,
         "--dst-contig-naming",
@@ -120,8 +154,6 @@ def prepare_command(args: argparse.Namespace, *, input_template: Path, shard_out
     cmd.append("--norm-indels" if args.norm_indels else "--no-norm-indels")
     if args.drop_strand_ambiguous:
         cmd.append("--drop-strand-ambiguous")
-    if args.chr2use:
-        cmd.extend(["--chr2use", args.chr2use])
     if args.resume:
         cmd.append("--resume")
     if args.force:
@@ -129,10 +161,10 @@ def prepare_command(args: argparse.Namespace, *, input_template: Path, shard_out
     return cmd
 
 
-def per_shard_managed_outputs(prefix_template: Path, shards: list[DiscoveredInputShard]) -> list[Path]:
+def per_group_managed_outputs(prefix_template: Path, group_labels: list[str]) -> list[Path]:
     outputs: list[Path] = []
-    for shard in shards:
-        prefix = shard_prefix(prefix_template, shard.source_shard)
+    for label in group_labels:
+        prefix = group_prefix(prefix_template, label)
         outputs.extend(all_retained_stage_outputs(prefix))
         outputs.append(variant_object_path(prefix))
     return outputs
@@ -155,49 +187,72 @@ def delete_outputs(paths: list[Path]) -> None:
         delete_variant_object(path)
 
 
-def validate_shard_metadata(final_paths: list[Path]) -> dict:
+def validate_group_metadata(final_paths: list[Path], *, input_template_raw: str) -> dict:
     if not final_paths:
-        raise ValueError("no prepared shard outputs to merge")
+        raise ValueError("no prepared group outputs to merge")
+    for path in final_paths:
+        if not variant_object_exists(path):
+            raise ValueError(f"missing required per-group final .vmap: {path}")
+
     first_metadata = load_metadata(final_paths[0])
     first_target = read_target_metadata(final_paths[0])
+    first_derived_from = first_metadata.get("derived_from")
+    if first_derived_from != input_template_raw:
+        raise ValueError("per-group final .vmap metadata derived_from must equal the original --input template")
+
     for path in final_paths[1:]:
         target = read_target_metadata(path)
+        metadata = load_metadata(path)
         if target.get("genome_build") != first_target.get("genome_build"):
-            raise ValueError("per-shard final .vmap files have mismatched genome_build")
+            raise ValueError("per-group final .vmap files have mismatched genome_build")
         if target.get("contig_naming") != first_target.get("contig_naming"):
-            raise ValueError("per-shard final .vmap files have mismatched contig_naming")
+            raise ValueError("per-group final .vmap files have mismatched contig_naming")
+        if metadata.get("derived_from") != first_derived_from:
+            raise ValueError("per-group final .vmap files have mismatched derived_from")
+
     return first_metadata
 
 
-def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict, derived_from: str) -> None:
+def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as output:
-        for shard_path in final_paths:
-            with open(shard_path, "r", encoding="utf-8", newline="") as handle:
-                for line in handle:
-                    output.write(line)
-    out_metadata = json.loads(json.dumps(metadata))
-    out_metadata["derived_from"] = derived_from
-    write_metadata(path, out_metadata)
-
-
-def sort_final_vmap(args: argparse.Namespace, *, concatenated_path: Path, final_output: Path) -> None:
-    run_command(
-        tool_command(
-            "sort_variants.py",
-            "--input",
-            str(concatenated_path),
-            "--output",
-            str(final_output),
-            "--drop-duplicates",
-            "--prefix",
-            str(sort_scratch_prefix(Path(args.prefix))),
-        )
-    )
+    temp_output = path.with_name(path.stem + ".tmp.vmap")
+    temp_meta = metadata_path_for(temp_output)
+    final_meta = metadata_path_for(path)
+    temp_qc = temp_output.with_name(temp_output.name + ".qc.tsv")
+    final_qc = path.with_name(path.name + ".qc.tsv")
+    if temp_output.exists():
+        temp_output.unlink()
+    if temp_meta.exists():
+        temp_meta.unlink()
+    if temp_qc.exists():
+        temp_qc.unlink()
+    try:
+        with open(temp_output, "w", encoding="utf-8", newline="\n") as output:
+            for final_path in final_paths:
+                with open(final_path, "r", encoding="utf-8", newline="") as handle:
+                    for line in handle:
+                        output.write(line)
+        write_metadata(temp_output, metadata)
+        temp_output.replace(path)
+        temp_meta.replace(final_meta)
+        if temp_qc.exists():
+            temp_qc.unlink()
+    except Exception:
+        if temp_output.exists():
+            temp_output.unlink()
+        if temp_meta.exists():
+            temp_meta.unlink()
+        if temp_qc.exists():
+            temp_qc.unlink()
+        raise
+    if final_qc.exists():
+        final_qc.unlink()
 
 
 def main() -> int:
     args = parse_args()
+    if args.dst_contig_naming == "plink_splitx":
+        raise ValueError("prepare_variants_sharded.py does not support --dst-contig-naming=plink_splitx")
     if "@" not in args.input:
         raise ValueError("prepare_variants_sharded.py requires --input to contain '@'")
     if "@" not in args.prefix:
@@ -208,9 +263,12 @@ def main() -> int:
     input_template = Path(args.input)
     prefix_template = Path(args.prefix)
     final_output = variant_object_path(Path(args.output))
-    shards = resolve_import_input_paths(args.input, kind_label=KIND_LABEL_BY_FORMAT[args.input_format])
-    managed_outputs = [*per_shard_managed_outputs(prefix_template, shards), final_output]
 
+    shards = discover_input_shards(input_template)
+    grouped = group_shards_by_canonical(shards)
+    group_labels = ordered_group_labels(grouped)
+
+    managed_outputs = [*per_group_managed_outputs(prefix_template, group_labels), final_output]
     if args.force:
         delete_outputs(managed_outputs)
     elif not args.resume:
@@ -220,31 +278,26 @@ def main() -> int:
         logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
         return 0
 
-    processed_any = False
     final_paths: list[Path] = []
-    with tempfile.TemporaryDirectory(prefix="genomatch-prepare-sharded.") as workspace_raw:
-        workspace = Path(workspace_raw)
-        for shard in shards:
-            output_prefix = shard_prefix(prefix_template, shard.source_shard)
-            shard_final = variant_object_path(output_prefix)
-            final_paths.append(shard_final)
-            if args.resume and variant_object_exists(shard_final):
-                logger.info("%s: skipping shard %s; output exists at %s", WRAPPER_NAME, shard.source_shard, shard_final)
-                continue
-            single_input_template = one_shard_template(input_template, shard, workspace)
-            run_command(prepare_command(args, input_template=single_input_template, shard_output_prefix=output_prefix))
-            processed_any = True
+    for group_label in group_labels:
+        output_prefix = group_prefix(prefix_template, group_label)
+        group_final = variant_object_path(output_prefix)
+        final_paths.append(group_final)
+        if args.resume and variant_object_exists(group_final):
+            logger.info("%s: skipping group %s; output exists at %s", WRAPPER_NAME, group_label, group_final)
+            continue
+        run_command(
+            prepare_command(
+                args,
+                input_template=input_template,
+                output_prefix=output_prefix,
+                canonical_group=group_label,
+                group_shards=grouped[group_label],
+            )
+        )
 
-    metadata = validate_shard_metadata(final_paths)
-    if args.resume and not processed_any and variant_object_exists(final_output):
-        logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
-        return 0
-
-    with temporary_directory_from_prefix(merge_scratch_prefix(prefix_template)) as merge_workspace_raw:
-        concatenated_path = Path(merge_workspace_raw) / "concatenated.vmap"
-        write_concatenated_vmap(concatenated_path, final_paths, metadata, args.input)
-        sort_final_vmap(args, concatenated_path=concatenated_path, final_output=final_output)
-
+    metadata = validate_group_metadata(final_paths, input_template_raw=args.input)
+    write_concatenated_vmap(final_output, final_paths, metadata)
     logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
     return 0
 

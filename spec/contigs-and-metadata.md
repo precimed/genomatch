@@ -107,6 +107,8 @@ In the intended v1 CLI surface, `--chr2use` / `--contigs` belongs only to:
 
 It is not part of `apply_vmap_*` tools and is not carried across the rest of the canonical `.vtable` / `.vmap` transformation surface.
 
+Workflow wrappers may expose contig filtering only as orchestration of these canonical tools. `prepare_variants.py` may pass `--chr2use` / `--contigs` through to its final `restrict_contigs.py` stage. `prepare_variants_sharded.py` must not expose user-facing `--chr2use` / `--contigs`; it supplies per-shard contig filters itself under its chromosome-semantic shard contract.
+
 ## `plink_splitx`
 
 Requirements:

@@ -21,6 +21,7 @@ CHROM_SYNONYMS = {
     "x_par1": "X",
     "x_par2": "X",
     "x_nonpar": "X",
+    "nonpar": "X",
 }
 PLINK_NUMERIC_MAP = {
     23: "X",

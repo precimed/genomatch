@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from utils import read_tsv, run_py, write_lines
 
 
@@ -305,6 +307,99 @@ def test_import_pvar_normalizes_lowercase_alleles_to_uppercase(tmp_path):
     result = run_py("import_pvar.py", "--input", source, "--output", out)
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+
+@pytest.mark.parametrize(
+    ("script_name", "ext", "rows"),
+    [
+        ("import_bim.py", "bim", ["1\trs1\t0\t100\tA\tG"]),
+        (
+            "import_pvar.py",
+            "pvar",
+            [
+                "##fileformat=VCFv4.2",
+                "#CHROM\tPOS\tID\tREF\tALT",
+                "1\t100\trs1\tG\tA",
+            ],
+        ),
+        (
+            "import_vcf.py",
+            "vcf",
+            [
+                "##fileformat=VCFv4.2",
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+                "1\t100\trs1\tG\tA\t.\t.\t.",
+            ],
+        ),
+    ],
+)
+def test_importers_accept_explicit_shards_without_discovery_validation(tmp_path, script_name, ext, rows):
+    out = tmp_path / "out.vmap"
+    write_lines(tmp_path / f"input.token_weird.{ext}", rows)
+
+    result = run_py(
+        script_name,
+        "--input",
+        tmp_path / f"input.@.{ext}",
+        "--output",
+        out,
+        "--shards",
+        "token_weird",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", "token_weird", "0", "identity"]]
+
+
+def test_import_bim_explicit_shards_preserve_requested_order(tmp_path):
+    out = tmp_path / "out.vmap"
+    write_lines(tmp_path / "input.a.bim", ["1\trs_a\t0\t100\tA\tG"])
+    write_lines(tmp_path / "input.b.bim", ["1\trs_b\t0\t200\tC\tT"])
+
+    result = run_py(
+        "import_bim.py",
+        "--input",
+        tmp_path / "input.@.bim",
+        "--output",
+        out,
+        "--shards",
+        "b,a",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["1", "200", "rs_b", "C", "T", "b", "0", "identity"],
+        ["1", "100", "rs_a", "A", "G", "a", "0", "identity"],
+    ]
+
+
+def test_import_bim_explicit_shards_missing_path_fails_clearly(tmp_path):
+    out = tmp_path / "out.vmap"
+    write_lines(tmp_path / "input.a.bim", ["1\trs_a\t0\t100\tA\tG"])
+
+    result = run_py(
+        "import_bim.py",
+        "--input",
+        tmp_path / "input.@.bim",
+        "--output",
+        out,
+        "--shards",
+        "a,missing",
+    )
+
+    assert result.returncode != 0
+    assert "requested shard not found" in result.stderr
+
+
+def test_import_bim_explicit_shards_require_at_input(tmp_path):
+    out = tmp_path / "out.vmap"
+    source = tmp_path / "input.bim"
+    write_lines(source, ["1\trs1\t0\t100\tA\tG"])
+
+    result = run_py("import_bim.py", "--input", source, "--output", out, "--shards", "1")
+
+    assert result.returncode != 0
+    assert "--shards requires --input to contain '@'" in result.stderr
 
 
 def test_import_sumstats_uses_metadata_contract_and_single_file_provenance(tmp_path):

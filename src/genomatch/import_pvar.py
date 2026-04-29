@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output .vmap file")
     parser.add_argument("--genome-build", default="unknown", help="Genome build for metadata")
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="Comma-separated chromosome list or ranges")
+    parser.add_argument("--shards", help="Comma-separated explicit shard tokens for @ inputs")
     parser.add_argument("--max-allele-length", type=int, default=150, help="Maximum allele length; rows exceeding this are dropped (default: 150)")
     return parser.parse_args()
 
@@ -37,7 +38,7 @@ def main() -> int:
     logger.info("import_pvar.py: importing %s -> %s", args.input, output_path)
     rows: List[ImportedVariantRow] = []
     qc_rows: List[ImportQcRow] = []
-    for shard in resolve_import_input_paths(args.input, kind_label=".pvar"):
+    for shard in resolve_import_input_paths(args.input, kind_label=".pvar", explicit_shards_csv=args.shards):
         source_index = 0
         with open_text(shard.path, "rt") as handle:
             header = None

@@ -113,9 +113,9 @@ The following patterns are normative when applicable:
 - when assigning potentially long/variable-length string data into DataFrame columns, avoid implicit NumPy fixed-width unicode materialization (for example `<U...>` from `np.array(list_of_strings)`).
 - use object-safe assignment paths (for example pandas object Series/arrays or `to_numpy(dtype=object)`) so one extreme string length cannot upcast the full column to huge fixed-width unicode buffers.
 
-1. External sort is allowed for row-ordering tools:
-- tools such as `sort_variants.py` may use multi-pass external sorting with bounded chunk size and bounded merge fan-in, provided stable declared-coordinate ordering and all file-format / metadata semantics are preserved.
-- external-sort temporary files must be isolated from canonical output artifacts and finalized by temp-then-atomic-rename so failed runs do not leave partial canonical outputs.
+1. Standalone row-ordering tools may be in-memory:
+- `sort_variants.py` reads one canonical `.vtable` or `.vmap` object, sorts it in memory, and writes the same object type.
+- wrappers that need scalability for raw sharded genotype inputs must obtain it from shard-level orchestration rather than from `sort_variants.py` external-sort scratch behavior.
 
 1. System temporary directory use must remain small:
 - `tempfile` / system temporary-directory use is allowed only for a few small helper objects, approximately 1 MB total per process.

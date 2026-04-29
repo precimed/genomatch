@@ -1,9 +1,6 @@
 import json
-import os
 
-import pytest
-
-from utils import read_tsv, run_py, run_py_with_env, write_json, write_lines
+from utils import read_tsv, run_py, write_json, write_lines
 
 
 def test_sort_variants_vtable_sorts_by_declared_coordinate_order(tmp_path):
@@ -34,11 +31,6 @@ def test_sort_variants_vtable_sorts_by_declared_coordinate_order(tmp_path):
         ["X", "7", "rx", "A", "C"],
         ["MT", "3", "rm", "A", "T"],
     ]
-    assert json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8")) == {
-        "object_type": "variant_table",
-        "genome_build": "GRCh37",
-        "contig_naming": "ncbi",
-    }
 
 
 def test_sort_variants_vmap_sorts_target_rows_and_preserves_provenance(tmp_path):
@@ -67,10 +59,6 @@ def test_sort_variants_vmap_sorts_target_rows_and_preserves_provenance(tmp_path)
         ["2", "5", "r2", "A", "G", "sh2", "9", "swap"],
         ["X", "1", "rx", "A", "C", "sh3", "3", "flip_swap"],
     ]
-    assert json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8")) == {
-        "object_type": "variant_map",
-        "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"},
-    }
 
 
 def test_sort_variants_removes_stale_qc_sidecar(tmp_path):
@@ -89,7 +77,7 @@ def test_sort_variants_removes_stale_qc_sidecar(tmp_path):
     assert not out.with_name(out.name + ".qc.tsv").exists()
 
 
-def test_sort_variants_drop_duplicates_handles_non_adjacent_identity_with_same_coordinate(tmp_path):
+def test_sort_variants_drop_duplicates_drops_repeated_target_identities(tmp_path):
     source = tmp_path / "source.vmap"
     out = tmp_path / "sorted.vmap"
     write_lines(
@@ -106,17 +94,7 @@ def test_sort_variants_drop_duplicates_handles_non_adjacent_identity_with_same_c
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
     )
 
-    result = run_py_with_env(
-        "sort_variants.py",
-        {"GENOMATCH_SORT_CHUNK_LINES": "2"},
-        "--input",
-        source,
-        "--output",
-        out,
-        "--drop-duplicates",
-        "--prefix",
-        tmp_path / "scratch" / "sort_tmp",
-    )
+    result = run_py("sort_variants.py", "--input", source, "--output", out, "--drop-duplicates")
 
     assert result.returncode == 0, result.stderr
     assert "dropped 1 duplicate target rows" in result.stderr
@@ -125,104 +103,6 @@ def test_sort_variants_drop_duplicates_handles_non_adjacent_identity_with_same_c
         ["1", "10", "other", "C", "T", "sh2", "2", "identity"],
         ["1", "11", "later", "A", "C", "sh4", "4", "identity"],
     ]
-
-
-def test_sort_variants_rejects_invalid_chunk_env(tmp_path):
-    source = tmp_path / "source.vtable"
-    out = tmp_path / "sorted.vtable"
-    write_lines(source, ["1\t1\tr1\tA\tG"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
-    )
-
-    result = run_py_with_env(
-        "sort_variants.py",
-        {"GENOMATCH_SORT_CHUNK_LINES": "0"},
-        "--input",
-        source,
-        "--output",
-        out,
-    )
-
-    assert result.returncode != 0
-    assert "GENOMATCH_SORT_CHUNK_LINES must be a positive integer" in result.stderr
-
-
-def test_sort_variants_unwritable_scratch_prefix_fails_clearly(tmp_path):
-    source = tmp_path / "source.vtable"
-    out = tmp_path / "sorted.vtable"
-    scratch_parent = tmp_path / "scratch"
-    scratch_parent.mkdir()
-    write_lines(source, ["1\t2\tr2\tC\tT", "1\t1\tr1\tA\tG"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
-    )
-
-    scratch_parent.chmod(0o500)
-    try:
-        if os.access(scratch_parent, os.W_OK):
-            pytest.skip("scratch directory remains writable in this environment")
-        result = run_py(
-            "sort_variants.py",
-            "--input",
-            source,
-            "--output",
-            out,
-            "--prefix",
-            scratch_parent / "sort_tmp",
-        )
-    finally:
-        scratch_parent.chmod(0o700)
-
-    assert result.returncode != 0
-    assert "Permission denied" in result.stderr
-    assert not out.exists()
-
-
-def test_sort_variants_external_sort_merges_many_runs(tmp_path):
-    source = tmp_path / "source.vtable"
-    out = tmp_path / "sorted.vtable"
-    write_lines(source, [f"1\t{idx}\tr{idx}\tA\tG" for idx in range(130, 0, -1)])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
-    )
-
-    result = run_py_with_env(
-        "sort_variants.py",
-        {"GENOMATCH_SORT_CHUNK_LINES": "1"},
-        "--input",
-        source,
-        "--output",
-        out,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [[str(1), str(idx), f"r{idx}", "A", "G"] for idx in range(1, 131)]
-
-
-def test_sort_variants_default_scratch_is_output_adjacent(tmp_path):
-    source = tmp_path / "source.vtable"
-    out = tmp_path / "nested" / "sorted.vtable"
-    write_lines(source, ["1\t2\tr2\tC\tT", "1\t1\tr1\tA\tG"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
-    )
-
-    result = run_py_with_env(
-        "sort_variants.py",
-        {"GENOMATCH_SORT_CHUNK_LINES": "1"},
-        "--input",
-        source,
-        "--output",
-        out,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert str(out.with_name(out.name + ".sort_tmp.")) in result.stderr
 
 
 def test_sort_variants_empty_vtable_produces_empty_output(tmp_path):
@@ -285,3 +165,21 @@ def test_sort_variants_rejects_over_wide_vmap_row(tmp_path):
 
     assert result.returncode != 0
     assert "invalid vmap row" in result.stderr
+
+
+def test_sort_variants_preserves_metadata(tmp_path):
+    source = tmp_path / "source.vmap"
+    out = tmp_path / "sorted.vmap"
+    write_lines(source, ["1\t2\trs2\tC\tT\t.\t1\tidentity", "1\t1\trs1\tA\tG\t.\t0\tidentity"])
+    metadata = {
+        "object_type": "variant_map",
+        "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"},
+        "created_by": "something.py",
+        "derived_from": "raw.@.bim",
+    }
+    write_json(source.with_name(source.name + ".meta.json"), metadata)
+
+    result = run_py("sort_variants.py", "--input", source, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8")) == metadata

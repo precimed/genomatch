@@ -531,6 +531,91 @@ def test_prepare_variants_sumstats_passes_id_vtable_through_to_importer(tmp_path
     assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.build_compatible.vmap")
 
 
+def test_prepare_variants_passes_shards_through_to_genotype_importer(tmp_path):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "TTTTTT", "chr2": "TTTTTT", "chrX": "TTTTTT"},
+        grch38_sequences={"chr1": "AAAAAA", "chr2": "AAAAAA", "chrX": "AAAAAA"},
+    )
+    output = tmp_path / "prepared"
+    write_bim(tmp_path / "source.a.bim", ["1\trs1\t0\t1\tA\tG"])
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input",
+        tmp_path / "source.@.bim",
+        "--input-format",
+        "bim",
+        "--shards",
+        "a",
+        "--output",
+        output,
+        "--dst-build",
+        "GRCh37",
+    )
+
+    assert result.returncode == 0, result.stderr
+    import_line = next(line for line in result.stderr.splitlines() if "import_bim.py" in line)
+    assert "--shards a" in import_line
+
+
+def test_prepare_variants_rejects_shards_for_sumstats(tmp_path):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "TTTTTT", "chr2": "TTTTTT", "chrX": "TTTTTT"},
+        grch38_sequences={"chr1": "AAAAAA", "chr2": "AAAAAA", "chrX": "AAAAAA"},
+    )
+    source = tmp_path / "study.tsv"
+    metadata = tmp_path / "study.yaml"
+    write_lines(source, ["CHR\tPOS\tSNP\tEA\tOA\tBETA", "1\t1\trs1\tA\tG\t0.5"])
+    write_sumstats_metadata(metadata)
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input",
+        source,
+        "--input-format",
+        "sumstats",
+        "--sumstats-metadata",
+        metadata,
+        "--shards",
+        "1",
+        "--output",
+        tmp_path / "prepared",
+    )
+
+    assert result.returncode != 0
+    assert "--shards is supported only for --input-format=bim/pvar/vcf with sharded --input" in result.stderr
+
+
+def test_prepare_variants_rejects_shards_for_non_sharded_genotype_input(tmp_path):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "TTTTTT", "chr2": "TTTTTT", "chrX": "TTTTTT"},
+        grch38_sequences={"chr1": "AAAAAA", "chr2": "AAAAAA", "chrX": "AAAAAA"},
+    )
+    source = tmp_path / "source.bim"
+    write_bim(source, ["1\trs1\t0\t1\tA\tG"])
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input",
+        source,
+        "--input-format",
+        "bim",
+        "--shards",
+        "1",
+        "--output",
+        tmp_path / "prepared",
+    )
+
+    assert result.returncode != 0
+    assert "--shards requires --input to contain '@'" in result.stderr
+
+
 def test_prepare_variants_fails_when_planned_outputs_exist_without_resume_or_force(tmp_path):
     env = base_env(
         tmp_path,

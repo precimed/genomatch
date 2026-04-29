@@ -1,6 +1,7 @@
 # Filename shard discovery
 
 This file is the single source of truth for filename-based `@` shard discovery in `match/`.
+It does not constrain explicit shard-token lists such as importer `--shards`; explicit shard lists are tool-specific and may use tokens outside the discovery set.
 
 It applies to:
 
@@ -9,7 +10,7 @@ It applies to:
 
 ## Shared contract
 
-When `@` is present in an accepted input path or source prefix, the tool treats it as a filename placeholder and searches for matching shards on disk.
+When `@` is present in an accepted input path or source prefix and the consuming tool has not supplied an explicit shard-token list, the tool treats `@` as a filename placeholder and searches for matching shards on disk.
 
 Discovery rules:
 

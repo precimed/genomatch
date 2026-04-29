@@ -211,12 +211,32 @@ def write_import_qc(path: Path, rows: Sequence[ImportQcRow] | pd.DataFrame) -> N
             handle.write(f"{row.source_shard}\t{row.source_index}\t{row.reason}\n")
 
 
-def resolve_import_input_paths(input_arg: str, *, kind_label: str) -> List[DiscoveredInputShard]:
+def resolve_import_input_paths(
+    input_arg: str,
+    *,
+    kind_label: str,
+    explicit_shards_csv: str | None = None,
+) -> List[DiscoveredInputShard]:
     input_path = Path(input_arg)
     if "@" not in input_arg:
+        if explicit_shards_csv is not None:
+            raise ValueError("--shards requires --input to contain '@'")
         if not input_path.exists():
             raise ValueError(f"input {kind_label} not found: {input_path}")
         return [DiscoveredInputShard(path=input_path, source_shard=MISSING_SOURCE_SHARD)]
+    if explicit_shards_csv is not None:
+        tokens = explicit_shards_csv.split(",")
+        if any(token == "" for token in tokens):
+            raise ValueError("--shards contains an empty token")
+        if len(set(tokens)) != len(tokens):
+            raise ValueError("--shards contains duplicate tokens")
+        explicit: List[DiscoveredInputShard] = []
+        for token in tokens:
+            candidate = Path(str(input_path).replace("@", token))
+            if not candidate.is_file():
+                raise ValueError(f"requested shard not found for token {token!r}: {candidate}")
+            explicit.append(DiscoveredInputShard(path=candidate, source_shard=token))
+        return explicit
     name_prefix, name_suffix = input_path.name.split("@", 1)
     discovered: List[DiscoveredInputShard] = []
     for token in supported_exact_contig_tokens():
