@@ -90,6 +90,68 @@ def ensure_parent_dir(path: Path) -> None:
 
 
 WRITE_CHUNK_ROWS = 100_000
+_VTABLE_COLUMNS = ["chrom", "pos", "id", "a1", "a2"]
+_VMAP_COLUMNS = ["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"]
+
+
+def _iter_tabular_chunks(
+    path: Path,
+    expected_columns: List[str],
+    *,
+    label: str,
+) -> Iterator[pd.DataFrame]:
+    try:
+        reader = pd.read_table(
+            path,
+            sep="\t",
+            header=None,
+            dtype="object",
+            keep_default_na=False,
+            na_values=[],
+            skip_blank_lines=True,
+            compression="infer",
+            chunksize=WRITE_CHUNK_ROWS,
+        )
+        for chunk in reader:
+            if len(chunk.columns) != len(expected_columns):
+                raise ValueError(
+                    f"invalid {label} row in {path}: expected {len(expected_columns)} columns, got {len(chunk.columns)}"
+                )
+            chunk.columns = expected_columns
+            yield chunk
+    except pd.errors.EmptyDataError:
+        return
+    except pd.errors.ParserError as exc:
+        raise ValueError(f"invalid {label} row in {path}") from exc
+
+
+def _read_exact_width_frame(
+    path: Path,
+    expected_columns: List[str],
+    *,
+    label: str,
+) -> pd.DataFrame:
+    try:
+        frame = pd.read_table(
+            path,
+            sep="\t",
+            header=None,
+            dtype="object",
+            keep_default_na=False,
+            na_values=[],
+            skip_blank_lines=True,
+            compression="infer",
+        )
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame(columns=expected_columns, dtype="object")
+    except Exception as exc:
+        raise ValueError(f"invalid {label} row in {path}") from exc
+    if len(frame.columns) != len(expected_columns):
+        raise ValueError(
+            f"invalid {label} row in {path}: expected {len(expected_columns)} columns, got {len(frame.columns)}"
+        )
+    frame.columns = expected_columns
+    return frame
 
 
 def normalize_allele_token(value: str) -> str:
@@ -209,19 +271,7 @@ def variant_row_identity(row: VariantRow | VMapRow) -> Tuple[str, str, str, str]
 
 
 def iter_vtable_rows(path: Path, *, label: str = "vtable") -> Iterator[VariantRow]:
-    reader = pd.read_table(
-        path,
-        sep="\t",
-        header=None,
-        names=["chrom", "pos", "id", "a1", "a2"],
-        dtype="object",
-        keep_default_na=False,
-        na_values=[],
-        skip_blank_lines=True,
-        compression="infer",
-        chunksize=WRITE_CHUNK_ROWS,
-    )
-    for chunk in reader:
+    for chunk in _iter_tabular_chunks(path, _VTABLE_COLUMNS, label=label):
         if chunk.isna().any(axis=None):
             raise ValueError(f"invalid {label} row in {path}")
         chunk["a1"] = chunk["a1"].str.strip().str.upper()
@@ -232,19 +282,7 @@ def iter_vtable_rows(path: Path, *, label: str = "vtable") -> Iterator[VariantRo
 
 
 def iter_vmap_rows(path: Path) -> Iterator[VMapRow]:
-    reader = pd.read_table(
-        path,
-        sep="\t",
-        header=None,
-        names=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"],
-        dtype="object",
-        keep_default_na=False,
-        na_values=[],
-        skip_blank_lines=True,
-        compression="infer",
-        chunksize=WRITE_CHUNK_ROWS,
-    )
-    for chunk in reader:
+    for chunk in _iter_tabular_chunks(path, _VMAP_COLUMNS, label="vmap"):
         if chunk.isna().any(axis=None):
             raise ValueError(f"invalid vmap row in {path}")
         source_index = chunk["source_index"].str.strip()
@@ -265,20 +303,7 @@ def read_vtable_table(path: Path) -> VariantRowsTable:
     # Assumes: path points to a tab-delimited vtable payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
     # Guarantees: VariantRowsTable with canonical uppercase a1/a2 and validated vtable invariants.
-    try:
-        frame = pd.read_table(
-            path,
-            sep="\t",
-            header=None,
-            names=["chrom", "pos", "id", "a1", "a2"],
-            dtype="object",
-            keep_default_na=False,
-            na_values=[],
-            skip_blank_lines=True,
-            compression="infer",
-        )
-    except Exception as exc:
-        raise ValueError(f"invalid vtable row in {path}") from exc
+    frame = _read_exact_width_frame(path, _VTABLE_COLUMNS, label="vtable row")
     if frame.isna().any(axis=None):
         raise ValueError(f"invalid vtable row in {path}")
     table = VariantRowsTable.from_frame(frame, copy=False)
@@ -325,20 +350,7 @@ def read_vmap_table(path: Path) -> VMapRowsTable:
     # Assumes: path points to a tab-delimited vmap payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
     # Guarantees: VMapRowsTable with canonical uppercase a1/a2, int64 source_index, and validated vmap invariants.
-    try:
-        frame = pd.read_table(
-            path,
-            sep="\t",
-            header=None,
-            names=["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"],
-            dtype="object",
-            keep_default_na=False,
-            na_values=[],
-            skip_blank_lines=True,
-            compression="infer",
-        )
-    except Exception as exc:
-        raise ValueError(f"invalid vmap row in {path}") from exc
+    frame = _read_exact_width_frame(path, _VMAP_COLUMNS, label="vmap row")
     if frame.isna().any(axis=None):
         raise ValueError(f"invalid vmap row in {path}")
     source_index = frame["source_index"].str.strip()

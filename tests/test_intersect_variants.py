@@ -139,3 +139,35 @@ def test_intersect_variants_fails_cleanly_on_missing_contig_naming(tmp_path):
     assert "normalize_contigs.py" in result.stderr
     assert f"{first}: genome_build=GRCh37, contig_naming=<missing>" in result.stderr
     assert "invalid vtable row" not in result.stderr
+
+
+def test_intersect_variants_empty_later_input_yields_empty_result(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, [])
+    write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+
+    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.exists()
+    from utils import read_tsv
+    assert read_tsv(out) == []
+
+
+def test_intersect_variants_rejects_over_wide_later_vtable_row(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t100\tid1\tA\tG\textra_column"])
+    write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+
+    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+
+    assert result.returncode != 0
+    assert "invalid variant table row" in result.stderr

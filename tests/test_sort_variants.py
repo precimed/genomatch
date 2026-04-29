@@ -223,3 +223,65 @@ def test_sort_variants_default_scratch_is_output_adjacent(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert str(out.with_name(out.name + ".sort_tmp.")) in result.stderr
+
+
+def test_sort_variants_empty_vtable_produces_empty_output(tmp_path):
+    source = tmp_path / "source.vtable"
+    out = tmp_path / "sorted.vtable"
+    write_lines(source, [])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    result = run_py("sort_variants.py", "--input", source, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.exists()
+    assert read_tsv(out) == []
+
+
+def test_sort_variants_empty_vmap_produces_empty_output(tmp_path):
+    source = tmp_path / "source.vmap"
+    out = tmp_path / "sorted.vmap"
+    write_lines(source, [])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py("sort_variants.py", "--input", source, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.exists()
+    assert read_tsv(out) == []
+
+
+def test_sort_variants_rejects_over_wide_vtable_row(tmp_path):
+    source = tmp_path / "source.vtable"
+    out = tmp_path / "sorted.vtable"
+    write_lines(source, ["1\t100\tr1\tA\tG\textra_column"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    result = run_py("sort_variants.py", "--input", source, "--output", out)
+
+    assert result.returncode != 0
+    assert "invalid vtable row" in result.stderr
+
+
+def test_sort_variants_rejects_over_wide_vmap_row(tmp_path):
+    source = tmp_path / "source.vmap"
+    out = tmp_path / "sorted.vmap"
+    write_lines(source, ["1\t100\tr1\tA\tG\tsh1\t0\tidentity\textra_column"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py("sort_variants.py", "--input", source, "--output", out)
+
+    assert result.returncode != 0
+    assert "invalid vmap row" in result.stderr
