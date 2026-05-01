@@ -1225,3 +1225,112 @@ def test_restrict_build_compatible_reference_access_modes_are_consistent_and_def
     for summary in (default_summary, bulk_summary, legacy_summary):
         summary.pop("output", None)
     assert default_summary == bulk_summary == legacy_summary
+
+
+def test_restrict_build_compatible_drop_duplicates_requires_sort(tmp_path):
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "base.vmap"
+    out = tmp_path / "restricted.vmap"
+    write_fasta(grch37, {"chr1": "A"})
+    write_fasta(grch38, {"chr1": "C"})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(source, ["1\t1\tt1\tA\tG\tsh\t0\tidentity"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py_with_env(
+        "restrict_build_compatible.py",
+        {"MATCH_CONFIG": str(config)},
+        "--source", source,
+        "--output", out,
+        "--drop-duplicates",
+    )
+
+    assert result.returncode != 0
+    assert "--drop-duplicates requires --sort" in result.stderr
+
+
+def test_restrict_build_compatible_drop_duplicates_vmap_sorts_and_passes_through_without_error(tmp_path):
+    # Verifies --sort --drop-duplicates combination works for vmap with no duplicates.
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "base.vmap"
+    out = tmp_path / "restricted.vmap"
+    write_fasta(grch37, {"chr1": "AG"})
+    write_fasta(grch38, {"chr1": "CC"})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(
+        source,
+        [
+            "1\t2\tt2\tC\tG\tsh\t1\tidentity",
+            "1\t1\tt1\tA\tG\tsh\t0\tidentity",
+        ],
+    )
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py_with_env(
+        "restrict_build_compatible.py",
+        {"MATCH_CONFIG": str(config)},
+        "--source", source,
+        "--output", out,
+        "--sort",
+        "--drop-duplicates",
+    )
+
+    # t1: pos 1, ref=A, a1=A=ref → swap to (G, A); t2: pos 2, ref=G, a2=G=ref → identity (C, G)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["1", "1", "t1", "G", "A", "sh", "0", "swap"],
+        ["1", "2", "t2", "C", "G", "sh", "1", "identity"],
+    ]
+    assert not out.with_name(out.name + ".qc.tsv").exists()
+
+
+def test_restrict_build_compatible_drop_duplicates_vtable_retains_first_and_no_qc(tmp_path):
+    # Two input rows canonicalize to the same target; --drop-duplicates retains first, no QC sidecar.
+    grch37 = tmp_path / "GRCh37.ucsc.fa"
+    grch38 = tmp_path / "GRCh38.ucsc.fa"
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "base.vtable"
+    out = tmp_path / "restricted.vtable"
+    write_fasta(grch37, {"chr1": "AG"})
+    write_fasta(grch38, {"chr1": "CC"})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(
+        source,
+        [
+            "1\t1\tdup\tA\tG",
+            "1\t1\tkeep\tA\tG",
+            "1\t2\tt2\tC\tG",
+        ],
+    )
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "restrict_build_compatible.py",
+        {"MATCH_CONFIG": str(config)},
+        "--source", source,
+        "--output", out,
+        "--sort",
+        "--drop-duplicates",
+    )
+
+    # dup and keep both canonicalize to (G, A) at pos 1 (ref=A, swap); t2: pos 2, ref=G, a2=G=ref → (C, G)
+    # --drop-duplicates retains first (dup), drops keep; no QC sidecar for vtable
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["1", "1", "dup", "G", "A"],
+        ["1", "2", "t2", "C", "G"],
+    ]
+    assert not out.with_name(out.name + ".qc.tsv").exists()

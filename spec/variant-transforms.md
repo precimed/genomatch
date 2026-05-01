@@ -46,13 +46,13 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - `sort_variants.py` accepts `.vtable` or `.vmap`, reads the input object in memory, sorts target rows into declared coordinate order, emits the same type as the input, and does not normalize contigs, validate against reference, liftover, change alleles, or change provenance
 - `sort_variants.py` validates target rows against the declared `contig_naming` to compute declared coordinate order, but preserves stored `chrom` labels exactly and does not treat different contig spellings as equivalent target identities
 - `sort_variants.py` must accept optional `--drop-duplicates`; when supplied, duplicate target identities are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
-- `sort_variants.py --drop-duplicates` drops duplicate exact target identities after sorting; because the sort is stable and exact duplicates have identical declared-coordinate sort keys, the retained duplicate representative is the first occurrence from the input
+- `sort_variants.py --drop-duplicates` drops duplicate exact target identities after sorting; because exact duplicates have identical declared-coordinate sort keys, the retained duplicate representative is the first occurrence from the input
 - `sort_variants.py --drop-duplicates` does not write a QC sidecar; it is intended for explicit whole-object duplicate cleanup rather than row-level import or transform auditing
 - `liftover_build.py` resolves chain and FASTA assets from config + metadata only
 - `liftover_build.py` accepts declared `ncbi`, `ucsc`, and `plink` input contig naming while using UCSC internal reference assets
 - `liftover_build.py` rejects declared `plink_splitx` input clearly; users must normalize to a build-independent naming first, liftover, and then normalize back to `plink_splitx` afterward if desired
 - `liftover_build.py` supports `--resume` to reuse retained `bcftools +liftover` output at `<output>.bcftools_output.vcf` and rerun parse/QC/output logic without rerunning bcftools
-- `liftover_build.py` supports SNVs and source-build reference-anchored non-SNV rows where exactly one allele is a single-base `A` / `C` / `G` / `T` reference allele and the other allele is any non-empty `A` / `C` / `G` / `T` string
+- `liftover_build.py` supports SNVs and source-build reference-anchored non-SNV rows where exactly one allele is a single-base `A` / `C` / `G` / `T` allele matching the source reference base (that single-base anchor may be either input allele) and the other allele is any non-empty `A` / `C` / `G` / `T` string; this is an input-compatibility condition, not a requirement that output canonical `a2` be single-base
 - `liftover_build.py` may drop unsupported non-SNV rows with auditable QC; this includes rows that are not source-build reference-anchored in that sense and lifted outputs that are not representable as one canonical biallelic row with at least one single-base allele
 - `liftover_build.py` may drop liftover results that land on unsupported non-primary target contigs with auditable QC
 - `liftover_build.py` must compare expected source and lifted target `(male_ploidy, female_ploidy)` pairs using the shared ploidy model and must drop rows with auditable QC status `ploidy_class_changed` when that pair changes
@@ -64,12 +64,14 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - `restrict_build_compatible.py` resolves reference FASTA from config + metadata only
 - `restrict_build_compatible.py` accepts declared `ncbi`, `ucsc`, `plink`, and `plink_splitx` input contig naming while using UCSC internal reference FASTA
 - exception: `restrict_build_compatible.py --norm-indels` rejects declared `plink_splitx` input clearly; users must normalize to a build-independent naming first before running normalization-aware same-build restriction
-- `restrict_build_compatible.py` supports both SNP and non-SNP rows when at least one allele is a single-base `A` / `C` / `G` / `T` allele matching the reference base and the other allele is any non-empty `A` / `C` / `G` / `T` string
+- `restrict_build_compatible.py` supports both SNP and non-SNP rows when at least one allele is a single-base `A` / `C` / `G` / `T` allele matching the reference base (that single-base anchor may be either input allele) and the other allele is any non-empty `A` / `C` / `G` / `T` string; this is an input-compatibility condition, not a requirement that canonical `a2` be single-base
 - `restrict_build_compatible.py --allow-strand-flips` applies that same rule after strand complementation as well
 - `restrict_build_compatible.py` keeps only same-build reference-compatible rows
 - `restrict_build_compatible.py` canonicalizes retained rows to reference-second target ordering: `a1=non-reference`, `a2=reference`
 - `restrict_build_compatible.py` accepts optional `--sort`
 - with `--sort`, `restrict_build_compatible.py` sorts retained output rows into declared coordinate order using the same contract as `sort_variants.py`
+- `restrict_build_compatible.py` accepts optional `--drop-duplicates`; requires `--sort`
+- with `--drop-duplicates`, after sorting, duplicate target identities are dropped by exact `(chrom, pos, a1, a2)`, retaining the first occurrence; for `.vmap` inputs, dropped duplicates are written to `<output>.qc.tsv` with status `duplicate_target`; for `.vtable` inputs, dropped duplicates are logged only (no QC sidecar, since `.vtable` carries no source provenance)
 - if the reference allele is found in `a1`, `restrict_build_compatible.py` swaps the retained row and composes local `swap` into `.vmap allele_op`
 - if `--allow-strand-flips` is supplied and the reference allele is found only after strand complementation, `restrict_build_compatible.py` emits local `flip` or `flip_swap` as needed while still ending with `a2=reference`
 - `restrict_build_compatible.py` accepts optional `--norm-indels`

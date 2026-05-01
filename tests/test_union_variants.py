@@ -35,8 +35,8 @@ def test_union_variants_deduplicates_first_occurrence_and_sorts(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "100", "first-pos", "A", "G"],
         ["1", "100", "other-alleles", "A", "C"],
+        ["1", "100", "first-pos", "A", "G"],
         ["1", "200", "late", "C", "T"],
         ["X", "7", "rx", "A", "C"],
         ["MT", "3", "mt", "A", "T"],

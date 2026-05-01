@@ -41,7 +41,7 @@ normalize_contigs.py        [only if current contig naming != --dst-contig-namin
 guess_build.py          [in place; skipped under --resume when build is resolved]
   |
   v
-restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when build already matches --dst-build]
+restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort --drop-duplicates when build already matches --dst-build]
   -> <prefix>.build_compatible.vmap
   |
   +--> liftover_build.py --target-build <dst-build>   [if build differs]
@@ -94,8 +94,8 @@ restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort when
 - by default, pass both `--allow-strand-flips` and `--norm-indels` through to `restrict_build_compatible.py`
 - if `--no-allow-strand-flips` is supplied to `prepare_variants.py`, omit `--allow-strand-flips` when invoking `restrict_build_compatible.py`
 - if `--no-norm-indels` is supplied to `prepare_variants.py`, omit `--norm-indels` when invoking `restrict_build_compatible.py`
-- if the current retained stage already matches `--dst-build`, pass `--sort` to `restrict_build_compatible.py`
-- final `prepare_variants.py` output is therefore in declared coordinate order: either from `restrict_build_compatible.py --sort` in same-build cases or from `liftover_build.py` in build-conversion cases
+- if the current retained stage already matches `--dst-build`, pass `--sort --drop-duplicates` to `restrict_build_compatible.py`
+- final `prepare_variants.py` output is therefore in declared coordinate order with duplicates dropped: either from `restrict_build_compatible.py --sort --drop-duplicates` in same-build cases or from `liftover_build.py` in build-conversion cases
 - under `--norm-indels`, `prepare_variants.py` still runs exactly one retained build-compatible stage, even though `restrict_build_compatible.py` may internally make at most one `bcftools norm` call for branch 2 and at most one `bcftools norm` call for branch 3
 - skip `liftover_build.py` when the current retained stage already matches `--dst-build`
 - in the deferred `plink_splitx` case, after any required liftover and after build is known, run one final `normalize_contigs.py --to plink_splitx` stage before any optional `drop_strand_ambiguous.py` or `restrict_contigs.py`

@@ -124,7 +124,7 @@ The exact meaning of `source_shard` depends on the first provenance-bearing step
 - `.vmap` produced from an existing `.vmap`: preserve the original upstream `source_shard`
 
 ## Row-order contract
-- Declared coordinate order means declared contig order, then numeric position, preserving input order for ties with the same contig and position.
+- Declared coordinate order means declared contig order, then numeric position, then `a1` lexicographically, then `a2` lexicographically, preserving input order for ties with the same `(chrom, pos, a1, a2)`.
 - Canonical importers preserve retained discovery order
 - For sharded imports this means deterministic shard order plus within-shard row order.
 - Single-input filter/repair/reference-compatible restriction tools preserve retained target-row order unless explicitly documented otherwise.

@@ -629,10 +629,10 @@ def require_unique_target_rows(rows: Sequence[VariantRow], *, message: str = "du
 
 
 def sort_target_table_by_declared_coordinate(frame: pd.DataFrame, contig_naming: str, *, label: str) -> pd.DataFrame:
-    # Assumes: target frame has at least chrom/pos columns in declared contig naming.
+    # Assumes: target frame has at least chrom/pos/a1/a2 columns in declared contig naming.
     # Performs: PV/SV checks for sortable keys and deterministic stable sort.
-    # Guarantees: frame sorted by canonical contig rank then integer position.
-    required = {"chrom", "pos"}
+    # Guarantees: frame sorted by canonical contig rank, integer position, a1 lexicographically, a2 lexicographically.
+    required = {"chrom", "pos", "a1", "a2"}
     missing = [col for col in required if col not in frame.columns]
     if missing:
         missing_csv = ",".join(missing)
@@ -653,7 +653,7 @@ def sort_target_table_by_declared_coordinate(frame: pd.DataFrame, contig_naming:
         raise ValueError(f"{label} row has invalid pos: {first_pos!r}")
     out["__rank"] = canonical.map(lambda token: CANONICAL_CONTIG_RANK[str(token)]).astype("int64")
     out["__pos"] = pos_numeric.astype("int64")
-    out.sort_values(by=["__rank", "__pos"], kind="mergesort", inplace=True)
+    out.sort_values(by=["__rank", "__pos", "a1", "a2"], kind="mergesort", inplace=True)
     out.drop(columns=["__rank", "__pos"], inplace=True)
     out.reset_index(drop=True, inplace=True)
     return out
@@ -753,7 +753,7 @@ def canonical_contig_from_row(row: object, contig_naming: str, *, label: str) ->
     return canonical
 
 
-def declared_coordinate_sort_key(row: object, contig_naming: str, *, label: str) -> Tuple[int, int]:
+def declared_coordinate_sort_key(row: object, contig_naming: str, *, label: str) -> Tuple[int, int, str, str]:
     canonical = canonical_contig_from_row(row, contig_naming, label=label)
     try:
         pos = int(getattr(row, "pos"))
@@ -761,7 +761,7 @@ def declared_coordinate_sort_key(row: object, contig_naming: str, *, label: str)
         raise ValueError(f"{label} row has invalid pos: {getattr(row, 'pos', None)!r}") from exc
     if pos <= 0:
         raise ValueError(f"{label} row has invalid pos: {getattr(row, 'pos', None)!r}")
-    return (CANONICAL_CONTIG_RANK[canonical], pos)
+    return (CANONICAL_CONTIG_RANK[canonical], pos, str(getattr(row, "a1", "")), str(getattr(row, "a2", "")))
 
 
 def sort_target_rows_by_declared_coordinate(rows: Sequence[object], contig_naming: str, *, label: str) -> List[object]:

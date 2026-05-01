@@ -192,6 +192,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Sort retained output rows into declared coordinate order",
     )
+    parser.add_argument(
+        "--drop-duplicates",
+        action="store_true",
+        help="Drop duplicate target identities (chrom,pos,a1,a2) after sorting, retaining first occurrence; requires --sort",
+    )
     return parser.parse_args()
 
 
@@ -828,6 +833,8 @@ def main() -> int:
             f"(declared genome_build={genome_build!r}, declared contig_naming={contig_naming!r}, "
             "internal_reference_naming='ucsc')"
         )
+    if args.drop_duplicates and not args.sort:
+        raise ValueError("restrict_build_compatible.py --drop-duplicates requires --sort")
     if args.norm_indels and contig_naming == "plink_splitx":
         raise ValueError(
             "restrict_build_compatible.py --norm-indels does not support contig_naming=plink_splitx; "
@@ -914,6 +921,18 @@ def main() -> int:
                 label="restrict_build_compatible.py output",
             )
 
+        if args.drop_duplicates and not out_vmap_frame.empty:
+            drop_mask = out_vmap_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
+            if bool(drop_mask.any()):
+                qc_dropdup = out_vmap_frame.loc[drop_mask, ["source_shard", "source_index", "id"]].copy()
+                qc_dropdup["status"] = "duplicate_target"
+                qc_frames.append(qc_dropdup)
+                out_vmap_frame = out_vmap_frame.loc[~drop_mask].reset_index(drop=True)
+                logger.info(
+                    "restrict_build_compatible.py: --drop-duplicates dropped %s duplicate target rows",
+                    int(drop_mask.sum()),
+                )
+
         if qc_frames:
             qc_all = pd.concat(qc_frames, axis=0, ignore_index=True)
             write_vmap_status_qc(
@@ -945,6 +964,15 @@ def main() -> int:
                 contig_naming,
                 label="restrict_build_compatible.py output",
             )
+        if args.drop_duplicates and not out_vtable_frame.empty:
+            drop_mask = out_vtable_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
+            if bool(drop_mask.any()):
+                dropped_count = int(drop_mask.sum())
+                out_vtable_frame = out_vtable_frame.loc[~drop_mask].reset_index(drop=True)
+                logger.info(
+                    "restrict_build_compatible.py: --drop-duplicates dropped %s duplicate target rows",
+                    dropped_count,
+                )
         if qc_output_path.exists():
             qc_output_path.unlink()
         write_vtable_table(output_path, VariantRowsTable.from_frame(out_vtable_frame, copy=False), assume_validated=True)

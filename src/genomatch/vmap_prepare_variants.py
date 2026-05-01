@@ -251,6 +251,7 @@ def main() -> int:
         restrict_extra_args.append("--norm-indels")
     if current_build == args.dst_build:
         restrict_extra_args.append("--sort")
+        restrict_extra_args.append("--drop-duplicates")
     run_command_if_needed(
         transform_command("restrict_build_compatible.py", current_path, restricted_path, restrict_extra_args),
         restricted_path,

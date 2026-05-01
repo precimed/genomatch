@@ -437,7 +437,7 @@ def parse_lifted_vcf(
         first_bad_idx = first_true_index(invalid_pos)
         raise ValueError(f"liftover_build.py output row has invalid pos: {parsed_frame.at[first_bad_idx, 'pos']!r}")
     parsed_frame["pos_int"] = pos_int.astype("int64")
-    parsed_frame = parsed_frame.sort_values(["contig_rank", "pos_int"], kind="stable")
+    parsed_frame = parsed_frame.sort_values(["contig_rank", "pos_int", "a1", "a2"], kind="stable")
 
     duplicate_mask = parsed_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep=False)
     status_by_row_id.update(dict(zip(parsed_frame.loc[duplicate_mask, "row_id"], ["duplicate_target"] * int(duplicate_mask.sum()))))

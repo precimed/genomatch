@@ -25,8 +25,8 @@ def test_sort_variants_vtable_sorts_by_declared_coordinate_order(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "100", "r1", "A", "G"],
         ["1", "100", "r1b", "A", "C"],
+        ["1", "100", "r1", "A", "G"],
         ["1", "200", "r2", "C", "T"],
         ["X", "7", "rx", "A", "C"],
         ["MT", "3", "rm", "A", "T"],
@@ -54,8 +54,8 @@ def test_sort_variants_vmap_sorts_target_rows_and_preserves_provenance(tmp_path)
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "4", "r1b", "C", "T", "sh1", "8", "flip"],
         ["1", "4", "r1a", "A", "G", "sh1", "7", "identity"],
+        ["1", "4", "r1b", "C", "T", "sh1", "8", "flip"],
         ["2", "5", "r2", "A", "G", "sh2", "9", "swap"],
         ["X", "1", "rx", "A", "C", "sh3", "3", "flip_swap"],
     ]
