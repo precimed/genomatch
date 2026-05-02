@@ -159,6 +159,71 @@ def test_apply_vmap_to_bfile_reports_chunk_progress(tmp_path):
     assert "apply_vmap_to_bfile.py progress: 2/2 chunks" in result.stderr
 
 
+def test_apply_vmap_to_bfile_chrX_chunk_boundary_parity(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_chunk1 = tmp_path / "aligned_chunk1"
+    out_chunk3 = tmp_path / "aligned_chunk3"
+    # Position 5,000,000 on chrX is outside PAR for GRCh37, so male ploidy differs from female.
+    write_bfile(
+        source_prefix,
+        [
+            "X\trs1\t0\t5000000\tA\tG",
+            "X\trs2\t0\t5000001\tC\tT",
+            "X\trs3\t0\t5000002\tG\tA",
+        ],
+        ["S1 S1 0 0 1 -9", "S2 S2 0 0 2 -9", "S3 S3 0 0 0 -9"],
+        [[2, 3, 0], [0, 0, 3], [3, 2, 1]],
+    )
+    write_lines(
+        vmap,
+        [
+            "X\t5000000\tt1\tA\tG\t.\t0\tidentity",
+            "X\t5000001\tt2\tC\tT\t.\t1\tidentity",
+            "X\t5000002\tt3\tG\tA\t.\t2\tidentity",
+        ],
+    )
+    write_json(
+        vmap.with_name(vmap.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+
+    result_chunk1 = run_py_with_env(
+        "apply_vmap_to_bfile.py",
+        {"MATCH_BFILE_APPLY_CHUNK_SIZE": "1"},
+        "--source-prefix",
+        source_prefix,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_chunk1,
+    )
+    result_chunk3 = run_py_with_env(
+        "apply_vmap_to_bfile.py",
+        {"MATCH_BFILE_APPLY_CHUNK_SIZE": "3"},
+        "--source-prefix",
+        source_prefix,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_chunk3,
+    )
+
+    assert result_chunk1.returncode == 0, result_chunk1.stderr
+    assert result_chunk3.returncode == 0, result_chunk3.stderr
+
+    assert read_bed_matrix(out_chunk1.with_suffix(".bed"), 3, 3) == read_bed_matrix(out_chunk3.with_suffix(".bed"), 3, 3)
+    assert out_chunk1.with_suffix(".bim").read_text(encoding="utf-8") == out_chunk3.with_suffix(".bim").read_text(encoding="utf-8")
+    assert out_chunk1.with_suffix(".fam").read_text(encoding="utf-8") == out_chunk3.with_suffix(".fam").read_text(encoding="utf-8")
+
+    expected_haploid_warning = "found 1 incompatible heterozygous haploid-target genotypes"
+    expected_unknown_warning = "skipped ploidy validation for 3 sex-dependent row/sample cells with unknown output sex"
+    assert expected_haploid_warning in result_chunk1.stderr
+    assert expected_haploid_warning in result_chunk3.stderr
+    assert expected_unknown_warning in result_chunk1.stderr
+    assert expected_unknown_warning in result_chunk3.stderr
+
+
 def test_apply_vmap_to_bfile_warns_about_unknown_sex_only_for_sex_dependent_rows(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"

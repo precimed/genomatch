@@ -35,6 +35,13 @@ class PackedBedRemapPlan:
     source_shifts: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 
 
+@dataclass(frozen=True)
+class PackedPloidyValidationPlan:
+    unknown_sex_unvalidated: int
+    haploid_output_byte_indices: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    absent_output_byte_indices: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+
+
 def read_bim(path: Path) -> List[BimRow]:
     rows: List[BimRow] = []
     with open(path, "r", newline="\n") as handle:
@@ -124,6 +131,73 @@ def count_target_ploidy_genotype_issues(
         else:
             raise ValueError(f"unsupported ploidy value {ploidy} at {row.chrom}:{row.bp}")
     return haploid_het_incompatible, absent_nonmissing_incompatible, unknown_sex_unvalidated
+
+
+def _count_genotype_code_by_slot(code: int) -> np.ndarray:
+    out = np.zeros((4, 256), dtype=np.uint8)
+    for slot in range(4):
+        for value in range(256):
+            geno = (value >> (2 * slot)) & 0b11
+            out[slot, value] = 1 if geno == code else 0
+    return out
+
+
+_HET_BY_SLOT = _count_genotype_code_by_slot(2)
+_MISSING_BY_SLOT = _count_genotype_code_by_slot(1)
+_NONMISSING_BY_SLOT = np.uint8(1) - _MISSING_BY_SLOT
+
+
+def build_packed_ploidy_validation_plan(
+    sexes: Sequence[int],
+    ploidy_male: int,
+    ploidy_female: int,
+) -> PackedPloidyValidationPlan:
+    unknown_sex_unvalidated = 0
+    ploidy_pair = (ploidy_male, ploidy_female)
+    sex_dependent = is_sex_dependent_ploidy(ploidy_pair)
+
+    haploid_per_slot: list[list[int]] = [[], [], [], []]
+    absent_per_slot: list[list[int]] = [[], [], [], []]
+    for sample_idx, sex in enumerate(sexes):
+        if sex == 0 and sex_dependent:
+            unknown_sex_unvalidated += 1
+            continue
+        ploidy = ploidy_male if sex == 1 else ploidy_female
+        if ploidy == 2:
+            continue
+        slot = sample_idx % 4
+        byte_idx = sample_idx // 4
+        if ploidy == 1:
+            haploid_per_slot[slot].append(byte_idx)
+        elif ploidy == 0:
+            absent_per_slot[slot].append(byte_idx)
+        else:
+            raise ValueError(f"unsupported ploidy value {ploidy}")
+
+    return PackedPloidyValidationPlan(
+        unknown_sex_unvalidated=unknown_sex_unvalidated,
+        haploid_output_byte_indices=tuple(np.asarray(indices, dtype=np.intp) for indices in haploid_per_slot),  # type: ignore[arg-type]
+        absent_output_byte_indices=tuple(np.asarray(indices, dtype=np.intp) for indices in absent_per_slot),  # type: ignore[arg-type]
+    )
+
+
+def count_target_ploidy_genotype_issues_packed(
+    chunk: bytes,
+    plan: PackedPloidyValidationPlan,
+) -> Tuple[int, int, int]:
+    packed = np.frombuffer(chunk, dtype=np.uint8)
+    haploid_het_incompatible = 0
+    absent_nonmissing_incompatible = 0
+
+    for slot in range(4):
+        haploid_indices = plan.haploid_output_byte_indices[slot]
+        if haploid_indices.size:
+            haploid_het_incompatible += int(_HET_BY_SLOT[slot, packed[haploid_indices]].sum(dtype=np.int64))
+        absent_indices = plan.absent_output_byte_indices[slot]
+        if absent_indices.size:
+            absent_nonmissing_incompatible += int(_NONMISSING_BY_SLOT[slot, packed[absent_indices]].sum(dtype=np.int64))
+
+    return haploid_het_incompatible, absent_nonmissing_incompatible, plan.unknown_sex_unvalidated
 
 
 def bytes_per_bed_row(n_samples: int) -> int:

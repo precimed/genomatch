@@ -14,11 +14,12 @@ from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows, o
 from .bfile_utils import (
     HAPLOID_SCHEMA,
     BimRow,
+    PackedPloidyValidationPlan,
     PackedBedRemapPlan,
+    build_packed_ploidy_validation_plan,
     build_packed_bed_remap_plan,
     bytes_per_bed_row,
-    count_target_ploidy_genotype_issues,
-    decode_bed_chunk,
+    count_target_ploidy_genotype_issues_packed,
     missing_bed_row,
     read_bim,
     read_bed_selected_chunks,
@@ -346,6 +347,7 @@ def main() -> int:
         target_rows,
         target_build=target_build,
     )
+    packed_validation_plans: Dict[Tuple[int, int], PackedPloidyValidationPlan] = {}
     haploid_het_incompatible_count = 0
     absent_nonmissing_incompatible_count = 0
     unknown_sex_unvalidated_count = 0
@@ -387,13 +389,17 @@ def main() -> int:
         if not needs_ploidy_validation:
             return packed_chunk
 
-        genos = decode_bed_chunk(packed_chunk, n_samples)
-        haploid_issues, absent_issues, unknown_sex_issues = count_target_ploidy_genotype_issues(
-            genos,
-            sample_axis_plan.output_sexes,
-            ploidy_pair[0],
-            ploidy_pair[1],
-            target_rows[idx],
+        validation_plan = packed_validation_plans.get(ploidy_pair)
+        if validation_plan is None:
+            validation_plan = build_packed_ploidy_validation_plan(
+                sample_axis_plan.output_sexes,
+                ploidy_pair[0],
+                ploidy_pair[1],
+            )
+            packed_validation_plans[ploidy_pair] = validation_plan
+        haploid_issues, absent_issues, unknown_sex_issues = count_target_ploidy_genotype_issues_packed(
+            packed_chunk,
+            validation_plan,
         )
         haploid_het_incompatible_count += haploid_issues
         absent_nonmissing_incompatible_count += absent_issues
