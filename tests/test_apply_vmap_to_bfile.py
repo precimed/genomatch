@@ -283,6 +283,73 @@ def test_apply_vmap_to_bfile_reports_absent_region_calls_without_rewriting(tmp_p
     assert out_prefix.with_suffix(".ploidy").exists()
 
 
+def test_apply_vmap_to_bfile_writes_qc_tsv_for_haploid_het_incompatible(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    # Male with het genotype at X non-PAR (X:100 is outside PAR1 for GRCh37) → haploid_het_incompatible
+    write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[2]])
+    write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
+    assert result.returncode == 0, result.stderr
+
+    qc_path = out_prefix.with_suffix(".qc.tsv")
+    assert qc_path.exists()
+    lines = qc_path.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "source_shard\tsource_index\tid\tstatus\tn_affected"
+    assert lines[1] == ".\t0\tX:100:A:G\thaploid_het_incompatible\t1"
+    assert len(lines) == 2
+
+
+def test_apply_vmap_to_bfile_writes_qc_tsv_for_absent_nonmissing(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    # Female with non-missing genotype at Y MSY (Y:100 is in Y_MSY for GRCh37) → absent_nonmissing
+    write_bfile(source_prefix, ["Y\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 2 -9"], [[0]])
+    write_lines(vmap, ["Y\t100\tt1\tA\tG\t.\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
+    assert result.returncode == 0, result.stderr
+
+    qc_path = out_prefix.with_suffix(".qc.tsv")
+    assert qc_path.exists()
+    lines = qc_path.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "source_shard\tsource_index\tid\tstatus\tn_affected"
+    assert lines[1] == ".\t0\tY:100:A:G\tabsent_nonmissing\t1"
+    assert len(lines) == 2
+
+
+def test_apply_vmap_to_bfile_no_qc_tsv_when_no_ploidy_issues(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[0]])
+    write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
+    assert result.returncode == 0, result.stderr
+    assert not out_prefix.with_suffix(".qc.tsv").exists()
+
+
+def test_apply_vmap_to_bfile_removes_stale_qc_tsv_when_no_ploidy_issues(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[0]])
+    write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    out_prefix.with_suffix(".qc.tsv").write_text("stale content\n", encoding="utf-8")
+
+    result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
+    assert result.returncode == 0, result.stderr
+    assert not out_prefix.with_suffix(".qc.tsv").exists()
+
+
 def test_apply_vmap_to_bfile_uses_exact_source_shard_for_sharded_payloads(tmp_path):
     source_template = tmp_path / "source.@"
     vmap = tmp_path / "map.vmap"

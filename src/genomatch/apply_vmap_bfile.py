@@ -38,7 +38,7 @@ from .sample_axis_utils import (
     parse_fam_table,
     require_identical_sample_signatures,
 )
-from .vtable_utils import load_metadata, MISSING_SOURCE_SHARD, read_vmap, require_contig_naming, require_rows_match_contig_naming, validate_vmap_metadata
+from .vtable_utils import load_metadata, MISSING_SOURCE_SHARD, read_vmap, require_contig_naming, require_rows_match_contig_naming, validate_vmap_metadata, write_apply_qc
 
 logger = logging.getLogger(__name__)
 
@@ -348,6 +348,7 @@ def main() -> int:
         target_build=target_build,
     )
     packed_validation_plans: Dict[Tuple[int, int], PackedPloidyValidationPlan] = {}
+    apply_qc_issues: List[Tuple[int, str, int]] = []  # (vmap_idx, status, n_affected)
     haploid_het_incompatible_count = 0
     absent_nonmissing_incompatible_count = 0
     unknown_sex_unvalidated_count = 0
@@ -404,6 +405,10 @@ def main() -> int:
         haploid_het_incompatible_count += haploid_issues
         absent_nonmissing_incompatible_count += absent_issues
         unknown_sex_unvalidated_count += unknown_sex_issues
+        if haploid_issues:
+            apply_qc_issues.append((idx, "haploid_het_incompatible", haploid_issues))
+        if absent_issues:
+            apply_qc_issues.append((idx, "absent_nonmissing", absent_issues))
         return packed_chunk
 
     def iter_output_rows(indices: Sequence[int], output_bed_path: Path) -> Iterable[bytes]:
@@ -440,6 +445,17 @@ def main() -> int:
                 for male, female in shard_ploidy_rows:
                     handle.write(f"{male}\t{female}\n")
         write_bed_chunks(out_bed, iter_output_rows(indices, out_bed), bytes_per_snp=output_bytes_per_snp)
+        out_qc = bfile_component(shard_out_prefix, ".qc.tsv")
+        indices_set = set(indices)
+        shard_qc_rows = [
+            (vmap_rows[idx].source_shard, int(vmap_rows[idx].source_index), target_rows[idx].snp, status, n_affected)
+            for idx, status, n_affected in apply_qc_issues
+            if idx in indices_set
+        ]
+        if shard_qc_rows:
+            write_apply_qc(out_qc, shard_qc_rows)
+        elif out_qc.exists():
+            out_qc.unlink()
     if haploid_het_incompatible_count or absent_nonmissing_incompatible_count:
         parts: List[str] = []
         if haploid_het_incompatible_count:

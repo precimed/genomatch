@@ -516,6 +516,14 @@ def write_vmap_status_qc(path: Path, rows: Iterable[tuple[str, int, str, str]]) 
             handle.write(f"{source_shard}\t{source_index}\t{source_id}\t{status}\n")
 
 
+def write_apply_qc(path: Path, rows: Iterable[tuple[str, int, str, str, int]]) -> None:
+    ensure_parent_dir(path)
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("source_shard\tsource_index\tid\tstatus\tn_affected\n")
+        for source_shard, source_index, variant_id, status, n_affected in rows:
+            handle.write(f"{source_shard}\t{source_index}\t{variant_id}\t{status}\t{n_affected}\n")
+
+
 def load_variant_object(path: Path) -> LoadedVariantObject:
     metadata = load_metadata(path)
     if path.name.endswith(".vtable"):

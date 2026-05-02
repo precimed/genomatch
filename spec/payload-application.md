@@ -167,6 +167,12 @@ Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined i
 - if the output prefix contains `@`, emit one PLINK payload per target contig with retained rows in target-row order after optional `--only-mapped-target` filtering
 - every emitted PLINK output must include `.bed`, `.bim`, and `.fam`
 - `apply_vmap_to_bfile.py` emits `.ploidy` according to the shared ploidy-model contract
+- `apply_vmap_to_bfile.py` emits `<output>.qc.tsv` when ploidy-validation incompatibilities are observed in retained output rows
+- `<output>.qc.tsv` columns are `source_shard`, `source_index`, `id`, `status`, `n_affected`
+- `status` is one of `haploid_het_incompatible` or `absent_nonmissing`
+- `n_affected` is the number of output samples with that incompatibility for the row
+- if no retained row has ploidy-validation incompatibilities, `<output>.qc.tsv` is not emitted
+- when the output prefix contains `@`, this `.qc.tsv` behavior applies per emitted output shard
 - if `--target-fam` is supplied, haploid validation uses the sex column from `--target-fam`
 - `apply_vmap_to_bfile.py` follows the shared ploidy-model validation contract and does not redefine ploidy by rewriting offending genotype content
 
