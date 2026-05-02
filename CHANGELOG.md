@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-05-03
+
 ### Added
 - `restrict_build_compatible.py --drop-duplicates` (requires `--sort`) to drop duplicate target identities after sorting.
 - Projected PLINK payloads now write a `<output>.qc.tsv` audit file when ploidy-incompatible genotypes are found — for example, heterozygous calls at haploid-target positions (chrX non-PAR in males, chrY, MT) or non-missing calls at absent-target positions (chrY in females). Each row identifies the affected variant and how many samples are involved. The file is omitted when no issues are detected, and removed on re-runs that produce no issues.
