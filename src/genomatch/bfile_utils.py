@@ -38,8 +38,10 @@ class PackedBedRemapPlan:
 @dataclass(frozen=True)
 class PackedPloidyValidationPlan:
     unknown_sex_unvalidated: int
-    haploid_output_byte_indices: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-    absent_output_byte_indices: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    haploid_byte_indices_by_mask: Tuple[np.ndarray, ...]
+    haploid_active_masks: Tuple[int, ...]
+    absent_byte_indices_by_mask: Tuple[np.ndarray, ...]
+    absent_active_masks: Tuple[int, ...]
 
 
 def read_bim(path: Path) -> List[BimRow]:
@@ -133,18 +135,42 @@ def count_target_ploidy_genotype_issues(
     return haploid_het_incompatible, absent_nonmissing_incompatible, unknown_sex_unvalidated
 
 
-def _count_genotype_code_by_slot(code: int) -> np.ndarray:
-    out = np.zeros((4, 256), dtype=np.uint8)
-    for slot in range(4):
+def _count_genotype_code_by_mask(code: int) -> np.ndarray:
+    out = np.zeros((16, 256), dtype=np.uint8)
+    for mask in range(16):
         for value in range(256):
-            geno = (value >> (2 * slot)) & 0b11
-            out[slot, value] = 1 if geno == code else 0
+            count = 0
+            for slot in range(4):
+                if not (mask & (1 << slot)):
+                    continue
+                geno = (value >> (2 * slot)) & 0b11
+                if geno == code:
+                    count += 1
+            out[mask, value] = count
     return out
 
 
-_HET_BY_SLOT = _count_genotype_code_by_slot(2)
-_MISSING_BY_SLOT = _count_genotype_code_by_slot(1)
-_NONMISSING_BY_SLOT = np.uint8(1) - _MISSING_BY_SLOT
+def _count_nonmissing_by_mask() -> np.ndarray:
+    out = np.zeros((16, 256), dtype=np.uint8)
+    for mask in range(16):
+        for value in range(256):
+            count = 0
+            for slot in range(4):
+                if not (mask & (1 << slot)):
+                    continue
+                geno = (value >> (2 * slot)) & 0b11
+                if geno != 1:
+                    count += 1
+            out[mask, value] = count
+    return out
+
+
+_HET_BY_MASK = _count_genotype_code_by_mask(2)
+_NONMISSING_BY_MASK = _count_nonmissing_by_mask()
+
+
+def _group_byte_indices_by_mask(byte_masks: np.ndarray) -> Tuple[np.ndarray, ...]:
+    return tuple(np.flatnonzero(byte_masks == mask).astype(np.intp) for mask in range(16))
 
 
 def build_packed_ploidy_validation_plan(
@@ -156,8 +182,8 @@ def build_packed_ploidy_validation_plan(
     ploidy_pair = (ploidy_male, ploidy_female)
     sex_dependent = is_sex_dependent_ploidy(ploidy_pair)
 
-    haploid_per_slot: list[list[int]] = [[], [], [], []]
-    absent_per_slot: list[list[int]] = [[], [], [], []]
+    haploid_byte_masks = np.zeros(bytes_per_bed_row(len(sexes)), dtype=np.uint8)
+    absent_byte_masks = np.zeros(bytes_per_bed_row(len(sexes)), dtype=np.uint8)
     for sample_idx, sex in enumerate(sexes):
         if sex == 0 and sex_dependent:
             unknown_sex_unvalidated += 1
@@ -168,16 +194,20 @@ def build_packed_ploidy_validation_plan(
         slot = sample_idx % 4
         byte_idx = sample_idx // 4
         if ploidy == 1:
-            haploid_per_slot[slot].append(byte_idx)
+            haploid_byte_masks[byte_idx] |= np.uint8(1 << slot)
         elif ploidy == 0:
-            absent_per_slot[slot].append(byte_idx)
+            absent_byte_masks[byte_idx] |= np.uint8(1 << slot)
         else:
             raise ValueError(f"unsupported ploidy value {ploidy}")
+    haploid_byte_indices_by_mask = _group_byte_indices_by_mask(haploid_byte_masks)
+    absent_byte_indices_by_mask = _group_byte_indices_by_mask(absent_byte_masks)
 
     return PackedPloidyValidationPlan(
         unknown_sex_unvalidated=unknown_sex_unvalidated,
-        haploid_output_byte_indices=tuple(np.asarray(indices, dtype=np.intp) for indices in haploid_per_slot),  # type: ignore[arg-type]
-        absent_output_byte_indices=tuple(np.asarray(indices, dtype=np.intp) for indices in absent_per_slot),  # type: ignore[arg-type]
+        haploid_byte_indices_by_mask=haploid_byte_indices_by_mask,
+        haploid_active_masks=tuple(mask for mask in range(1, 16) if haploid_byte_indices_by_mask[mask].size),
+        absent_byte_indices_by_mask=absent_byte_indices_by_mask,
+        absent_active_masks=tuple(mask for mask in range(1, 16) if absent_byte_indices_by_mask[mask].size),
     )
 
 
@@ -189,13 +219,12 @@ def count_target_ploidy_genotype_issues_packed(
     haploid_het_incompatible = 0
     absent_nonmissing_incompatible = 0
 
-    for slot in range(4):
-        haploid_indices = plan.haploid_output_byte_indices[slot]
-        if haploid_indices.size:
-            haploid_het_incompatible += int(_HET_BY_SLOT[slot, packed[haploid_indices]].sum(dtype=np.int64))
-        absent_indices = plan.absent_output_byte_indices[slot]
-        if absent_indices.size:
-            absent_nonmissing_incompatible += int(_NONMISSING_BY_SLOT[slot, packed[absent_indices]].sum(dtype=np.int64))
+    for mask in plan.haploid_active_masks:
+        haploid_indices = plan.haploid_byte_indices_by_mask[mask]
+        haploid_het_incompatible += int(_HET_BY_MASK[mask, packed[haploid_indices]].sum(dtype=np.int64))
+    for mask in plan.absent_active_masks:
+        absent_indices = plan.absent_byte_indices_by_mask[mask]
+        absent_nonmissing_incompatible += int(_NONMISSING_BY_MASK[mask, packed[absent_indices]].sum(dtype=np.int64))
 
     return haploid_het_incompatible, absent_nonmissing_incompatible, plan.unknown_sex_unvalidated
 
