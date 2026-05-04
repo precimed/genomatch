@@ -19,8 +19,10 @@ from .haploid_utils import expected_ploidy_pair, is_sex_dependent_ploidy
 from .sample_axis_utils import (
     SAMPLE_ID_MODE_CHOICES,
     SAMPLE_ID_MODE_FID_IID,
+    build_native_sample_axis_plan_for_output_shard,
     build_sample_axis_plan,
     compute_reconciliation_missingness_summary,
+    mapped_source_shards_for_output_indices,
     parse_psam_table,
     require_identical_sample_signatures,
     require_psam_fid_presence_consistent,
@@ -77,6 +79,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-prefix", required=True, help="Output PLINK 2 prefix")
     parser.add_argument("--target-psam", help="Explicit target .psam defining the output sample axis")
     parser.add_argument(
+        "--sample-axis",
+        choices=["native"],
+        help="Keep each emitted output shard on its native source sample axis",
+    )
+    parser.add_argument(
         "--sample-id-mode",
         choices=SAMPLE_ID_MODE_CHOICES,
         default="fid_iid",
@@ -91,6 +98,11 @@ def parse_args() -> argparse.Namespace:
         "--retain-snp-id",
         action="store_true",
         help="Use retained target-side .vmap id values as output IDs instead of generated chrom:pos:a1:a2 IDs",
+    )
+    parser.add_argument(
+        "--skip-ploidy-check",
+        action="store_true",
+        help="Skip target-side genotype ploidy validation during payload application",
     )
     return parser.parse_args()
 
@@ -576,33 +588,36 @@ def main() -> int:
                 raise ValueError(f"required input not found ({label}): {path}")
     elif not vmap_path.exists():
         raise ValueError(f"required input not found (.vmap): {vmap_path}")
+    if args.sample_axis == "native" and args.target_psam:
+        raise ValueError("--sample-axis native cannot be combined with --target-psam")
 
     target_build, vmap_rows = load_retained_vmap_rows(vmap_path, only_mapped_target=args.only_mapped_target)
     needed_by_shard = build_needed_source_indices(vmap_rows)
     prepared_sources, source_tables = prepare_source_payloads(args, needed_by_shard)
-    if args.sample_id_mode == SAMPLE_ID_MODE_FID_IID:
+    if args.sample_id_mode == SAMPLE_ID_MODE_FID_IID and args.sample_axis != "native":
         require_psam_fid_presence_consistent(source_tables.values(), label="referenced source .psam files")
-    target_table = None
-    if args.target_psam:
-        target_table = parse_psam_table(
-            Path(args.target_psam),
-            sample_id_mode=args.sample_id_mode,
-            label="target .psam",
-        )
-        if args.sample_id_mode == SAMPLE_ID_MODE_FID_IID:
-            require_psam_fid_presence_consistent(
-                [*source_tables.values(), target_table],
-                label="referenced source .psam files and --target-psam",
+    global_sample_axis_plan = None
+    if args.sample_axis != "native":
+        target_table = None
+        if args.target_psam:
+            target_table = parse_psam_table(
+                Path(args.target_psam),
+                sample_id_mode=args.sample_id_mode,
+                label="target .psam",
             )
-        output_psam_source = Path(args.target_psam)
-    else:
-        output_psam_source = require_identical_sample_signatures(source_tables, descriptor=".psam")
-    sample_axis_plan = build_sample_axis_plan(
-        source_tables,
-        output_sample_path=output_psam_source,
-        explicit_target_table=target_table,
-    )
-    n_samples = sample_axis_plan.output_sample_count
+            if args.sample_id_mode == SAMPLE_ID_MODE_FID_IID:
+                require_psam_fid_presence_consistent(
+                    [*source_tables.values(), target_table],
+                    label="referenced source .psam files and --target-psam",
+                )
+            output_psam_source = Path(args.target_psam)
+        else:
+            output_psam_source = require_identical_sample_signatures(source_tables, descriptor=".psam")
+        global_sample_axis_plan = build_sample_axis_plan(
+            source_tables,
+            output_sample_path=output_psam_source,
+            explicit_target_table=target_table,
+        )
     source_row_plans = plan_source_rows(vmap_rows, prepared_sources)
 
     missing_count = sum(1 for row in vmap_rows if row.source_index == -1)
@@ -623,6 +638,22 @@ def main() -> int:
             out_pgen = pfile_component(shard_out_prefix, ".pgen")
             out_pvar = pfile_component(shard_out_prefix, ".pvar")
             out_psam = pfile_component(shard_out_prefix, ".psam")
+            if args.sample_axis == "native":
+                source_shards = mapped_source_shards_for_output_indices(indices, vmap_rows)
+                require_psam_fid_presence_consistent(
+                    [source_tables[shard] for shard in source_shards],
+                    label=f"native source .psam files for {shard_out_prefix}",
+                )
+                sample_axis_plan = build_native_sample_axis_plan_for_output_shard(
+                    source_tables,
+                    source_shards,
+                    descriptor=".psam",
+                    output_label=str(shard_out_prefix),
+                )
+            else:
+                assert global_sample_axis_plan is not None
+                sample_axis_plan = global_sample_axis_plan
+            n_samples = sample_axis_plan.output_sample_count
             shard_target_rows = [target_rows[idx] for idx in indices]
             write_output_pvar(out_pvar, shard_target_rows)
             shutil.copyfile(sample_axis_plan.output_sample_path, out_psam)
@@ -637,9 +668,6 @@ def main() -> int:
             )
             try:
                 for chunk in chunked_indices(indices, chunk_size):
-                    alleles_cache: Dict[Tuple[str, int], np.ndarray] = {}
-                    phase_cache: Dict[Tuple[str, int], np.ndarray] = {}
-                    dosages_cache: Dict[Tuple[str, int], np.ndarray] = {}
                     for idx in chunk:
                         row = vmap_rows[idx]
                         if row.source_index == -1:
@@ -659,43 +687,36 @@ def main() -> int:
                         local_to_output = sample_axis_plan.source_local_to_output[row.source_shard]
 
                         if plan.channel == SUPPORTED_CHANNEL_DOSAGE:
-                            dosages = dosages_cache.get(key)
-                            if dosages is None:
-                                dosages = dosages_for_row(reader, row.source_index, prepared.n_samples)
-                                dosages_cache[key] = dosages
+                            dosages = dosages_for_row(reader, row.source_index, prepared.n_samples)
                             out_dosages = dosages if row.allele_op in {"identity", "flip"} else swap_dosages(dosages)
                             out_dosages = scatter_dosages(out_dosages, local_to_output, n_samples)
-                            dosage_issues, unknown_sex_issues = validate_dosage_ploidy(
-                                out_dosages,
-                                sample_axis_plan.output_sexes,
-                                ploidy_rows[idx],
-                            )
-                            nonmissing_dosage_in_absent_count += dosage_issues
-                            unknown_sex_unvalidated_count += unknown_sex_issues
+                            if not args.skip_ploidy_check:
+                                dosage_issues, unknown_sex_issues = validate_dosage_ploidy(
+                                    out_dosages,
+                                    sample_axis_plan.output_sexes,
+                                    ploidy_rows[idx],
+                                )
+                                nonmissing_dosage_in_absent_count += dosage_issues
+                                unknown_sex_unvalidated_count += unknown_sex_issues
                             writer.append_dosages(out_dosages)
                             continue
 
-                        alleles = alleles_cache.get(key)
-                        if alleles is None:
-                            alleles = allele_array_for_row(reader, row.source_index, prepared.n_samples)
-                            alleles_cache[key] = alleles
+                        alleles = allele_array_for_row(reader, row.source_index, prepared.n_samples)
                         out_alleles = alleles if row.allele_op in {"identity", "flip"} else swap_alleles(alleles)
                         out_alleles = scatter_alleles(out_alleles, local_to_output, n_samples)
-                        hardcall_issues = validate_hardcall_ploidy(
-                            out_alleles,
-                            sample_axis_plan.output_sexes,
-                            ploidy_rows[idx],
-                        )
-                        diploid_het_in_haploid_count += hardcall_issues[0]
-                        malformed_partial_count += hardcall_issues[1]
-                        nonmissing_hardcall_in_absent_count += hardcall_issues[2]
-                        unknown_sex_unvalidated_count += hardcall_issues[3]
+                        if not args.skip_ploidy_check:
+                            hardcall_issues = validate_hardcall_ploidy(
+                                out_alleles,
+                                sample_axis_plan.output_sexes,
+                                ploidy_rows[idx],
+                            )
+                            diploid_het_in_haploid_count += hardcall_issues[0]
+                            malformed_partial_count += hardcall_issues[1]
+                            nonmissing_hardcall_in_absent_count += hardcall_issues[2]
+                            unknown_sex_unvalidated_count += hardcall_issues[3]
 
                         if plan.channel == SUPPORTED_CHANNEL_PHASE:
-                            phasepresent = phase_cache.get(key)
-                            if phasepresent is None:
-                                _, phasepresent = allele_and_phase_for_row(reader, row.source_index, prepared.n_samples)
-                                phase_cache[key] = phasepresent
+                            _, phasepresent = allele_and_phase_for_row(reader, row.source_index, prepared.n_samples)
                             writer.append_partially_phased(
                                 out_alleles,
                                 scatter_phasepresent(phasepresent, local_to_output, n_samples),
@@ -704,7 +725,10 @@ def main() -> int:
                             writer.append_alleles(out_alleles)
             finally:
                 writer.close()
-        reconciliation_summary = compute_reconciliation_missingness_summary(sample_axis_plan, vmap_rows)
+        if global_sample_axis_plan is not None:
+            reconciliation_summary = compute_reconciliation_missingness_summary(global_sample_axis_plan, vmap_rows)
+        else:
+            reconciliation_summary = None
         if reconciliation_summary is not None:
             logger.info(
                 "Sample-axis reconciliation summary: introduced "

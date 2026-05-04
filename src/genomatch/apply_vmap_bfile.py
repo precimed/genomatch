@@ -33,8 +33,10 @@ from .haploid_utils import expected_ploidy_pair, has_non_diploid_ploidy
 from .contig_utils import supported_exact_contig_tokens
 from .sample_axis_utils import (
     SAMPLE_ID_MODE_CHOICES,
+    build_native_sample_axis_plan_for_output_shard,
     build_sample_axis_plan,
     compute_reconciliation_missingness_summary,
+    mapped_source_shards_for_output_indices,
     parse_fam_table,
     require_identical_sample_signatures,
 )
@@ -62,6 +64,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-prefix", required=True, help="Output PLINK prefix")
     parser.add_argument("--target-fam", help="Explicit target .fam defining the output sample axis")
     parser.add_argument(
+        "--sample-axis",
+        choices=["native"],
+        help="Keep each emitted output shard on its native source sample axis",
+    )
+    parser.add_argument(
         "--sample-id-mode",
         choices=SAMPLE_ID_MODE_CHOICES,
         default="fid_iid",
@@ -76,6 +83,11 @@ def parse_args() -> argparse.Namespace:
         "--retain-snp-id",
         action="store_true",
         help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a1:a2 IDs",
+    )
+    parser.add_argument(
+        "--skip-ploidy-check",
+        action="store_true",
+        help="Skip target-side genotype ploidy validation during payload application",
     )
     return parser.parse_args()
 
@@ -296,6 +308,8 @@ def main() -> int:
                 raise ValueError(f"required input not found ({label}): {path}")
     elif not vmap_path.exists():
         raise ValueError(f"required input not found (.vmap): {vmap_path}")
+    if args.sample_axis == "native" and args.target_fam:
+        raise ValueError("--sample-axis native cannot be combined with --target-fam")
 
     target_build, vmap_rows = load_retained_vmap_rows(vmap_path, only_mapped_target=args.only_mapped_target)
 
@@ -309,133 +323,133 @@ def main() -> int:
         source_bed,
         source_fam,
     )
-    target_table = None
-    if args.target_fam:
-        target_table = parse_fam_table(
-            Path(args.target_fam),
-            sample_id_mode=args.sample_id_mode,
-            label="target .fam",
-        )
-        output_fam_source = Path(args.target_fam)
-    else:
-        output_fam_source = require_identical_sample_signatures(source_tables, descriptor=".fam")
-    sample_axis_plan = build_sample_axis_plan(
-        source_tables,
-        output_sample_path=output_fam_source,
-        explicit_target_table=target_table,
-    )
-    n_samples = sample_axis_plan.output_sample_count
     missing_count = sum(1 for row in vmap_rows if row.source_index == -1)
-    packed_missing_row = missing_bed_row(n_samples)
-    output_bytes_per_snp = bytes_per_bed_row(n_samples)
     chunk_size = resolve_chunk_size()
-    identity_sample_axis = not sample_axis_plan.reconciliation_active
-    identity_remap_by_shard: Dict[str, bool] = {}
-    packed_sample_axis_plans: Dict[str, PackedBedRemapPlan] = {}
-    if not identity_sample_axis:
-        identity_remap_by_shard = {
-            shard: has_identity_sample_axis_remap(local_to_output, n_samples)
-            for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
-        }
-        packed_sample_axis_plans = {
-            shard: build_packed_bed_remap_plan(local_to_output, n_samples)
-            for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
-            if not identity_remap_by_shard[shard]
-        }
+    global_sample_axis_plan = None
+    if args.sample_axis != "native":
+        target_table = None
+        if args.target_fam:
+            target_table = parse_fam_table(
+                Path(args.target_fam),
+                sample_id_mode=args.sample_id_mode,
+                label="target .fam",
+            )
+            output_fam_source = Path(args.target_fam)
+        else:
+            output_fam_source = require_identical_sample_signatures(source_tables, descriptor=".fam")
+        global_sample_axis_plan = build_sample_axis_plan(
+            source_tables,
+            output_sample_path=output_fam_source,
+            explicit_target_table=target_table,
+        )
 
     ploidy_rows = resolve_target_ploidy_rows(
         target_rows,
         target_build=target_build,
     )
-    packed_validation_plans: Dict[Tuple[int, int], PackedPloidyValidationPlan] = {}
+    packed_validation_plans: Dict[Tuple[Path, Tuple[int, int]], PackedPloidyValidationPlan] = {}
     apply_qc_issues: List[Tuple[int, str, int]] = []  # (vmap_idx, status, n_affected)
     haploid_het_incompatible_count = 0
     absent_nonmissing_incompatible_count = 0
     unknown_sex_unvalidated_count = 0
-
-    def row_bed_chunk(
-        idx: int,
-        source_chunks: Dict[Tuple[str, int], bytes],
-        swapped_packed_cache: Dict[Tuple[str, int], bytes],
-        remapped_packed_cache: Dict[Tuple[str, int, bool], bytes],
-    ) -> bytes:
-        nonlocal haploid_het_incompatible_count, absent_nonmissing_incompatible_count, unknown_sex_unvalidated_count
-        row = vmap_rows[idx]
-        ploidy_pair = ploidy_rows[idx]
-        needs_ploidy_validation = has_non_diploid_ploidy(ploidy_pair)
-        needs_swap = row.allele_op in {"swap", "flip_swap"}
-        if row.source_index == -1:
-            packed_chunk = packed_missing_row
-        else:
-            key = (row.source_shard, row.source_index)
-            packed_chunk = source_chunks.get(key)
-            if packed_chunk is None:
-                raise ValueError(
-                    f"missing source genotypes for requested SNP: "
-                    f"source_shard={row.source_shard!r}, source_index={row.source_index}"
-                )
-            if needs_swap:
-                swapped_packed = swapped_packed_cache.get(key)
-                if swapped_packed is None:
-                    swapped_packed = swap_bed_chunk(packed_chunk)
-                    swapped_packed_cache[key] = swapped_packed
-                packed_chunk = swapped_packed
-            if not identity_sample_axis and not identity_remap_by_shard[row.source_shard]:
-                remapped_key = (row.source_shard, row.source_index, needs_swap)
-                remapped_chunk = remapped_packed_cache.get(remapped_key)
-                if remapped_chunk is None:
-                    remapped_chunk = remap_bed_chunk(packed_chunk, packed_sample_axis_plans[row.source_shard])
-                    remapped_packed_cache[remapped_key] = remapped_chunk
-                packed_chunk = remapped_chunk
-        if not needs_ploidy_validation:
-            return packed_chunk
-
-        validation_plan = packed_validation_plans.get(ploidy_pair)
-        if validation_plan is None:
-            validation_plan = build_packed_ploidy_validation_plan(
-                sample_axis_plan.output_sexes,
-                ploidy_pair[0],
-                ploidy_pair[1],
-            )
-            packed_validation_plans[ploidy_pair] = validation_plan
-        haploid_issues, absent_issues, unknown_sex_issues = count_target_ploidy_genotype_issues_packed(
-            packed_chunk,
-            validation_plan,
-        )
-        haploid_het_incompatible_count += haploid_issues
-        absent_nonmissing_incompatible_count += absent_issues
-        unknown_sex_unvalidated_count += unknown_sex_issues
-        if haploid_issues:
-            apply_qc_issues.append((idx, "haploid_het_incompatible", haploid_issues))
-        if absent_issues:
-            apply_qc_issues.append((idx, "absent_nonmissing", absent_issues))
-        return packed_chunk
-
-    def iter_output_rows(indices: Sequence[int], output_bed_path: Path) -> Iterable[bytes]:
-        total_chunks = chunk_count(len(indices), chunk_size)
-        for done_chunks, chunk in enumerate(chunked_indices(indices, chunk_size), start=1):
-            source_chunks = load_chunk_source_bed_chunks(chunk, vmap_rows, prepared_sources)
-            swapped_packed_cache: Dict[Tuple[str, int], bytes] = {}
-            remapped_packed_cache: Dict[Tuple[str, int, bool], bytes] = {}
-            for idx in chunk:
-                yield row_bed_chunk(
-                    idx,
-                    source_chunks,
-                    swapped_packed_cache,
-                    remapped_packed_cache,
-                )
-            logger.info(
-                "apply_vmap_to_bfile.py progress: %s/%s chunks -> %s",
-                done_chunks,
-                total_chunks,
-                output_bed_path,
-            )
 
     for shard_out_prefix, indices in grouped_output_indices(vmap_rows, args.output_prefix):
         out_bim = bfile_component(shard_out_prefix, ".bim")
         out_bed = bfile_component(shard_out_prefix, ".bed")
         out_fam = bfile_component(shard_out_prefix, ".fam")
         out_ploidy = bfile_component(shard_out_prefix, ".ploidy")
+        if args.sample_axis == "native":
+            source_shards = mapped_source_shards_for_output_indices(indices, vmap_rows)
+            sample_axis_plan = build_native_sample_axis_plan_for_output_shard(
+                source_tables,
+                source_shards,
+                descriptor=".fam",
+                output_label=str(shard_out_prefix),
+            )
+        else:
+            assert global_sample_axis_plan is not None
+            sample_axis_plan = global_sample_axis_plan
+        n_samples = sample_axis_plan.output_sample_count
+        packed_missing_row = missing_bed_row(n_samples)
+        output_bytes_per_snp = bytes_per_bed_row(n_samples)
+        identity_sample_axis = not sample_axis_plan.reconciliation_active
+        identity_remap_by_shard: Dict[str, bool] = {}
+        packed_sample_axis_plans: Dict[str, PackedBedRemapPlan] = {}
+        if not identity_sample_axis:
+            identity_remap_by_shard = {
+                shard: has_identity_sample_axis_remap(local_to_output, n_samples)
+                for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
+            }
+            packed_sample_axis_plans = {
+                shard: build_packed_bed_remap_plan(local_to_output, n_samples)
+                for shard, local_to_output in sample_axis_plan.source_local_to_output.items()
+                if not identity_remap_by_shard[shard]
+            }
+
+        def row_bed_chunk(
+            idx: int,
+            source_chunks: Dict[Tuple[str, int], bytes],
+        ) -> bytes:
+            nonlocal haploid_het_incompatible_count, absent_nonmissing_incompatible_count, unknown_sex_unvalidated_count
+            row = vmap_rows[idx]
+            ploidy_pair = ploidy_rows[idx]
+            needs_ploidy_validation = (not args.skip_ploidy_check) and has_non_diploid_ploidy(ploidy_pair)
+            needs_swap = row.allele_op in {"swap", "flip_swap"}
+            if row.source_index == -1:
+                packed_chunk = packed_missing_row
+            else:
+                key = (row.source_shard, row.source_index)
+                packed_chunk = source_chunks.get(key)
+                if packed_chunk is None:
+                    raise ValueError(
+                        f"missing source genotypes for requested SNP: "
+                        f"source_shard={row.source_shard!r}, source_index={row.source_index}"
+                )
+                if needs_swap:
+                    packed_chunk = swap_bed_chunk(packed_chunk)
+                if not identity_sample_axis and not identity_remap_by_shard[row.source_shard]:
+                    packed_chunk = remap_bed_chunk(packed_chunk, packed_sample_axis_plans[row.source_shard])
+            if not needs_ploidy_validation:
+                return packed_chunk
+
+            validation_plan_key = (sample_axis_plan.output_sample_path, ploidy_pair)
+            validation_plan = packed_validation_plans.get(validation_plan_key)
+            if validation_plan is None:
+                validation_plan = build_packed_ploidy_validation_plan(
+                    sample_axis_plan.output_sexes,
+                    ploidy_pair[0],
+                    ploidy_pair[1],
+                )
+                packed_validation_plans[validation_plan_key] = validation_plan
+            haploid_issues, absent_issues, unknown_sex_issues = count_target_ploidy_genotype_issues_packed(
+                packed_chunk,
+                validation_plan,
+            )
+            haploid_het_incompatible_count += haploid_issues
+            absent_nonmissing_incompatible_count += absent_issues
+            unknown_sex_unvalidated_count += unknown_sex_issues
+            if haploid_issues:
+                apply_qc_issues.append((idx, "haploid_het_incompatible", haploid_issues))
+            if absent_issues:
+                apply_qc_issues.append((idx, "absent_nonmissing", absent_issues))
+            return packed_chunk
+
+        def iter_output_rows(indices: Sequence[int], output_bed_path: Path) -> Iterable[bytes]:
+            total_chunks = chunk_count(len(indices), chunk_size)
+            for done_chunks, chunk in enumerate(chunked_indices(indices, chunk_size), start=1):
+                source_chunks = load_chunk_source_bed_chunks(chunk, vmap_rows, prepared_sources)
+                for idx in chunk:
+                    yield row_bed_chunk(
+                        idx,
+                        source_chunks,
+                    )
+                logger.info(
+                    "apply_vmap_to_bfile.py progress: %s/%s chunks -> %s",
+                    done_chunks,
+                    total_chunks,
+                    output_bed_path,
+                )
+
         shard_target_rows = [target_rows[idx] for idx in indices]
         write_bim(out_bim, shard_target_rows)
         shutil.copyfile(sample_axis_plan.output_sample_path, out_fam)
@@ -472,7 +486,10 @@ def main() -> int:
             "skipped ploidy validation for %s sex-dependent row/sample cells with unknown output sex.",
             unknown_sex_unvalidated_count,
         )
-    reconciliation_summary = compute_reconciliation_missingness_summary(sample_axis_plan, vmap_rows)
+    if global_sample_axis_plan is not None:
+        reconciliation_summary = compute_reconciliation_missingness_summary(global_sample_axis_plan, vmap_rows)
+    else:
+        reconciliation_summary = None
     if reconciliation_summary is not None:
         logger.info(
             "Sample-axis reconciliation summary: introduced "

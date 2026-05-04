@@ -727,6 +727,93 @@ def test_apply_vmap_to_bfile_rejects_sharded_source_fam_content_mismatch(tmp_pat
     assert "identical .fam contents" in result.stderr
 
 
+def test_apply_vmap_to_bfile_sample_axis_native_keeps_per_output_shard_fam(tmp_path):
+    source_template = tmp_path / "source.@"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned.@"
+    write_bfile(tmp_path / "source_1", ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9", "S2 S2 0 0 2 -9"], [[0, 3]])
+    write_bfile(tmp_path / "source_X", ["X\trsx\t0\t5000000\tC\tT"], ["S1 S1 0 0 1 -9"], [[2]])
+    for stem, token in (("source_1", "1"), ("source_X", "X")):
+        src = tmp_path / stem
+        for ext in (".bed", ".bim", ".fam"):
+            src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
+    write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "X\t5000000\ttx\tC\tT\tX\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py(
+        "apply_vmap_to_bfile.py",
+        "--source-prefix",
+        source_template,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--sample-axis",
+        "native",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "aligned.1.fam").read_text(encoding="utf-8") == (tmp_path / "source.1.fam").read_text(encoding="utf-8")
+    assert (tmp_path / "aligned.X.fam").read_text(encoding="utf-8") == (tmp_path / "source.X.fam").read_text(encoding="utf-8")
+    assert read_bed_matrix(tmp_path / "aligned.1.bed", 2, 1) == [[0, 3]]
+    assert read_bed_matrix(tmp_path / "aligned.X.bed", 1, 1) == [[2]]
+
+
+def test_apply_vmap_to_bfile_sample_axis_native_rejects_mixed_axes_in_one_output(tmp_path):
+    source_template = tmp_path / "source.@"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_bfile(tmp_path / "source_1", ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9", "S2 S2 0 0 2 -9"], [[0, 3]])
+    write_bfile(tmp_path / "source_X", ["X\trsx\t0\t5000000\tC\tT"], ["S1 S1 0 0 1 -9"], [[2]])
+    for stem, token in (("source_1", "1"), ("source_X", "X")):
+        src = tmp_path / stem
+        for ext in (".bed", ".bim", ".fam"):
+            src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
+    write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "X\t5000000\ttx\tC\tT\tX\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py(
+        "apply_vmap_to_bfile.py",
+        "--source-prefix",
+        source_template,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--sample-axis",
+        "native",
+    )
+
+    assert result.returncode != 0
+    assert "--sample-axis native cannot emit" in result.stderr
+    assert "different .fam contents" in result.stderr
+
+
+def test_apply_vmap_to_bfile_skip_ploidy_check_suppresses_validation_warning_and_qc(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[2]])
+    write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py(
+        "apply_vmap_to_bfile.py",
+        "--source-prefix",
+        source_prefix,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--skip-ploidy-check",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "incompatible heterozygous haploid-target genotypes" not in result.stderr
+    assert not out_prefix.with_suffix(".qc.tsv").exists()
+    assert out_prefix.with_suffix(".ploidy").exists()
+
+
 def test_apply_vmap_to_bfile_streams_single_file_payload_in_small_chunks(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"

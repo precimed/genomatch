@@ -43,6 +43,13 @@ This section applies to `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`.
 - both tools accept an optional explicit target sample file which, when present, defines the full output sample axis exactly
 - for BFILE payloads, the explicit target sample file is `--target-fam`
 - for PFILE payloads, the explicit target sample file is `--target-psam`
+- both tools accept optional `--sample-axis native`
+- `--sample-axis native` cannot be combined with `--target-fam` or `--target-psam`
+- in native sample-axis mode, every emitted output shard must have one unambiguous native sample axis
+- in native sample-axis mode, all mapped rows emitted to one output shard must reference source shards whose sample metadata signatures are identical
+- in native sample-axis mode, different output shards may use different sample axes
+- in native sample-axis mode, an emitted output shard with no mapped source rows must fail because no native sample axis is defined
+- in native sample-axis mode, each output sample file is copied from the native source sample file selected for that emitted output shard
 - when an explicit target sample file is supplied, output subject order is exactly the target sample-file order
 - when an explicit target sample file is supplied, the tool must copy that target sample file exactly to every emitted output payload
 - when an explicit target sample file is supplied, subjects absent from a given referenced source shard must be emitted as missing for rows sourced from that shard
@@ -155,7 +162,7 @@ Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined i
 - `apply_vmap_to_bfile.py` defines output `.bim` rows from retained target-side `.vmap` rows, writes genetic-position / cM as `0`, and writes the SNP field according to the shared output-ID rule above
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
 - if `--target-fam` is not supplied, `apply_vmap_to_bfile.py` must propagate the source payload `.fam` to every emitted output `.fam`
-- if `--target-fam` is not supplied, all referenced source shards in one invocation must have identical `.fam` contents; implementations may enforce this as a single global precheck across all referenced shards
+- if neither `--target-fam` nor `--sample-axis native` is supplied, all referenced source shards in one invocation must have identical `.fam` contents; implementations may enforce this as a single global precheck across all referenced shards
 - if `--target-fam` is supplied, that file defines the output sample axis exactly and must be copied exactly to every emitted output `.fam`
 - `identity` and `flip` leave BFILE genotype encoding unchanged
 - `swap` and `flip_swap` are genotype-swapping operations
@@ -174,6 +181,8 @@ Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined i
 - if no retained row has ploidy-validation incompatibilities, `<output>.qc.tsv` is not emitted
 - when the output prefix contains `@`, this `.qc.tsv` behavior applies per emitted output shard
 - if `--target-fam` is supplied, haploid validation uses the sex column from `--target-fam`
+- if `--sample-axis native` is supplied, haploid validation uses the sex column from the native `.fam` selected for each emitted output shard
+- if `--skip-ploidy-check` is supplied, genotype-content ploidy validation and `.qc.tsv` incompatibility reporting are skipped; `.ploidy` emission is unchanged
 - `apply_vmap_to_bfile.py` follows the shared ploidy-model validation contract and does not redefine ploidy by rewriting offending genotype content
 
 ## Bounded-memory requirement for `apply_vmap_to_bfile.py`
@@ -202,7 +211,7 @@ Expected ploidy and payload-validation rules are defined in [ploidy-model.md](pl
 - if a mapped row uses `swap` or `flip_swap`, the genotype payload must be rewritten to stay consistent with the target-side allele order encoded in output `.pvar`
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`
 - if `--target-psam` is not supplied, `.psam` is propagated from the source payload sample axis
-- if `--target-psam` is not supplied, all referenced source shards in one invocation must have identical `.psam` contents; implementations may enforce `.psam` equality as one global precheck across all referenced shards
+- if neither `--target-psam` nor `--sample-axis native` is supplied, all referenced source shards in one invocation must have identical `.psam` contents; implementations may enforce `.psam` equality as one global precheck across all referenced shards
 - if `--target-psam` is supplied, that file defines the output sample axis exactly and must be copied exactly to every emitted output `.psam`
 - with `--target-psam`, `apply_vmap_to_pfile.py` must not attempt heuristic merging of arbitrary extra source `.psam` metadata columns; the explicit target `.psam` is the output metadata source of truth
 - biallelicity of each retained mapped source row is determined from the source `.pvar` allele structure for that row
@@ -210,6 +219,8 @@ Expected ploidy and payload-validation rules are defined in [ploidy-model.md](pl
 - supported retained mapped content is: hardcalls, hardcall phase information when present, unphased dosages, and haploid hardcalls or haploid dosages under PLINK/PGEN allele-count conventions
 - unsupported retained mapped content is: non-biallelic retained source rows, phased dosage preservation, and any retained mapped source content that cannot be represented by the chosen pgenlib read or write path
 - fail on unsupported retained mapped inputs; do not silently degrade
+- if `--sample-axis native` is supplied, ploidy validation uses the sex column from the native `.psam` selected for each emitted output shard
+- if `--skip-ploidy-check` is supplied, genotype-content ploidy validation and incompatibility warnings are skipped
 - `apply_vmap_to_pfile.py` follows the shared ploidy-model validation contract; hardcall phase flags do not affect ploidy compatibility
 
 For retained mapped rows:

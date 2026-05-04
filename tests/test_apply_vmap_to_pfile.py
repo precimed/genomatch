@@ -344,6 +344,35 @@ def test_apply_vmap_to_pfile_reports_haploid_incompatible_hardcalls_without_rewr
     assert read_pfile_genotypes(out_prefix, 1, 0) == [1]
 
 
+def test_apply_vmap_to_pfile_skip_ploidy_check_suppresses_validation_warning(tmp_path):
+    source_prefix = tmp_path / "source"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_pfile(
+        source_prefix,
+        ["X\t100\trs1\tA\tG"],
+        ["S1\t1"],
+        [{"channel": "hardcall", "alleles": [0, 1]}],
+        psam_header="#IID\tSEX",
+    )
+    write_vmap(vmap, ["X\t100\tt1\tG\tA\t.\t0\tidentity"])
+
+    result = run_py(
+        "apply_vmap_to_pfile.py",
+        "--source-prefix",
+        source_prefix,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--skip-ploidy-check",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "incompatible diploid-het hardcalls in haploid target ploidy" not in result.stderr
+    assert read_pfile_genotypes(out_prefix, 1, 0) == [1]
+
+
 def test_apply_vmap_to_pfile_reports_absent_hardcalls_without_rewriting(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
@@ -463,6 +492,86 @@ def test_apply_vmap_to_pfile_target_psam_reorders_and_fills_missing_for_inconsis
     assert read_pfile_genotypes(out_prefix, 3, 0) == [-9, 0, 2]
     assert read_pfile_genotypes(out_prefix, 3, 1) == [0, -9, 1]
     assert "Sample-axis reconciliation summary" in result.stderr
+
+
+def test_apply_vmap_to_pfile_sample_axis_native_keeps_per_output_shard_psam(tmp_path):
+    source_template = tmp_path / "source.@"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned.@"
+    write_pfile(
+        tmp_path / "source_1",
+        ["1\t100\trs1\tA\tG"],
+        ["S1", "S2"],
+        [{"channel": "hardcall", "alleles": [0, 0, 1, 1]}],
+    )
+    write_pfile(
+        tmp_path / "source_X",
+        ["X\t5000000\trsx\tC\tT"],
+        ["S1"],
+        [{"channel": "hardcall", "alleles": [0, 1]}],
+    )
+    for stem, token in (("source_1", "1"), ("source_X", "X")):
+        src = tmp_path / stem
+        for ext in (".pgen", ".pvar", ".psam"):
+            src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
+    write_vmap(vmap, ["1\t100\tt1\tG\tA\t1\t0\tidentity", "X\t5000000\ttx\tT\tC\tX\t0\tidentity"])
+
+    result = run_py(
+        "apply_vmap_to_pfile.py",
+        "--source-prefix",
+        source_template,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--sample-axis",
+        "native",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "aligned.1.psam").read_text(encoding="utf-8") == (tmp_path / "source.1.psam").read_text(encoding="utf-8")
+    assert (tmp_path / "aligned.X.psam").read_text(encoding="utf-8") == (tmp_path / "source.X.psam").read_text(encoding="utf-8")
+    assert read_pfile_genotypes(tmp_path / "aligned.1.pgen", 2, 0) == [0, 2]
+    assert read_pfile_genotypes(tmp_path / "aligned.X.pgen", 1, 0) == [1]
+
+
+def test_apply_vmap_to_pfile_sample_axis_native_rejects_mixed_axes_in_one_output(tmp_path):
+    source_template = tmp_path / "source.@"
+    vmap = tmp_path / "map.vmap"
+    out_prefix = tmp_path / "aligned"
+    write_pfile(
+        tmp_path / "source_1",
+        ["1\t100\trs1\tA\tG"],
+        ["S1", "S2"],
+        [{"channel": "hardcall", "alleles": [0, 0, 1, 1]}],
+    )
+    write_pfile(
+        tmp_path / "source_X",
+        ["X\t5000000\trsx\tC\tT"],
+        ["S1"],
+        [{"channel": "hardcall", "alleles": [0, 1]}],
+    )
+    for stem, token in (("source_1", "1"), ("source_X", "X")):
+        src = tmp_path / stem
+        for ext in (".pgen", ".pvar", ".psam"):
+            src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
+    write_vmap(vmap, ["1\t100\tt1\tG\tA\t1\t0\tidentity", "X\t5000000\ttx\tT\tC\tX\t0\tidentity"])
+
+    result = run_py(
+        "apply_vmap_to_pfile.py",
+        "--source-prefix",
+        source_template,
+        "--vmap",
+        vmap,
+        "--output-prefix",
+        out_prefix,
+        "--sample-axis",
+        "native",
+    )
+
+    assert result.returncode != 0
+    assert "--sample-axis native cannot emit" in result.stderr
+    assert "different .psam contents" in result.stderr
 
 
 def test_apply_vmap_to_pfile_rejects_target_psam_duplicate_subject_keys(tmp_path):

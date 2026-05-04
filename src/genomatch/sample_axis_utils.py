@@ -228,6 +228,62 @@ def require_identical_sample_signatures(
     return first_table.path
 
 
+def native_sample_axis_table_for_output_shard(
+    tables_by_shard: Dict[str, ParsedSampleTable],
+    source_shards: Sequence[str],
+    *,
+    descriptor: str,
+    output_label: str,
+) -> ParsedSampleTable:
+    if not source_shards:
+        raise ValueError(
+            f"--sample-axis native cannot emit {output_label}: no mapped source rows define a native {descriptor} axis"
+        )
+    first_shard = source_shards[0]
+    first_table = tables_by_shard[first_shard]
+    for shard in source_shards[1:]:
+        table = tables_by_shard[shard]
+        if table.signature != first_table.signature:
+            raise ValueError(
+                f"--sample-axis native cannot emit {output_label}: mapped rows reference source shards "
+                f"with different {descriptor} contents; first mismatch at source_shard={shard!r}: {table.path}"
+            )
+    return first_table
+
+
+def mapped_source_shards_for_output_indices(indices: Sequence[int], vmap_rows: Sequence[object]) -> List[str]:
+    seen: set[str] = set()
+    out: List[str] = []
+    for idx in indices:
+        row = vmap_rows[idx]
+        if int(row.source_index) == -1 or str(row.source_shard) in seen:
+            continue
+        shard = str(row.source_shard)
+        seen.add(shard)
+        out.append(shard)
+    return out
+
+
+def build_native_sample_axis_plan_for_output_shard(
+    source_tables_by_shard: Dict[str, ParsedSampleTable],
+    source_shards: Sequence[str],
+    *,
+    descriptor: str,
+    output_label: str,
+) -> SampleAxisPlan:
+    native_table = native_sample_axis_table_for_output_shard(
+        source_tables_by_shard,
+        source_shards,
+        descriptor=descriptor,
+        output_label=output_label,
+    )
+    return build_sample_axis_plan(
+        {shard: source_tables_by_shard[shard] for shard in source_shards},
+        output_sample_path=native_table.path,
+        explicit_target_table=None,
+    )
+
+
 def build_sample_axis_plan(
     source_tables_by_shard: Dict[str, ParsedSampleTable],
     *,

@@ -92,8 +92,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--sample-axis",
-        choices=["union"],
-        help="Wrapper-only sample-axis convenience for sharded genotype payloads",
+        choices=["union", "native"],
+        help="Genotype sample-axis mode: wrapper-synthesized union or canonical native passthrough",
+    )
+    parser.add_argument(
+        "--skip-ploidy-check",
+        action="store_true",
+        help="Pass through to genotype apply tools to skip target-side genotype ploidy validation",
     )
     parser.add_argument(
         "--force",
@@ -118,9 +123,11 @@ def require_supported_args(args: argparse.Namespace) -> None:
         if args.target_psam:
             raise ValueError("--target-psam is supported only for --input-format=pfile")
         if args.sample_axis is not None:
-            raise ValueError("--sample-axis union is supported only for --input-format=bfile or pfile")
+            raise ValueError("--sample-axis is supported only for --input-format=bfile or pfile")
         if args.sample_id_mode != "fid_iid":
             raise ValueError("--sample-id-mode is supported only for --input-format=bfile or pfile")
+        if args.skip_ploidy_check:
+            raise ValueError("--skip-ploidy-check is supported only for --input-format=bfile or pfile")
         if not args.sumstats_metadata:
             raise ValueError(f"--sumstats-metadata is required for --input-format={args.input_format}")
         if "@" in str(args.output):
@@ -146,7 +153,7 @@ def require_supported_args(args: argparse.Namespace) -> None:
             if args.target_fam:
                 raise ValueError("--target-fam is supported only for --input-format=bfile")
         if args.sample_axis is not None and (args.target_fam or args.target_psam):
-            raise ValueError("--sample-axis union cannot be combined with --target-fam or --target-psam")
+            raise ValueError("--sample-axis cannot be combined with --target-fam or --target-psam")
 
 
 def bfile_source_prefix(input_path: str) -> str:
@@ -219,6 +226,8 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
         cmd.extend(["--sample-id-mode", args.sample_id_mode])
         if args.target_fam:
             cmd.extend(["--target-fam", args.target_fam])
+        if args.sample_axis == "native":
+            cmd.extend(["--sample-axis", "native"])
     else:
         assert args.input is not None
         cmd = tool_command(
@@ -233,10 +242,14 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
         cmd.extend(["--sample-id-mode", args.sample_id_mode])
         if args.target_psam:
             cmd.extend(["--target-psam", args.target_psam])
+        if args.sample_axis == "native":
+            cmd.extend(["--sample-axis", "native"])
     if not args.full_target:
         cmd.append("--only-mapped-target")
     if args.retain_snp_id:
         cmd.append("--retain-snp-id")
+    if args.skip_ploidy_check:
+        cmd.append("--skip-ploidy-check")
     return cmd
 
 

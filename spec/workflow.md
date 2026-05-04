@@ -238,9 +238,11 @@ Final concatenation:
 - for `bfile` input, accept optional `--target-fam` and reject `--target-psam`
 - for `pfile` input, accept optional `--target-psam` and reject `--target-fam`
 - for `bfile` and `pfile` input, accept optional `--sample-id-mode {fid_iid,iid}` and pass it through unchanged to the underlying `apply_vmap_*` tool; default to `fid_iid`
-- for `bfile` and `pfile` input, accept optional `--sample-axis union`
-- reject `--sample-axis union` for `sumstats` and `sumstats-clean` input
-- reject `--sample-axis union` together with an explicit `--target-fam` or `--target-psam`
+- for `bfile` and `pfile` input, accept optional `--sample-axis {union,native}`
+- reject `--sample-axis` for `sumstats` and `sumstats-clean` input
+- reject `--sample-axis` together with an explicit `--target-fam` or `--target-psam`
+- for `bfile` and `pfile` input, accept optional `--skip-ploidy-check` and pass it through unchanged to the underlying `apply_vmap_*` tool
+- reject `--skip-ploidy-check` for `sumstats` and `sumstats-clean` input
 - for `--input-format sumstats-clean`, accept optional `--fill-mode {column,row}` and `--use-af-inference` and pass them through unchanged to `apply_vmap_to_sumstats.py --clean`
 - accept optional `--retain-snp-id` and pass it through unchanged to the underlying `apply_vmap_*` tool; by default, final projected payload IDs are generated from retained `.vmap` target rows as defined in [payload-application.md](payload-application.md#output-variant-ids)
 - require `--sumstats-metadata` for `sumstats` and `sumstats-clean` input and reject it for `bfile` and `pfile`
@@ -255,6 +257,8 @@ Final concatenation:
 - if `--full-target` is supplied, omit that wrapper-added `--only-mapped-target`
 - if `--target-fam` or `--target-psam` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - if `--sample-id-mode` is supplied for `bfile` or `pfile` input, pass it through unchanged to the underlying `apply_vmap_*` tool
+- if `--sample-axis native` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
+- if `--skip-ploidy-check` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - if `--retain-snp-id` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - for `sumstats` and `sumstats-clean` input, treat `--output` as the exact rewritten payload path and reject `@`
 - for `bfile` and `pfile` input, treat `--output` as the PLINK output prefix and allow `@`
@@ -274,6 +278,7 @@ Final concatenation:
 ### `project_payload.py`: wrapper-level `--sample-axis union`
 
 - `--sample-axis union` is a wrapper-only convenience for `bfile` and `pfile` input
+- `--sample-axis native` is not wrapper-only; `project_payload.py` passes it through to the canonical `apply_vmap_*` tool
 - it does not define alternate canonical payload semantics; instead, it synthesizes a target sample file and then invokes the canonical `apply_vmap_*` tool with that explicit target sample file
 - when `--sample-axis union` is requested, participating source shards are the referenced retained mapped shards only
 - a referenced retained mapped shard is a source shard that appears in the retained `.vmap` rows with `source_index != -1` after wrapper row-retention filtering: mapped-only by default, or full-target when `--full-target` is supplied

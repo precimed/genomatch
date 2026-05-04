@@ -65,6 +65,8 @@ Normative rule:
 - This validation is secondary QC only. It must not redefine the upstream contract that coordinate-changing transforms preserve ploidy class.
 - Validation warnings must be auditable and aggregated; payload-application tools must not emit one warning per offending genotype.
 - Payload-application tools must not rewrite offending genotype content to missing as part of ploidy validation.
+- Payload-application tools may expose `--skip-ploidy-check` to skip this secondary genotype-content validation for performance-sensitive runs.
+- Skipping genotype-content ploidy validation must not change row retention, allele operations, sample-axis handling, or BFILE `.ploidy` emission.
 
 ## Unknown sex handling
 

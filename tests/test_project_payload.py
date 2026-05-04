@@ -1152,6 +1152,45 @@ def test_project_payload_bfile_sample_axis_union_synthesizes_retained_target_fam
     assert read_bed_matrix(output.with_suffix(".bed"), 3, 2) == [[0, 3, 1], [1, 2, 0]]
 
 
+def test_project_payload_bfile_passes_through_native_sample_axis_and_skip_ploidy(tmp_path):
+    source_template = tmp_path / "source.@.bim"
+    target_vmap = tmp_path / "target.vmap"
+    output = tmp_path / "aligned.@"
+
+    write_bfile(tmp_path / "source_1", ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9", "S2 S2 0 0 2 -9"], [[0, 3]])
+    write_bfile(tmp_path / "source_X", ["X\trsx\t0\t5000000\tC\tT"], ["S1 S1 0 0 1 -9"], [[2]])
+    for stem, token in (("source_1", "1"), ("source_X", "X")):
+        src = tmp_path / stem
+        for ext in (".bed", ".bim", ".fam"):
+            src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
+    write_vmap(
+        target_vmap,
+        ["1\t100\tt1\tA\tG\t1\t0\tidentity", "X\t5000000\ttx\tC\tT\tX\t0\tidentity"],
+        genome_build="GRCh37",
+    )
+
+    result = run_py(
+        "project_payload.py",
+        "--input",
+        source_template,
+        "--input-format",
+        "bfile",
+        "--target",
+        target_vmap,
+        "--sample-axis",
+        "native",
+        "--skip-ploidy-check",
+        "--output",
+        output,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--sample-axis native" in result.stderr
+    assert "--skip-ploidy-check" in result.stderr
+    assert (tmp_path / "aligned.1.fam").read_text(encoding="utf-8") == (tmp_path / "source.1.fam").read_text(encoding="utf-8")
+    assert (tmp_path / "aligned.X.fam").read_text(encoding="utf-8") == (tmp_path / "source.X.fam").read_text(encoding="utf-8")
+
+
 def test_project_payload_bfile_sample_axis_union_warns_and_noops_for_non_sharded_input(tmp_path):
     source_prefix = tmp_path / "source"
     source_bim = source_prefix.with_suffix(".bim")
