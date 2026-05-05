@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "title": "Human haploid regions (GRCh37/GRCh38)",
+  "title": "Human haploid regions",
   "coordinate_system": {
     "basis": "1-based",
     "intervals": "inclusive",
@@ -279,6 +279,118 @@
         {
           "label": "Ensembl PARs overview",
           "url_hint": "Ensembl human PARs information page"
+        }
+      ]
+    },
+    "T2T-CHM13v2.0": {
+      "aliases": [
+        "hs1",
+        "chm13v2.0"
+      ],
+      "regions": [
+        {
+          "name": "PAR1",
+          "type": "pseudoautosomal",
+          "chromosomes": {
+            "X": {
+              "start": 1,
+              "end": 2394410
+            },
+            "Y": {
+              "start": 1,
+              "end": 2458320
+            }
+          },
+          "ploidy": {
+            "male": "diploid",
+            "female": "diploid"
+          }
+        },
+        {
+          "name": "PAR2",
+          "type": "pseudoautosomal",
+          "chromosomes": {
+            "X": {
+              "start": 153925835,
+              "end": 154259566
+            },
+            "Y": {
+              "start": 62122810,
+              "end": 62460029
+            }
+          },
+          "ploidy": {
+            "male": "diploid",
+            "female": "diploid"
+          }
+        },
+        {
+          "name": "X_nonPAR",
+          "type": "sex_chromosome_unique",
+          "chromosomes": {
+            "X": [
+              {
+                "start": 2394411,
+                "end": 153925834
+              },
+              {
+                "start": 154259567,
+                "end": null
+              }
+            ]
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "diploid"
+          },
+          "notes": [
+            "X_nonPAR is defined as all chrX sequence outside PAR1 and PAR2.",
+            "PAR1 starts at position 1 in the T2T CHM13v2.0 analysis-set PAR BED."
+          ]
+        },
+        {
+          "name": "Y_MSY",
+          "type": "sex_chromosome_unique",
+          "chromosomes": {
+            "Y": [
+              {
+                "start": 2458321,
+                "end": 62122809
+              },
+              {
+                "start": 62460030,
+                "end": null
+              }
+            ]
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "absent"
+          },
+          "notes": [
+            "Y_MSY is defined as all chrY sequence outside PAR1 and PAR2.",
+            "PAR1 starts at position 1 in the T2T CHM13v2.0 analysis-set PAR BED."
+          ]
+        },
+        {
+          "name": "MT",
+          "type": "mitochondrial",
+          "chromosomes": {
+            "MT": {
+              "start": 1,
+              "end": 16569
+            }
+          },
+          "ploidy": {
+            "male": "haploid",
+            "female": "haploid"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "label": "T2T CHM13 v2.0 analysis set (PAR BED)",
+          "url_hint": "marbl/CHM13 GitHub repository (analysis-set downloads, chm13v2.0_PAR.bed)"
         }
       ]
     }

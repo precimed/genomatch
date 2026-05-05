@@ -151,6 +151,45 @@ def test_normalize_contigs_vtable_ncbi_to_plink_splitx_uses_grch38_par_boundarie
     ]
 
 
+def test_normalize_contigs_vtable_ncbi_to_plink_splitx_uses_t2t_par_boundaries(tmp_path):
+    source = tmp_path / "in.vtable"
+    out = tmp_path / "out.vtable"
+    write_lines(
+        source,
+        [
+            "X\t1\trs_par1_start\tA\tG",
+            "X\t2394410\trs_par1_end\tA\tG",
+            "X\t2394411\trs_after_par1\tA\tG",
+            "X\t153925834\trs_before_par2\tA\tG",
+            "X\t153925835\trs_par2_start\tA\tG",
+            "X\t154259566\trs_par2_end\tA\tG",
+            "X\t154259567\trs_after_par2\tA\tG",
+            "1\t100\trs_auto\tC\tT",
+            "Y\t200\trs_y\tC\tT",
+            "MT\t300\trs_mt\tC\tT",
+        ],
+    )
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"},
+    )
+
+    result = run_py("normalize_contigs.py", "--input", source, "--output", out, "--to", "plink_splitx")
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["25", "1", "rs_par1_start", "A", "G"],
+        ["25", "2394410", "rs_par1_end", "A", "G"],
+        ["23", "2394411", "rs_after_par1", "A", "G"],
+        ["23", "153925834", "rs_before_par2", "A", "G"],
+        ["25", "153925835", "rs_par2_start", "A", "G"],
+        ["25", "154259566", "rs_par2_end", "A", "G"],
+        ["23", "154259567", "rs_after_par2", "A", "G"],
+        ["1", "100", "rs_auto", "C", "T"],
+        ["24", "200", "rs_y", "C", "T"],
+        ["26", "300", "rs_mt", "C", "T"],
+    ]
+
+
 def test_normalize_contigs_to_plink_splitx_requires_known_build(tmp_path):
     source = tmp_path / "in.vtable"
     out = tmp_path / "out.vtable"
@@ -162,7 +201,7 @@ def test_normalize_contigs_to_plink_splitx_requires_known_build(tmp_path):
 
     result = run_py("normalize_contigs.py", "--input", source, "--output", out, "--to", "plink_splitx")
     assert result.returncode != 0
-    assert "requires metadata genome_build=GRCh37 or GRCh38" in result.stderr
+    assert "requires metadata genome_build=GRCh37, GRCh38, or T2T-CHM13v2.0" in result.stderr
 
 
 def test_normalize_contigs_to_plink_splitx_rejects_unsupported_build(tmp_path):

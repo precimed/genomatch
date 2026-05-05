@@ -7,6 +7,7 @@ This file is the authoritative migration-aware test specification for `match/`.
 - Canonical test execution for this toolkit should run under the `match-liftover` conda environment.
 - Use that environment for both `pytest tests` and full `pytest` validation when reviewing `match/` changes.
 - This keeps the real liftover integration coverage active instead of relying on skipped-test behavior in a lighter environment.
+- `MATCH_REFERENCE_ACCESS_MODE` defaults to `BULK`, matching production behavior. End-to-end integration tests that rely on full real FASTA sequence assets must set `MATCH_REFERENCE_ACCESS_MODE=LEGACY`; preloading whole production FASTAs is multiple-GB behavior and is not appropriate for CI-sized tests.
 
 Active migrated modules currently include:
 

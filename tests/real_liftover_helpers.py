@@ -9,7 +9,7 @@ import pytest
 
 pysam = pytest.importorskip("pysam")
 
-from utils import REPO_ROOT, run_cmd, write_match_config
+from utils import REPO_ROOT, ensure_primary_ucsc_fasta_fixture, run_cmd, write_match_config
 
 
 REF_DIR = REPO_ROOT / "ref"
@@ -156,6 +156,8 @@ def write_real_match_config(tmp_path: Path, *, chroms: Iterable[str]) -> Path:
         chroms=chroms,
         source_labels_are_ucsc=True,
     )
+    ensure_primary_ucsc_fasta_fixture(grch37_ucsc)
+    ensure_primary_ucsc_fasta_fixture(grch38_ucsc)
     write_match_config(
         config,
         grch37_ucsc_fasta=grch37_ucsc,

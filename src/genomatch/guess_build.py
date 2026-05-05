@@ -78,8 +78,6 @@ def compatibility_rate(rows: List[VariantRow], fasta_path: Path, contig_naming: 
 def guess_build(rows: List[VariantRow], contig_naming: str) -> Dict[str, object]:
     evidence = []
     build_names = ["GRCh37", "GRCh38"]
-    if not build_names:
-        raise ValueError("config is missing UCSC reference entries for GRCh37/GRCh38")
     for build in build_names:
         fasta_path = resolve_internal_reference_fasta(build)
         compatible, considered = compatibility_rate(rows, fasta_path, contig_naming)

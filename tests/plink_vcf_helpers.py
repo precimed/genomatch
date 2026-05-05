@@ -301,7 +301,7 @@ def generate_region_positions(region: dict, chrom: str, count: int) -> List[int]
 
 
 def load_haploid_variants(bim_path: Path, *, build_name: str, counts: Dict[str, int]) -> List[HaploidVariant]:
-    schema_path = REPO_ROOT / "src" / "genomatch" / "schemas" / "human_haploid_regions_grch37_grch38.json"
+    schema_path = REPO_ROOT / "src" / "genomatch" / "schemas" / "human_haploid_regions.json"
     regions = load_regions(schema_path, build_name)
     rows_by_chrom: Dict[str, List[object]] = {"22": [], "X": [], "Y": [], "MT": []}
     for row in read_bim(bim_path):

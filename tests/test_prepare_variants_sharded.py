@@ -28,6 +28,19 @@ from utils import read_tsv, run_py, run_py_with_env
             ],
             "does not support --dst-contig-naming=plink_splitx",
         ),
+        (
+            [
+                "--input",
+                "source.@.bim",
+                "--prefix",
+                "work/@/prepared",
+                "--output",
+                "prepared",
+                "--dst-build",
+                "hg38",
+            ],
+            "invalid choice: 'hg38'",
+        ),
     ],
 )
 def test_prepare_variants_sharded_validates_sharded_contract(args, message):
@@ -35,6 +48,14 @@ def test_prepare_variants_sharded_validates_sharded_contract(args, message):
 
     assert result.returncode != 0
     assert message in result.stderr
+
+
+def test_prepare_variants_sharded_help_lists_dst_build_choices():
+    result = run_py("prepare_variants_sharded.py", "--help")
+
+    assert result.returncode == 0
+    help_text = " ".join(result.stdout.split())
+    assert "Destination genome build (GRCh37, GRCh38, T2T-CHM13v2.0; default: GRCh38)" in help_text
 
 
 def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_rank_order(tmp_path):

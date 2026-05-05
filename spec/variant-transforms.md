@@ -14,7 +14,7 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - the legacy path is intended for tests and profiling, not as the default runtime behavior
 - tools that use FASTA-backed reference access must preserve their existing validation and error semantics when switching between bulk and legacy access modes
 
-**Implementation requirement:** bulk FASTA access should be cached per reference FASTA path and per contig, not per base position. Cache lifetime may extend for the duration of the process or tool invocation. GRCh37 and GRCh38 must use separate caches because they resolve to different FASTA paths. An implementation may eagerly load all primary contigs or lazily populate contig caches, but it must not fall back to repeated per-position `fetch()` calls in the default bulk mode.
+**Implementation requirement:** bulk FASTA access should be cached per reference FASTA path and per contig, not per base position. Cache lifetime may extend for the duration of the process or tool invocation. GRCh37, GRCh38, and T2T-CHM13v2.0 must use separate caches because they resolve to different FASTA paths. An implementation may eagerly load all primary contigs or lazily populate contig caches, but it must not fall back to repeated per-position `fetch()` calls in the default bulk mode.
 
 **Implementation requirement:** in the default bulk mode, FASTA-consuming tools must not implement reference lookup as a per-variant loop around `fetch_reference_base()` or `fasta.fetch(contig, pos - 1, pos)`. They must batch by contig and answer lookups from contig-level cached reference data. The legacy per-variant fetch path is allowed only when `MATCH_REFERENCE_ACCESS_MODE=LEGACY` is set.
 
@@ -48,7 +48,7 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - `sort_variants.py` must accept optional `--drop-duplicates`; when supplied, duplicate target identities are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
 - `sort_variants.py --drop-duplicates` drops duplicate exact target identities after sorting; because exact duplicates have identical declared-coordinate sort keys, the retained duplicate representative is the first occurrence from the input
 - `sort_variants.py --drop-duplicates` does not write a QC sidecar; it is intended for explicit whole-object duplicate cleanup rather than row-level import or transform auditing
-- `liftover_build.py` resolves chain and FASTA assets from config + metadata only
+- `liftover_build.py` resolves chain and FASTA assets from config + metadata only, using list-valued directed `liftover` edges keyed by `(source, target)`
 - `liftover_build.py` accepts declared `ncbi`, `ucsc`, and `plink` input contig naming while using UCSC internal reference assets
 - `liftover_build.py` rejects declared `plink_splitx` input clearly; users must normalize to a build-independent naming first, liftover, and then normalize back to `plink_splitx` afterward if desired
 - `liftover_build.py` supports `--resume` to reuse retained `bcftools +liftover` output at `<output>.bcftools_output.vcf` and rerun parse/QC/output logic without rerunning bcftools

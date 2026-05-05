@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from ._cli_utils import run_cli
-from .vtable_utils import SUPPORTED_CONTIG_NAMINGS
+from .vtable_utils import SUPPORTED_CONTIG_NAMINGS, SUPPORTED_GENOME_BUILDS
 from .workflow_wrapper_utils import (
     copy_variant_object,
     planned_existing_variant_outputs,
@@ -35,6 +35,7 @@ IMPORTER_BY_FORMAT = {
 
 
 def parse_args() -> argparse.Namespace:
+    build_choices = sorted(SUPPORTED_GENOME_BUILDS - {"unknown"})
     parser = argparse.ArgumentParser(
         description=(
             "Prepare raw input variants through the canonical import -> optional contig normalization -> "
@@ -52,7 +53,12 @@ def parse_args() -> argparse.Namespace:
         "--prefix",
         help="Optional base prefix for retained intermediates; defaults to --output",
     )
-    parser.add_argument("--dst-build", default="GRCh38", help="Destination genome build (default: GRCh38)")
+    parser.add_argument(
+        "--dst-build",
+        default="GRCh38",
+        choices=build_choices,
+        help=f"Destination genome build ({', '.join(build_choices)}; default: GRCh38)",
+    )
     parser.add_argument(
         "--dst-contig-naming",
         default="ncbi",
@@ -160,8 +166,15 @@ def should_defer_plink_splitx(current_meta: dict[str, object], dst_contig_naming
     return dst_contig_naming == "plink_splitx" and str(current_meta.get("genome_build")) == "unknown"
 
 
+def require_supported_dst_build(dst_build: str) -> None:
+    allowed = sorted(SUPPORTED_GENOME_BUILDS - {"unknown"})
+    if dst_build not in allowed:
+        raise ValueError(f"unsupported --dst-build {dst_build!r}; expected one of: {', '.join(allowed)}")
+
+
 def main() -> int:
     args = parse_args()
+    require_supported_dst_build(str(args.dst_build))
     prefix = Path(args.prefix) if args.prefix is not None else Path(args.output)
     final_output = variant_object_path(Path(args.output))
 
@@ -230,7 +243,7 @@ def main() -> int:
         )
         current_path = normalized_path
 
-    if args.resume and read_target_build(current_path) != "unknown":
+    if read_target_build(current_path) != "unknown":
         print_skip_resolved_build(WRAPPER_NAME, current_path)
     else:
         run_command(tool_command("guess_build.py", "--input", str(current_path), "--write"))

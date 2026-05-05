@@ -4,7 +4,7 @@ import stat
 from pathlib import Path
 import pytest
 
-from utils import read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config
+from utils import read_tsv, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def write_fake_bcftools(path: Path) -> None:
@@ -134,8 +134,8 @@ def test_liftover_build_vtable_emits_vtable_and_qc(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t3"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1", "chr1\t3\tchr1\t2"])
     write_match_config(
@@ -177,6 +177,182 @@ def test_liftover_build_vtable_emits_vtable_and_qc(tmp_path):
     ]
 
 
+def test_liftover_build_resolves_grch38_to_t2t_edge(tmp_path):
+    grch37_ucsc = tmp_path / "hg19.fa"
+    grch38_ucsc = tmp_path / "hg38.fa"
+    t2t_ucsc = tmp_path / "chm13v2.fa"
+    chain38tot2t = tmp_path / "38tot2t.chain"
+    config = tmp_path / "config.yaml"
+    fake_bcftools = tmp_path / "bcftools"
+    source = tmp_path / "src.vtable"
+    out = tmp_path / "lifted.vtable"
+
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(t2t_ucsc, {"chr1": "AAAAAA"})
+    write_lines(chain38tot2t, ["chr1\t2\tchr1\t5"])
+    write_match_config(
+        config,
+        grch37_ucsc_fasta=grch37_ucsc,
+        grch38_ucsc_fasta=grch38_ucsc,
+        t2t_chm13v2_ucsc_fasta=t2t_ucsc,
+        chain38tot2t=chain38tot2t,
+    )
+    write_fake_bcftools(fake_bcftools)
+    write_lines(source, ["1\t2\trs1\tG\tA"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "liftover_build.py",
+        {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(fake_bcftools)},
+        "--input",
+        source,
+        "--output",
+        out,
+        "--target-build",
+        "T2T-CHM13v2.0",
+    )
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
+    meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
+    assert meta == {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}
+
+
+def test_liftover_build_resolves_t2t_to_grch38_edge(tmp_path):
+    grch37_ucsc = tmp_path / "hg19.fa"
+    grch38_ucsc = tmp_path / "hg38.fa"
+    t2t_ucsc = tmp_path / "chm13v2.fa"
+    chaint2tto38 = tmp_path / "t2tto38.chain"
+    config = tmp_path / "config.yaml"
+    fake_bcftools = tmp_path / "bcftools"
+    source = tmp_path / "src.vtable"
+    out = tmp_path / "lifted.vtable"
+
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(t2t_ucsc, {"chr1": "AAAA"})
+    write_lines(chaint2tto38, ["chr1\t2\tchr1\t5"])
+    write_match_config(
+        config,
+        grch37_ucsc_fasta=grch37_ucsc,
+        grch38_ucsc_fasta=grch38_ucsc,
+        t2t_chm13v2_ucsc_fasta=t2t_ucsc,
+        chaint2tto38=chaint2tto38,
+    )
+    write_fake_bcftools(fake_bcftools)
+    write_lines(source, ["1\t2\trs1\tG\tA"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "liftover_build.py",
+        {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(fake_bcftools)},
+        "--input",
+        source,
+        "--output",
+        out,
+        "--target-build",
+        "GRCh38",
+    )
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
+    meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
+    assert meta == {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"}
+
+
+def test_liftover_build_resolves_grch37_to_t2t_edge(tmp_path):
+    grch37_ucsc = tmp_path / "hg19.fa"
+    grch38_ucsc = tmp_path / "hg38.fa"
+    t2t_ucsc = tmp_path / "chm13v2.fa"
+    chain37tot2t = tmp_path / "37tot2t.chain"
+    config = tmp_path / "config.yaml"
+    fake_bcftools = tmp_path / "bcftools"
+    source = tmp_path / "src.vtable"
+    out = tmp_path / "lifted.vtable"
+
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(t2t_ucsc, {"chr1": "AAAAAA"})
+    write_lines(chain37tot2t, ["chr1\t2\tchr1\t5"])
+    write_match_config(
+        config,
+        grch37_ucsc_fasta=grch37_ucsc,
+        grch38_ucsc_fasta=grch38_ucsc,
+        t2t_chm13v2_ucsc_fasta=t2t_ucsc,
+        chain37tot2t=chain37tot2t,
+    )
+    write_fake_bcftools(fake_bcftools)
+    write_lines(source, ["1\t2\trs1\tG\tA"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "liftover_build.py",
+        {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(fake_bcftools)},
+        "--input",
+        source,
+        "--output",
+        out,
+        "--target-build",
+        "T2T-CHM13v2.0",
+    )
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
+    meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
+    assert meta == {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}
+
+
+def test_liftover_build_resolves_t2t_to_grch37_edge(tmp_path):
+    grch37_ucsc = tmp_path / "hg19.fa"
+    grch38_ucsc = tmp_path / "hg38.fa"
+    t2t_ucsc = tmp_path / "chm13v2.fa"
+    chaint2tto37 = tmp_path / "t2tto37.chain"
+    config = tmp_path / "config.yaml"
+    fake_bcftools = tmp_path / "bcftools"
+    source = tmp_path / "src.vtable"
+    out = tmp_path / "lifted.vtable"
+
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(t2t_ucsc, {"chr1": "AAAA"})
+    write_lines(chaint2tto37, ["chr1\t2\tchr1\t5"])
+    write_match_config(
+        config,
+        grch37_ucsc_fasta=grch37_ucsc,
+        grch38_ucsc_fasta=grch38_ucsc,
+        t2t_chm13v2_ucsc_fasta=t2t_ucsc,
+        chaint2tto37=chaint2tto37,
+    )
+    write_fake_bcftools(fake_bcftools)
+    write_lines(source, ["1\t2\trs1\tG\tA"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"},
+    )
+
+    result = run_py_with_env(
+        "liftover_build.py",
+        {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(fake_bcftools)},
+        "--input",
+        source,
+        "--output",
+        out,
+        "--target-build",
+        "GRCh37",
+    )
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
+    meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
+    assert meta == {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+
+
 def test_liftover_build_resume_reuses_retained_bcftools_output(tmp_path):
     grch37_ucsc = tmp_path / "hg19.fa"
     grch38_ucsc = tmp_path / "hg38.fa"
@@ -187,8 +363,8 @@ def test_liftover_build_resume_reuses_retained_bcftools_output(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t3"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1", "chr1\t3\tchr1\t2"])
     write_match_config(
@@ -251,8 +427,8 @@ def test_liftover_build_vmap_preserves_original_provenance(tmp_path):
     source = tmp_path / "base.vmap"
     out = tmp_path / "lifted.vmap"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t6", "chr1\t2\tchr1\t4"])
     write_lines(chain38to37, ["chr1\t6\tchr1\t1", "chr1\t4\tchr1\t2"])
     write_match_config(
@@ -301,8 +477,8 @@ def test_liftover_build_drops_rows_when_lifted_ploidy_class_changes(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chrX": "A" * 60001})
-    write_fasta(grch38_ucsc, {"chrX": "A" * 10000})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chrX": "A" * 60001})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chrX": "A" * 10000})
     write_lines(chain37to38, ["chrX\t60001\tchrX\t10000"])
     write_lines(chain38to37, ["chrX\t10000\tchrX\t60001"])
     write_match_config(
@@ -347,8 +523,8 @@ def test_liftover_build_uses_bcftools_flip_and_swap_tags(tmp_path):
     source = tmp_path / "src.vmap"
     out = tmp_path / "lifted.vmap"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAA"})
     write_lines(
         chain37to38,
         [
@@ -405,8 +581,8 @@ def test_liftover_build_lifts_one_side_multibase_rows_with_qc(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t3", "chr1\t2\tchr1\t4"])
     write_lines(chain38to37, ["chr1\t3\tchr1\t1", "chr1\t4\tchr1\t2"])
     write_match_config(
@@ -455,8 +631,8 @@ def test_liftover_build_drops_multiallelic_liftover_output_with_qc(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "A"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -502,8 +678,8 @@ def test_liftover_build_drops_both_multibase_liftover_output_with_qc(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "A"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -549,8 +725,8 @@ def test_liftover_build_drops_non_primary_target_contig_with_qc(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "A"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr4_GL000008v2_random\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -596,8 +772,8 @@ def test_liftover_build_drops_duplicate_lifted_targets_with_qc(tmp_path):
     source = tmp_path / "src.vmap"
     out = tmp_path / "lifted.vmap"
 
-    write_fasta(grch37_ucsc, {"chr1": "AA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -650,8 +826,8 @@ def test_liftover_build_accepts_ucsc_named_input(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t3"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1", "chr1\t3\tchr1\t2"])
     write_match_config(
@@ -695,22 +871,9 @@ def test_liftover_build_fails_on_missing_chain_entry(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
-    config.write_text(
-        "\n".join(
-            [
-                "references:",
-                "  ucsc:",
-                f"    GRCh37: {{fasta: {grch37_ucsc}}}",
-                f"    GRCh38: {{fasta: {grch38_ucsc}}}",
-                "chain:",
-                "  hg38ToHg19: missing.chain",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_match_config(config, grch37_ucsc_fasta=grch37_ucsc, grch38_ucsc_fasta=grch38_ucsc)
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t1\trs1\tA\tG"])
     write_json(
@@ -729,7 +892,7 @@ def test_liftover_build_fails_on_missing_chain_entry(tmp_path):
         "GRCh38",
     )
     assert result.returncode != 0
-    assert "chain.hg19tohg38" in result.stderr.lower()
+    assert "unsupported liftover direction" in result.stderr.lower()
 
 
 def test_liftover_build_fails_on_missing_bcftools_override(tmp_path):
@@ -741,8 +904,8 @@ def test_liftover_build_fails_on_missing_bcftools_override(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -783,7 +946,7 @@ def test_liftover_build_fails_on_missing_fasta_index(tmp_path):
     out = tmp_path / "lifted.vtable"
 
     grch37_ucsc.write_text(">chr1\nAAAA\n", encoding="utf-8")
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -824,8 +987,8 @@ def test_liftover_build_fails_on_wrong_strand_without_flag(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "A"})
-    write_fasta(grch38_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "A"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t1"])
     write_lines(chain38to37, ["chr1\t1\tchr1\t1"])
     write_match_config(
@@ -874,8 +1037,8 @@ def test_liftover_build_accepts_plink_family_input(tmp_path, contig_naming, chro
 
     prefix37 = "N" * 60000
     prefix38 = "N" * 60004
-    write_fasta(grch37_ucsc, {"chrX": prefix37 + "A"})
-    write_fasta(grch38_ucsc, {"chrX": prefix38 + "A"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chrX": prefix37 + "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chrX": prefix38 + "A"})
     write_lines(chain37to38, [f"chrX\t{pos}\tchrX\t60005"])
     write_lines(chain38to37, ["chrX\t60005\tchrX\t60001"])
     write_match_config(
@@ -920,8 +1083,8 @@ def test_liftover_build_rejects_plink_splitx_input(tmp_path):
 
     prefix37 = "N" * 60000
     prefix38 = "N" * 60004
-    write_fasta(grch37_ucsc, {"chrX": prefix37 + "A"})
-    write_fasta(grch38_ucsc, {"chrX": prefix38 + "A"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chrX": prefix37 + "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chrX": prefix38 + "A"})
     write_lines(chain37to38, ["chrX\t60001\tchrX\t60005"])
     write_lines(chain38to37, ["chrX\t60005\tchrX\t60001"])
     write_match_config(
@@ -962,8 +1125,8 @@ def test_liftover_build_fails_on_unsupported_contig_label(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -1004,8 +1167,8 @@ def test_liftover_build_fails_on_unsupported_swap_annotation(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "A"})
-    write_fasta(grch38_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "A"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t1\tswap=-1"])
     write_lines(chain38to37, ["chr1\t1\tchr1\t1"])
     write_match_config(
@@ -1046,8 +1209,8 @@ def test_liftover_build_drops_all_unsupported_non_snv_rows_with_qc(tmp_path):
     source = tmp_path / "src.vtable"
     out = tmp_path / "lifted.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1"])
     write_match_config(
@@ -1091,8 +1254,8 @@ def test_liftover_build_reference_access_modes_are_consistent_and_default_to_bul
     fake_bcftools = tmp_path / "bcftools"
     source = tmp_path / "src.vtable"
 
-    write_fasta(grch37_ucsc, {"chr1": "AAAA"})
-    write_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch37_ucsc, {"chr1": "AAAA"})
+    write_primary_ucsc_fasta(grch38_ucsc, {"chr1": "AAAAAA"})
     write_lines(chain37to38, ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t3"])
     write_lines(chain38to37, ["chr1\t5\tchr1\t1", "chr1\t3\tchr1\t2"])
     write_match_config(

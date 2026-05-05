@@ -108,7 +108,7 @@ Requirements:
 
 - treat this as a contig-normalization operation only; do not liftover, reorder, or alter alleles or positions
 - read genome build from the input metadata, not from a new CLI flag
-- require build to be GRCh37/hg19 or GRCh38/hg38; fail clearly if missing or unsupported
+- require build to be GRCh37/hg19, GRCh38/hg38, or T2T-CHM13v2.0/hs1; fail clearly if missing or unsupported
 - use the uploaded schema/JSON file as the authoritative source of PAR coordinates and related definitions; do not hardcode PAR boundaries if they can be read from that file
 
 For target `plink_splitx`:

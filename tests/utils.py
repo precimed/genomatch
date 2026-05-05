@@ -21,6 +21,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from genomatch.bfile_utils import read_bed_selected, write_bed_matrix
+from genomatch.reference_utils import PRIMARY_UCSC_CONTIGS
 
 PLINK_BIN = os.environ.get("PLINK_BIN", "plink")
 PLINK2_BIN = os.environ.get("PLINK2_BIN", "plink2")
@@ -256,45 +257,87 @@ def write_fasta(path: Path, sequences: dict[str, str]) -> None:
     pysam.faidx(str(path))
 
 
+def _read_fasta_sequences(path: Path) -> dict[str, str]:
+    sequences: dict[str, str] = {}
+    current_name: str | None = None
+    current_parts: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(">"):
+            if current_name is not None:
+                sequences[current_name] = "".join(current_parts)
+            current_name = line[1:].split()[0]
+            current_parts = []
+        elif current_name is not None:
+            current_parts.append(line.strip())
+    if current_name is not None:
+        sequences[current_name] = "".join(current_parts)
+    return sequences
+
+
+def ensure_primary_ucsc_fasta_fixture(path: Path) -> None:
+    if not path.exists() or not Path(str(path) + ".fai").exists():
+        return
+    sequences = _read_fasta_sequences(path)
+    missing = [contig for contig in PRIMARY_UCSC_CONTIGS if contig not in sequences]
+    if not missing:
+        return
+    for contig in missing:
+        sequences[contig] = "A"
+    write_fasta(path, sequences)
+
+
+def write_primary_ucsc_fasta(path: Path, sequences: dict[str, str]) -> None:
+    padded = dict(sequences)
+    for contig in PRIMARY_UCSC_CONTIGS:
+        padded.setdefault(contig, "A")
+    write_fasta(path, padded)
+
+
 def write_match_config(
     path: Path,
     *,
-    grch37_fasta: Path | None = None,
-    grch38_fasta: Path | None = None,
     grch37_ucsc_fasta: Path | None = None,
     grch38_ucsc_fasta: Path | None = None,
+    t2t_chm13v2_ucsc_fasta: Path | None = None,
     chain37to38: Path | None = None,
     chain38to37: Path | None = None,
+    chain37tot2t: Path | None = None,
+    chain38tot2t: Path | None = None,
+    chaint2tto37: Path | None = None,
+    chaint2tto38: Path | None = None,
 ) -> None:
-    grch37_ucsc_fasta = grch37_ucsc_fasta or grch37_fasta
-    grch38_ucsc_fasta = grch38_ucsc_fasta or grch38_fasta
     if grch37_ucsc_fasta is None or grch38_ucsc_fasta is None:
         raise ValueError("UCSC FASTA paths must be provided for GRCh37 and GRCh38")
     lines = [
-        "references:",
-        "  ucsc:",
-        "    GRCh37:",
-        f"      fasta: {grch37_ucsc_fasta}",
-        "    GRCh38:",
-        f"      fasta: {grch38_ucsc_fasta}",
+        "builds:",
+        "  GRCh37:",
+        f"    ucsc_fasta: {grch37_ucsc_fasta}",
+        "  GRCh38:",
+        f"    ucsc_fasta: {grch38_ucsc_fasta}",
     ]
-    if grch37_fasta is not None or grch38_fasta is not None:
+    if t2t_chm13v2_ucsc_fasta is not None:
+        lines.extend(["  T2T-CHM13v2.0:", f"    ucsc_fasta: {t2t_chm13v2_ucsc_fasta}"])
+    lines.append("liftover:")
+    liftover_header_index = len(lines) - 1
+    for source, target, chain_path in [
+        ("GRCh37", "GRCh38", chain37to38),
+        ("GRCh38", "GRCh37", chain38to37),
+        ("GRCh37", "T2T-CHM13v2.0", chain37tot2t),
+        ("GRCh38", "T2T-CHM13v2.0", chain38tot2t),
+        ("T2T-CHM13v2.0", "GRCh37", chaint2tto37),
+        ("T2T-CHM13v2.0", "GRCh38", chaint2tto38),
+    ]:
+        if chain_path is None:
+            continue
         lines.extend(
             [
-                "  ncbi:",
-                "    GRCh37:",
-                f"      fasta: {grch37_fasta or ''}",
-                "    GRCh38:",
-                f"      fasta: {grch38_fasta or ''}",
+                f"  - source: {source}",
+                f"    target: {target}",
+                f"    chain: {chain_path}",
             ]
         )
-    lines.extend(
-        [
-            "chain:",
-            f"  hg19ToHg38: {chain37to38 or ''}",
-            f"  hg38ToHg19: {chain38to37 or ''}",
-        ]
-    )
+    if len(lines) == liftover_header_index + 1:
+        lines[liftover_header_index] = "liftover: []"
     write_lines(path, lines)
 
 

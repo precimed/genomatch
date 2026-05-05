@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-HAPLOID_SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "human_haploid_regions_grch37_grch38.json"
+HAPLOID_SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "human_haploid_regions.json"
 PLOIDY_MAP = {"diploid": 2, "haploid": 1, "absent": 0}
 HAPLOID_CHROMS = {"X", "Y", "MT"}
 

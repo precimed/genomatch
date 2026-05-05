@@ -1,6 +1,6 @@
 # Variant Table Toolkit
 
-This toolkit harmonizes genetic variant data across common research formats and reference assemblies with explicit provenance and auditable row drops. It supports `GRCh37` and `GRCh38`, chromosomes `1-22`, `X`, `Y`, and `MT`, common contig naming modes (`ncbi`, `ucsc`, `plink`, `plink_splitx`), and biallelic `A/C/G/T` variants. The toolkit is designed for primary reference contigs only; alternate loci, decoy contigs, and other non-primary reference sequences are out of scope.
+This toolkit harmonizes genetic variant data across common research formats and reference assemblies with explicit provenance and auditable row drops. It supports `GRCh37`, `GRCh38`, and `T2T-CHM13v2.0`, chromosomes `1-22`, `X`, `Y`, and `MT`, common contig naming modes (`ncbi`, `ucsc`, `plink`, `plink_splitx`), and biallelic `A/C/G/T` variants. The toolkit is designed for primary reference contigs only; alternate loci, decoy contigs, and other non-primary reference sequences are out of scope.
 
 ## Table of contents
 
@@ -76,7 +76,7 @@ Use the tables below as a quick wrapper reference. The authoritative canonical-t
 | `--input`, `--output` | Required raw input payload and output stem. Genotype payload inputs may be sharded via `@`; see [spec/shard-discovery.md](spec/shard-discovery.md). The final prepared output is always a single `<output>.vmap` |
 | `--sumstats-metadata`, `--id-vtable` | Sumstats-only controls: `--sumstats-metadata` is required for `--input-format sumstats` and follows the raw metadata schema at [schemas/raw-sumstats-metadata.yaml](schemas/raw-sumstats-metadata.yaml), which is the same specification used by [BioPsyk/cleansumstats](https://github.com/BioPsyk/cleansumstats). `--id-vtable` optionally fills missing `chr`/`pos` by matching on variant ID, and becomes required when those fields are absent from the summary-stat metadata |
 | `--dst-contig-naming` | Target contig naming; defaults to `ncbi`. Supported values are `ncbi`, `ucsc`, `plink`, and `plink_splitx`; `plink_splitx` follows PLINK `--split-x` style X/XY_PAR labeling. See [spec/contigs-and-metadata.md](spec/contigs-and-metadata.md) |
-| `--dst-build` | Target genome build; defaults to `GRCh38`. If the input build differs, liftover rewrites both coordinates and alleles via `bcftools +liftover`, then emits canonical target rows with `a2=reference`. See [spec/variant-transforms.md](spec/variant-transforms.md) |
+| `--dst-build` | Target genome build (`GRCh37`, `GRCh38`, or `T2T-CHM13v2.0`); defaults to `GRCh38`. If the input build differs, liftover rewrites both coordinates and alleles via `bcftools +liftover`, then emits canonical target rows with `a2=reference`. See [spec/variant-transforms.md](spec/variant-transforms.md) |
 | `--[no-]allow-strand-flips` | Control strand-flip allowance during same-build reference-aware restriction; enabled by default |
 | `--[no-]norm-indels` | Control indel normalization during same-build reference-aware restriction; `bcftools norm` is used internally when enabled |
 | `--drop-strand-ambiguous` | Optional removal of strand-ambiguous variants after build compatibility / liftover |

@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from utils import run_py_with_env, write_fasta, write_json, write_lines, write_match_config
+from utils import run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def test_guess_build_updates_unknown_build_only_for_vtable(tmp_path):
@@ -9,8 +9,8 @@ def test_guess_build_updates_unknown_build_only_for_vtable(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA"])
     write_json(
@@ -31,8 +31,8 @@ def test_guess_build_updates_vmap_target_metadata_only(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vmap"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC\tshardA\t0\tidentity"])
     write_json(
@@ -59,8 +59,8 @@ def test_guess_build_force_overwrites_existing_build(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA"])
     write_json(
@@ -79,8 +79,8 @@ def test_guess_build_requires_declared_contig_naming(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
     write_json(
@@ -98,8 +98,8 @@ def test_guess_build_returns_unknown_on_ambiguous_build_evidence(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "A"})
-    write_fasta(grch38, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "A"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
     write_json(
@@ -119,8 +119,8 @@ def test_guess_build_accepts_ucsc_named_input(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["chr1\t1\trs1\tA\tC", "chr1\t2\trs2\tC\tA"])
     write_json(
@@ -141,8 +141,8 @@ def test_guess_build_returns_unknown_when_best_rate_is_below_threshold(tmp_path)
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tA\tA"])
     write_json(
@@ -162,8 +162,8 @@ def test_guess_build_returns_unknown_when_no_rows_are_usable_as_evidence(tmp_pat
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t999\trs1\tA\tC"])
     write_json(
@@ -184,8 +184,8 @@ def test_guess_build_fails_on_malformed_sidecar(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
     source.with_name(source.name + ".meta.json").write_text("{bad json\n", encoding="utf-8")
@@ -208,8 +208,8 @@ def test_guess_build_accepts_plink_family_input(tmp_path, contig_naming, chrom, 
     config = tmp_path / "config.yaml"
     source = tmp_path / f"cohort.{contig_naming}.vtable"
     prefix = "N" * 60000
-    write_fasta(grch37, {"chrX": prefix + "AC"})
-    write_fasta(grch38, {"chrX": prefix + "TG"})
+    write_primary_ucsc_fasta(grch37, {"chrX": prefix + "AC"})
+    write_primary_ucsc_fasta(grch38, {"chrX": prefix + "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, [f"{chrom}\t{pos}\trs1\tA\tC", f"{chrom}\t60002\trs2\tC\tA"])
     write_json(
@@ -230,8 +230,8 @@ def test_guess_build_reference_access_modes_are_consistent_and_default_to_bulk(t
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "ACG"})
-    write_fasta(grch38, {"chr1": "TGA"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "ACG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TGA"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA", "1\t3\trs3\tT\tG"])
     write_json(
@@ -269,8 +269,8 @@ def test_guess_build_sample_rows_limits_considered_rows(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "A" * 32})
-    write_fasta(grch38, {"chr1": "T" * 32})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A" * 32})
+    write_primary_ucsc_fasta(grch38, {"chr1": "T" * 32})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     rows = [f"1\t{i}\trs{i}\tA\tC" for i in range(1, 21)]
     write_lines(source, rows)
@@ -300,8 +300,8 @@ def test_guess_build_sample_rows_zero_uses_all_rows(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "A" * 32})
-    write_fasta(grch38, {"chr1": "T" * 32})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A" * 32})
+    write_primary_ucsc_fasta(grch38, {"chr1": "T" * 32})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     rows = [f"1\t{i}\trs{i}\tA\tC" for i in range(1, 13)]
     write_lines(source, rows)
@@ -331,8 +331,8 @@ def test_guess_build_rejects_negative_sample_rows(tmp_path):
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "cohort.vtable"
-    write_fasta(grch37, {"chr1": "AC"})
-    write_fasta(grch38, {"chr1": "TG"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
     write_json(

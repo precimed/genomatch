@@ -92,6 +92,7 @@ main() {
   mkdir -p \
     "${REF_DIR}/ucsc/GRCh37" \
     "${REF_DIR}/ucsc/GRCh38" \
+    "${REF_DIR}/ucsc/T2T-CHM13v2.0" \
     "${REF_DIR}/chain"
 
   download_gzip_if_missing "${GRCH37_FASTA}" "${GRCH37_URL}"
@@ -103,7 +104,8 @@ main() {
   download_file_if_missing "${CHAIN_37_TO_38}" "${CHAIN_37_TO_38_URL}"
   download_file_if_missing "${CHAIN_38_TO_37}" "${CHAIN_38_TO_37_URL}"
 
-  log "Required UCSC reference assets are installed under ${REF_DIR}"
+  log "GRCh37/GRCh38 UCSC reference assets are installed under ${REF_DIR}"
+  log "T2T-CHM13v2.0 assets are optional; see DOWNLOADS.md for FASTA and chain download pointers."
 }
 
 main "$@"

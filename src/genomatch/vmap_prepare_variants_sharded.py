@@ -9,7 +9,7 @@ from ._cli_utils import run_cli
 from .contig_utils import SUPPORTED_CONTIG_NAMINGS, contig_label_for_naming, normalize_chrom_label
 from .importer_utils import DiscoveredInputShard, resolve_import_input_paths
 from .vmap_prepare_variants import all_retained_stage_outputs
-from .vtable_utils import CANONICAL_CONTIG_RANK, load_metadata, metadata_path_for, write_metadata
+from .vtable_utils import CANONICAL_CONTIG_RANK, SUPPORTED_GENOME_BUILDS, load_metadata, metadata_path_for, write_metadata
 from .workflow_wrapper_utils import (
     delete_variant_object,
     planned_existing_variant_outputs,
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
+    build_choices = sorted(SUPPORTED_GENOME_BUILDS - {"unknown"})
     parser = argparse.ArgumentParser(
         description=(
             "Prepare chromosome-sharded raw input variants by running prepare_variants.py per target-contig group, "
@@ -38,7 +39,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--shards", help="Optional comma-separated explicit shard tokens for @ inputs")
     parser.add_argument("--output", required=True, help="Non-sharded output stem; final artifact is <output>.vmap")
     parser.add_argument("--prefix", required=True, help="Sharded retained-intermediate prefix containing @")
-    parser.add_argument("--dst-build", default="GRCh38", help="Destination genome build (default: GRCh38)")
+    parser.add_argument(
+        "--dst-build",
+        default="GRCh38",
+        choices=build_choices,
+        help=f"Destination genome build ({', '.join(build_choices)}; default: GRCh38)",
+    )
     parser.add_argument(
         "--dst-contig-naming",
         default="ncbi",
@@ -232,6 +238,9 @@ def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict)
 
 def main() -> int:
     args = parse_args()
+    allowed_builds = sorted(SUPPORTED_GENOME_BUILDS - {"unknown"})
+    if args.dst_build not in allowed_builds:
+        raise ValueError(f"unsupported --dst-build {args.dst_build!r}; expected one of: {', '.join(allowed_builds)}")
     if args.dst_contig_naming == "plink_splitx":
         raise ValueError("prepare_variants_sharded.py does not support --dst-contig-naming=plink_splitx")
     if "@" not in args.input:

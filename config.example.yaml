@@ -1,14 +1,27 @@
-references:
-  ucsc:
-    GRCh37:
-      fasta: ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
-    GRCh38:
-      fasta: ucsc/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
-  ncbi:
-    GRCh37:
-      fasta: ncbi/GRCh37/human_g1k_v37.fasta
-    GRCh38:
-      fasta: ncbi/GRCh38/GRCh38.primary.fa
-chain:
-  hg19ToHg38: chain/hg19ToHg38.over.chain.gz
-  hg38ToHg19: chain/hg38ToHg19.over.chain.gz
+builds:
+  GRCh37:
+    ucsc_fasta: ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
+  GRCh38:
+    ucsc_fasta: ucsc/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+  T2T-CHM13v2.0:
+    ucsc_fasta: ucsc/T2T-CHM13v2.0/chm13v2.0.fa
+
+liftover:
+  - source: GRCh37
+    target: GRCh38
+    chain: chain/hg19ToHg38.over.chain.gz
+  - source: GRCh38
+    target: GRCh37
+    chain: chain/hg38ToHg19.over.chain.gz
+  - source: GRCh37
+    target: T2T-CHM13v2.0
+    chain: chain/hg19-chm13v2.chain.gz
+  - source: GRCh38
+    target: T2T-CHM13v2.0
+    chain: chain/grch38-chm13v2.chain.gz
+  - source: T2T-CHM13v2.0
+    target: GRCh37
+    chain: chain/chm13v2-hg19.chain.gz
+  - source: T2T-CHM13v2.0
+    target: GRCh38
+    chain: chain/chm13v2-grch38.chain.gz

@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+### Added
+- T2T-CHM13v2.0 is now supported as a declared genome build by `restrict_build_compatible.py` and `liftover_build.py`. See `config.example.yaml` and `DOWNLOADS.md` for the updated reference configuration and download requirements.
+
+### Known limitations
+- `guess_build.py` does not infer T2T-CHM13v2.0. To use this build, pass `--genome-build T2T-CHM13v2.0` explicitly to the `import_*` tools.
+
 ## [v0.3.1] - 2026-05-04
 
 ### Added

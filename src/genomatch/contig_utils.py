@@ -172,15 +172,15 @@ def convert_contig_label(label: str, from_naming: str, to_naming: str) -> str:
 
 
 def resolve_plink_splitx_build(genome_build: str | None) -> str:
-    if genome_build in {"GRCh37", "GRCh38"}:
+    if genome_build in {"GRCh37", "GRCh38", "T2T-CHM13v2.0"}:
         return str(genome_build)
     if genome_build in {None, "", "unknown"}:
         raise ValueError(
-            "normalize_contigs.py --to plink_splitx requires metadata genome_build=GRCh37 or GRCh38"
+            "normalize_contigs.py --to plink_splitx requires metadata genome_build=GRCh37, GRCh38, or T2T-CHM13v2.0"
         )
     raise ValueError(
         f"normalize_contigs.py --to plink_splitx does not support genome_build={genome_build!r}; "
-        "expected GRCh37 or GRCh38"
+        "expected GRCh37, GRCh38, or T2T-CHM13v2.0"
     )
 
 

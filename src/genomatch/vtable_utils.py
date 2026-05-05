@@ -23,7 +23,7 @@ from .contig_utils import (
     repair_contig_label,
 )
 
-SUPPORTED_GENOME_BUILDS = {"GRCh37", "GRCh38", "unknown"}
+SUPPORTED_GENOME_BUILDS = {"GRCh37", "GRCh38", "T2T-CHM13v2.0", "unknown"}
 VALID_ALLELE_OPS = {"identity", "swap", "flip", "flip_swap", "missing"}
 ALLELE_OP_COMPOSITION = {
     ("identity", "identity"): "identity",

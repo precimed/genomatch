@@ -41,7 +41,7 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
     env = {
         "MATCH_CONFIG": str(config),
         "MATCH_BCFTOOLS": bcftools,
-        "MATCH_REFERENCE_ACCESS_MODE": "BULK",
+        "MATCH_REFERENCE_ACCESS_MODE": "LEGACY",
     }
 
     source = tmp_path / "source.vtable"

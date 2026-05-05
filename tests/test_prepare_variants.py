@@ -1,10 +1,11 @@
+import json
 import os
 import stat
 from pathlib import Path
 
 import pytest
 
-from utils import read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config
+from utils import read_tsv, run_py, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def assert_wrote(result, path: Path) -> None:
@@ -89,29 +90,90 @@ def write_sumstats_id_lookup_metadata(path: Path) -> None:
     )
 
 
+def write_known_sumstats_inputs(tmp_path: Path, *, genome_build: str) -> tuple[Path, Path, Path]:
+    source = tmp_path / "study.tsv"
+    metadata = tmp_path / "study.yaml"
+    id_vtable = tmp_path / "lookup.vtable"
+    write_lines(source, ["SNP\tEA\tOA\tBETA", "rs1\tG\tA\t0.5"])
+    write_sumstats_id_lookup_metadata(metadata)
+    write_lines(id_vtable, ["1\t1\trs1\tG\tA"])
+    write_json(
+        id_vtable.with_name(id_vtable.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": genome_build, "contig_naming": "ncbi"},
+    )
+    return source, metadata, id_vtable
+
+
+def test_prepare_variants_argparse_rejects_invalid_dst_build(tmp_path):
+    result = run_py(
+        "prepare_variants.py",
+        "--input",
+        tmp_path / "source.bim",
+        "--input-format",
+        "bim",
+        "--output",
+        tmp_path / "prepared",
+        "--dst-build",
+        "hg38",
+    )
+
+    assert result.returncode != 0
+    assert "invalid choice: 'hg38'" in result.stderr
+
+
+def test_prepare_variants_help_lists_dst_build_choices():
+    result = run_py("prepare_variants.py", "--help")
+
+    assert result.returncode == 0
+    help_text = " ".join(result.stdout.split())
+    assert "Destination genome build (GRCh37, GRCh38, T2T-CHM13v2.0; default: GRCh38)" in help_text
+
+
 def base_env(
     tmp_path: Path,
     *,
     grch37_sequences: dict[str, str],
     grch38_sequences: dict[str, str],
+    t2t_sequences: dict[str, str] | None = None,
     chain_lines_37_to_38: list[str] | None = None,
+    chain_lines_37_to_t2t: list[str] | None = None,
+    chain_lines_38_to_t2t: list[str] | None = None,
+    chain_lines_t2t_to_37: list[str] | None = None,
+    chain_lines_t2t_to_38: list[str] | None = None,
 ) -> dict[str, str]:
     grch37 = tmp_path / "hg19.fa"
     grch38 = tmp_path / "hg38.fa"
+    t2t = tmp_path / "chm13v2.fa"
     chain37to38 = tmp_path / "37to38.chain"
     chain38to37 = tmp_path / "38to37.chain"
+    chain37tot2t = tmp_path / "37tot2t.chain"
+    chain38tot2t = tmp_path / "38tot2t.chain"
+    chaint2tto37 = tmp_path / "t2tto37.chain"
+    chaint2tto38 = tmp_path / "t2tto38.chain"
     config = tmp_path / "config.yaml"
     fake_bcftools = tmp_path / "bcftools"
-    write_fasta(grch37, grch37_sequences)
-    write_fasta(grch38, grch38_sequences)
+    write_primary_ucsc_fasta(grch37, grch37_sequences)
+    write_primary_ucsc_fasta(grch38, grch38_sequences)
+    if t2t_sequences is not None:
+        write_primary_ucsc_fasta(t2t, t2t_sequences)
     write_lines(chain37to38, chain_lines_37_to_38 or ["chr1\t1\tchr1\t3", "chr1\t2\tchr1\t4", "chr2\t2\tchr2\t5"])
     write_lines(chain38to37, ["chr1\t3\tchr1\t1", "chr1\t4\tchr1\t2", "chr2\t5\tchr2\t2"])
+    if t2t_sequences is not None:
+        write_lines(chain37tot2t, chain_lines_37_to_t2t or ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t6"])
+        write_lines(chain38tot2t, chain_lines_38_to_t2t or ["chr1\t1\tchr1\t7", "chr1\t2\tchr1\t8"])
+        write_lines(chaint2tto37, chain_lines_t2t_to_37 or ["chr1\t1\tchr1\t5", "chr1\t2\tchr1\t6"])
+        write_lines(chaint2tto38, chain_lines_t2t_to_38 or ["chr1\t1\tchr1\t7", "chr1\t2\tchr1\t8"])
     write_match_config(
         config,
         grch37_ucsc_fasta=grch37,
         grch38_ucsc_fasta=grch38,
+        t2t_chm13v2_ucsc_fasta=t2t if t2t_sequences is not None else None,
         chain37to38=chain37to38,
         chain38to37=chain38to37,
+        chain37tot2t=chain37tot2t if t2t_sequences is not None else None,
+        chain38tot2t=chain38tot2t if t2t_sequences is not None else None,
+        chaint2tto37=chaint2tto37 if t2t_sequences is not None else None,
+        chaint2tto38=chaint2tto38 if t2t_sequences is not None else None,
     )
     write_fake_bcftools(fake_bcftools)
     return {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(fake_bcftools)}
@@ -344,6 +406,87 @@ def test_prepare_variants_deferred_plink_splitx_runs_after_liftover(tmp_path):
         ["1", "3", "rs1", "G", "A", ".", "0", "identity"],
     ]
     assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.splitx.vmap")
+
+
+def test_prepare_variants_fresh_known_build_skips_guess_build(tmp_path):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "A" * 10},
+        grch38_sequences={"chr1": "A" * 10},
+    )
+    source, metadata, id_vtable = write_known_sumstats_inputs(tmp_path, genome_build="GRCh37")
+    output = tmp_path / "prepared"
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input",
+        source,
+        "--input-format",
+        "sumstats",
+        "--sumstats-metadata",
+        metadata,
+        "--id-vtable",
+        id_vtable,
+        "--output",
+        output,
+        "--dst-build",
+        "GRCh37",
+        "--no-norm-indels",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "skipping guess_build.py" in result.stderr
+    command_lines = [line for line in result.stderr.splitlines() if "+ " in line]
+    assert not any("guess_build.py" in line for line in command_lines)
+    assert read_tsv(tmp_path / "prepared.vmap") == [["1", "1", "rs1", "G", "A", ".", "0", "identity"]]
+
+
+@pytest.mark.parametrize(
+    ("source_build", "dst_build", "expected_pos"),
+    [
+        ("GRCh37", "T2T-CHM13v2.0", "5"),
+        ("GRCh38", "T2T-CHM13v2.0", "7"),
+        ("T2T-CHM13v2.0", "GRCh37", "5"),
+    ],
+)
+def test_prepare_variants_t2t_end_to_end_planning(tmp_path, source_build, dst_build, expected_pos):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "A" * 10},
+        grch38_sequences={"chr1": "A" * 10},
+        t2t_sequences={"chr1": "A" * 10},
+    )
+    source, metadata, id_vtable = write_known_sumstats_inputs(tmp_path, genome_build=source_build)
+    output = tmp_path / "prepared"
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input",
+        source,
+        "--input-format",
+        "sumstats",
+        "--sumstats-metadata",
+        metadata,
+        "--id-vtable",
+        id_vtable,
+        "--output",
+        output,
+        "--dst-build",
+        dst_build,
+        "--no-norm-indels",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "skipping guess_build.py" in result.stderr
+    command_lines = [line for line in result.stderr.splitlines() if "+ " in line]
+    restrict_idx = next(idx for idx, line in enumerate(command_lines) if "restrict_build_compatible.py" in line)
+    liftover_idx = next(idx for idx, line in enumerate(command_lines) if "liftover_build.py" in line)
+    assert restrict_idx < liftover_idx
+    assert read_tsv(tmp_path / "prepared.vmap") == [["1", expected_pos, "rs1", "G", "A", ".", "0", "identity"]]
+    meta = json.loads((tmp_path / "prepared.vmap.meta.json").read_text(encoding="utf-8"))
+    assert meta["target"]["genome_build"] == dst_build
 
 
 @pytest.mark.parametrize(

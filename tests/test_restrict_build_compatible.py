@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from genomatch.vmap_restrict_build_compatible import run_bcftools_norm_check_ref_x_workaround
-from utils import read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config
+from utils import read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def write_fake_norm_bcftools(path, behavior_path, log_path):
@@ -66,16 +66,31 @@ def write_fake_norm_bcftools(path, behavior_path, log_path):
     os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR)
 
 
-def restrict_env_with_fake_norm(tmp_path, *, behavior, grch37_sequence="AAAAAA", grch38_sequence="CCCCCC"):
+def restrict_env_with_fake_norm(
+    tmp_path,
+    *,
+    behavior,
+    grch37_sequence="AAAAAA",
+    grch38_sequence="CCCCCC",
+    t2t_sequence=None,
+):
     grch37 = tmp_path / "GRCh37.ucsc.fa"
     grch38 = tmp_path / "GRCh38.ucsc.fa"
+    t2t = tmp_path / "T2T-CHM13v2.0.ucsc.fa"
     config = tmp_path / "config.yaml"
     bcftools = tmp_path / "bcftools"
     behavior_path = tmp_path / "bcftools_behavior.json"
     log_path = tmp_path / "bcftools.log"
-    write_fasta(grch37, {"chr1": grch37_sequence})
-    write_fasta(grch38, {"chr1": grch38_sequence})
-    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_primary_ucsc_fasta(grch37, {"chr1": grch37_sequence})
+    write_primary_ucsc_fasta(grch38, {"chr1": grch38_sequence})
+    if t2t_sequence is not None:
+        write_primary_ucsc_fasta(t2t, {"chr1": t2t_sequence})
+    write_match_config(
+        config,
+        grch37_ucsc_fasta=grch37,
+        grch38_ucsc_fasta=grch38,
+        t2t_chm13v2_ucsc_fasta=t2t if t2t_sequence is not None else None,
+    )
     behavior_path.write_text(json.dumps(behavior, sort_keys=True), encoding="utf-8")
     write_fake_norm_bcftools(bcftools, behavior_path, log_path)
     env = {"MATCH_CONFIG": str(config), "MATCH_BCFTOOLS": str(bcftools)}
@@ -157,8 +172,8 @@ def test_restrict_build_compatible_vmap_uses_config_and_preserves_provenance(tmp
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "AGT"})
-    write_fasta(grch38, {"chr1": "CCC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AGT"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CCC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(
         source,
@@ -203,14 +218,64 @@ def test_restrict_build_compatible_vmap_uses_config_and_preserves_provenance(tmp
     assert meta["target"]["genome_build"] == "GRCh37"
 
 
+def test_restrict_build_compatible_accepts_t2t_build(tmp_path):
+    env, _log_path = restrict_env_with_fake_norm(tmp_path, behavior={}, t2t_sequence="A")
+    source = tmp_path / "base.vmap"
+    out = tmp_path / "restricted.vmap"
+    write_lines(source, ["1\t1\tt1\tG\tA\tshardA\t0\tidentity"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py_with_env(
+        "restrict_build_compatible.py",
+        env,
+        "--source",
+        source,
+        "--output",
+        out,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "1", "t1", "G", "A", "shardA", "0", "identity"]]
+    summary = json.loads(result.stdout)
+    assert summary["genome_build"] == "T2T-CHM13v2.0"
+    meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["target"]["genome_build"] == "T2T-CHM13v2.0"
+
+
+def test_restrict_build_compatible_t2t_fails_when_fasta_is_absent(tmp_path):
+    env, _log_path = restrict_env_with_fake_norm(tmp_path, behavior={})
+    source = tmp_path / "base.vmap"
+    out = tmp_path / "restricted.vmap"
+    write_lines(source, ["1\t1\tt1\tG\tA\tshardA\t0\tidentity"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py_with_env(
+        "restrict_build_compatible.py",
+        env,
+        "--source",
+        source,
+        "--output",
+        out,
+    )
+
+    assert result.returncode != 0
+    assert "config has no builds.T2T-CHM13v2.0.ucsc_fasta entry" in result.stderr
+
+
 def test_restrict_build_compatible_sort_sorts_retained_rows_into_declared_coordinate_order(tmp_path):
     grch37 = tmp_path / "GRCh37.ucsc.fa"
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "TA"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "TA"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(
         source,
@@ -247,8 +312,8 @@ def test_restrict_build_compatible_vtable_emits_vtable_and_keeps_reference_ancho
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tAT", "1\t2\tt2\tAT\tCG"])
     write_json(
@@ -274,8 +339,8 @@ def test_restrict_build_compatible_vtable_can_flip_reference_anchored_non_snv(tm
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tT\tCG"])
     write_json(
@@ -302,8 +367,8 @@ def test_restrict_build_compatible_requires_known_build(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tC"])
     write_json(
@@ -329,8 +394,8 @@ def test_restrict_build_compatible_drops_rows_where_both_alleles_are_longer_than
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tAT\tCG"])
     write_json(
@@ -357,8 +422,8 @@ def test_restrict_build_compatible_accepts_ucsc_named_input(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["chr1\t1\tt1\tA\tC", "chr1\t2\tt2\tT\tC"])
     write_json(
@@ -383,8 +448,8 @@ def test_restrict_build_compatible_vmap_keeps_reference_second_rows_unchanged(tm
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "A"})
-    write_fasta(grch38, {"chr1": "C"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tG\tA\tshardA\t0\tidentity"])
     write_json(
@@ -411,8 +476,8 @@ def test_restrict_build_compatible_vmap_swaps_when_reference_is_in_a1(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "A"})
-    write_fasta(grch38, {"chr1": "C"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tG\tshardA\t0\tidentity"])
     write_json(
@@ -439,8 +504,8 @@ def test_restrict_build_compatible_vmap_can_flip_and_swap_to_reference_in_a2(tmp
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "A"})
-    write_fasta(grch38, {"chr1": "C"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tT\tC\tshardA\t0\tidentity"])
     write_json(
@@ -467,8 +532,8 @@ def test_restrict_build_compatible_vmap_drops_duplicate_targets_to_qc(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "A"})
-    write_fasta(grch38, {"chr1": "C"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(
         source,
@@ -507,8 +572,8 @@ def test_restrict_build_compatible_rejects_unknown_contigs(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["unknown\t1\tt1\tA\tC"])
     write_json(
@@ -534,8 +599,8 @@ def test_restrict_build_compatible_rejects_rows_inconsistent_with_declared_conti
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["chr1\t1\tt1\tA\tC"])
     write_json(
@@ -575,7 +640,7 @@ def test_restrict_build_compatible_fails_on_missing_config_section(tmp_path):
         out,
     )
     assert result.returncode != 0
-    assert "references" in result.stderr
+    assert "legacy match config shape" in result.stderr
 
 
 def test_restrict_build_compatible_fails_on_missing_fasta_index(tmp_path):
@@ -585,7 +650,7 @@ def test_restrict_build_compatible_fails_on_missing_fasta_index(tmp_path):
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
     grch37.write_text(">chr1\nAG\n", encoding="utf-8")
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tC"])
     write_json(
@@ -612,15 +677,12 @@ def test_restrict_build_compatible_fails_on_bad_relative_fasta_path(tmp_path):
     config.write_text(
         "\n".join(
             [
-                "references:",
-                "  ucsc:",
-                "    GRCh37:",
-                "      fasta: missing/GRCh37.fa",
-                "    GRCh38:",
-                "      fasta: missing/GRCh38.fa",
-                "chain:",
-                "  hg19ToHg38: missing.chain",
-                "  hg38ToHg19: missing.chain",
+                "builds:",
+                "  GRCh37:",
+                "    ucsc_fasta: missing/GRCh37.fa",
+                "  GRCh38:",
+                "    ucsc_fasta: missing/GRCh38.fa",
+                "liftover: []",
             ]
         )
         + "\n",
@@ -641,7 +703,7 @@ def test_restrict_build_compatible_fails_on_bad_relative_fasta_path(tmp_path):
         out,
     )
     assert result.returncode != 0
-    assert "internal ucsc reference fasta" in result.stderr.lower()
+    assert "builds.grch37.ucsc_fasta" in result.stderr.lower()
 
 
 def test_restrict_build_compatible_fails_on_non_acgt_alleles(tmp_path):
@@ -650,8 +712,8 @@ def test_restrict_build_compatible_fails_on_non_acgt_alleles(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tN"])
     write_json(
@@ -685,8 +747,8 @@ def test_restrict_build_compatible_accepts_plink_family_input(tmp_path, contig_n
     source = tmp_path / f"base.{contig_naming}.vtable"
     out = tmp_path / f"restricted.{contig_naming}.vtable"
     prefix = "N" * 60000
-    write_fasta(grch37, {"chrX": prefix + "AC"})
-    write_fasta(grch38, {"chrX": prefix + "TG"})
+    write_primary_ucsc_fasta(grch37, {"chrX": prefix + "AC"})
+    write_primary_ucsc_fasta(grch38, {"chrX": prefix + "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, [f"{chrom}\t{pos}\tt1\tA\tC"])
     write_json(
@@ -785,6 +847,41 @@ def test_restrict_build_compatible_norm_indels_normalizes_one_multibase_branch(t
     assert read_tsv(out) == [["1", "1", "t1", "A", "AA", "shardA", "5", "swap"]]
 
 
+def test_restrict_build_compatible_norm_indels_accepts_t2t_build(tmp_path):
+    env, log_path = restrict_env_with_fake_norm(
+        tmp_path,
+        behavior={
+            "branch2_row0": {
+                "records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}],
+            }
+        },
+        t2t_sequence="AAAAAA",
+    )
+    source = tmp_path / "base.vmap"
+    out = tmp_path / "restricted.vmap"
+    write_lines(source, ["1\t2\tt1\tA\tAT\tshardA\t5\tidentity"])
+    write_json(
+        source.with_name(source.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py_with_env(
+        "restrict_build_compatible.py",
+        env,
+        "--source",
+        source,
+        "--output",
+        out,
+        "--norm-indels",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "-c e" in log_path.read_text(encoding="utf-8")
+    assert read_tsv(out) == [["1", "1", "t1", "A", "AA", "shardA", "5", "swap"]]
+    summary = json.loads(result.stdout)
+    assert summary["genome_build"] == "T2T-CHM13v2.0"
+
+
 def test_restrict_build_compatible_norm_indels_drops_rows_when_ploidy_class_changes(tmp_path):
     grch37 = tmp_path / "GRCh37.ucsc.fa"
     grch38 = tmp_path / "GRCh38.ucsc.fa"
@@ -792,8 +889,8 @@ def test_restrict_build_compatible_norm_indels_drops_rows_when_ploidy_class_chan
     bcftools = tmp_path / "bcftools"
     behavior_path = tmp_path / "bcftools_behavior.json"
     log_path = tmp_path / "bcftools.log"
-    write_fasta(grch37, {"chrX": "A" * 60001})
-    write_fasta(grch38, {"chrX": "C" * 60001})
+    write_primary_ucsc_fasta(grch37, {"chrX": "A" * 60001})
+    write_primary_ucsc_fasta(grch38, {"chrX": "C" * 60001})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     behavior_path.write_text(
         json.dumps(
@@ -1125,8 +1222,8 @@ def test_restrict_build_compatible_norm_indels_fails_when_bcftools_is_missing(tm
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AAAAAA"})
-    write_fasta(grch38, {"chr1": "CCCCCC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AAAAAA"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CCCCCC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t2\tt1\tA\tAT"])
     write_json(
@@ -1179,8 +1276,8 @@ def test_restrict_build_compatible_reference_access_modes_are_consistent_and_def
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
-    write_fasta(grch37, {"chr1": "AGT"})
-    write_fasta(grch38, {"chr1": "CCC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AGT"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CCC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(
         source,
@@ -1233,8 +1330,8 @@ def test_restrict_build_compatible_drop_duplicates_requires_sort(tmp_path):
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "A"})
-    write_fasta(grch38, {"chr1": "C"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tG\tsh\t0\tidentity"])
     write_json(
@@ -1261,8 +1358,8 @@ def test_restrict_build_compatible_drop_duplicates_vmap_sorts_and_passes_through
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(
         source,
@@ -1301,8 +1398,8 @@ def test_restrict_build_compatible_drop_duplicates_vtable_retains_first_and_no_q
     config = tmp_path / "config.yaml"
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
-    write_fasta(grch37, {"chr1": "AG"})
-    write_fasta(grch38, {"chr1": "CC"})
+    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
+    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(
         source,

@@ -12,7 +12,7 @@ This file defines the expected ploidy model used by coordinate-changing variant 
 
 - Expected ploidy is derived from target `chrom`, target `pos`, target `genome_build`, and sample sex.
 - For payload application, sample sex is taken from the resolved output sample axis, whether that comes from propagated source `.fam` / `.psam` metadata or an explicit target sample file.
-- The authoritative source of build-specific haploid-region definitions is [human_haploid_regions_grch37_grch38.json](../schemas/human_haploid_regions_grch37_grch38.json).
+- The authoritative source of build-specific haploid-region definitions is [human_haploid_regions.json](../src/genomatch/schemas/human_haploid_regions.json).
 - The model must not depend on literal contig-naming strings such as `ncbi`, `ucsc`, `plink`, or `plink_splitx`; tools must normalize contig interpretation internally before applying ploidy logic.
 
 For one retained row, the canonical row-level ploidy descriptor is the expected ploidy pair:
