@@ -13,7 +13,7 @@ from utils import REPO_ROOT, ensure_primary_ucsc_fasta_fixture, run_cmd, write_m
 
 
 REF_DIR = REPO_ROOT / "ref"
-GRCH37_UCSC_SOURCE_FASTA = REF_DIR / "ucsc" / "GRCh37" / "hg19.p13.plusMT.no_alt_analysis_set.fa"
+GRCH37_UCSC_SOURCE_FASTA = REF_DIR / "ucsc" / "GRCh37" / "hg19.fa"
 GRCH38_UCSC_SOURCE_FASTA = REF_DIR / "ucsc" / "GRCh38" / "GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
 CHAIN_37_TO_38 = REF_DIR / "chain" / "hg19ToHg38.over.chain.gz"
 CHAIN_38_TO_37 = REF_DIR / "chain" / "hg38ToHg19.over.chain.gz"

@@ -1,6 +1,6 @@
 builds:
   GRCh37:
-    ucsc_fasta: ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
+    ucsc_fasta: ucsc/GRCh37/hg19.fa
   GRCh38:
     ucsc_fasta: ucsc/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
   T2T-CHM13v2.0:

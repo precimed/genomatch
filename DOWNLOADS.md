@@ -51,14 +51,17 @@ These are the required FASTA files for the current implementation.
 
 ### GRCh37 UCSC-style FASTA
 
-The recommended GRCh37 asset is UCSC's `hg19.p13.plusMT.no_alt_analysis_set.fa.gz`. This is the closest GRCh37 analogue to the GRCh38 `no_alt_analysis_set` file and is the correct asset for the current toolkit's internal GRCh37 reference path.
+The recommended GRCh37 asset is UCSC's full `hg19.fa.gz`. It uses UCSC-style
+contig labels, including `chrM`, and matches the UCSC hg19 chain files used by
+the toolkit. The toolkit refers to this reference as `GRCh37` metadata because
+hg19 is the UCSC naming surface for GRCh37.
 
 ```bash
 wget -O- \
-  https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/analysisSet/hg19.p13.plusMT.no_alt_analysis_set.fa.gz \
-  | gzip -d > ref/ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
+  https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz \
+  | gzip -d > ref/ucsc/GRCh37/hg19.fa
 
-samtools faidx ref/ucsc/GRCh37/hg19.p13.plusMT.no_alt_analysis_set.fa
+samtools faidx ref/ucsc/GRCh37/hg19.fa
 ```
 
 ### GRCh38 UCSC-style FASTA
