@@ -415,6 +415,32 @@ def test_import_sumstats_uses_metadata_contract_and_single_file_provenance(tmp_p
     assert meta_payload["target"]["contig_naming"] == "ncbi"
 
 
+def test_import_sumstats_resolves_metadata_columns_with_padded_headers(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["CHR \t POS \t SNP \t EA \t OA \t BETA ", "1\t100\trs1\tA\tG\t0.2"])
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+
+def test_import_sumstats_rejects_ambiguous_padded_header_lookup(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["CHR \t CHR\tPOS\tEA\tOA", "1\t2\t100\tA\tG"])
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+
+    assert result.returncode != 0
+    assert "ambiguous after trimming header whitespace" in result.stderr
+
+
 def test_import_sumstats_normalizes_lowercase_alleles_to_uppercase(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"

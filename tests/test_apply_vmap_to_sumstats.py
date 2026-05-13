@@ -37,6 +37,22 @@ def test_apply_vmap_to_sumstats_target_order_and_swap_effects(tmp_path):
     )
 
 
+def test_apply_vmap_to_sumstats_resolves_padded_headers_for_legacy_output(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(sumstats, ["CHR \t POS \t EA \t OA \t BETA ", "1\t100\tA\tG\t0.5"])
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
+    write_lines(vmap, ["2\t250\tt1\tT\tC\t.\t0\tswap"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == "CHR \t POS \t EA \t OA \t BETA \n2\t250\tT\tC\t-0.5\n"
+
+
 def test_apply_vmap_to_sumstats_appends_missing_variant_columns(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"

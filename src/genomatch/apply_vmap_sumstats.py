@@ -22,6 +22,7 @@ from .sumstats_utils import (
     open_text,
     read_sumstats_table,
     resolve_sumstats_input_path,
+    _lookup_header_index,
     resolve_column,
     resolve_effect_columns,
     rewrite_variant_fields,
@@ -154,11 +155,7 @@ def metadata_column_name(metadata: Dict[str, object], key: str) -> Optional[str]
 def output_column_index(header: List[str], column_name: Optional[str]) -> Optional[int]:
     if column_name is None:
         return None
-    by_name = {name: idx for idx, name in enumerate(header)}
-    by_lower = {name.lower(): idx for idx, name in enumerate(header)}
-    if column_name in by_name:
-        return by_name[column_name]
-    return by_lower.get(column_name.lower())
+    return _lookup_header_index(header, column_name, label=column_name)
 
 
 def load_sumstats_rows_single_file(

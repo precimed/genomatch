@@ -198,6 +198,29 @@ def build_sumstats_read_csv_kwargs(
     return kwargs
 
 
+def _lookup_header_index(header: List[str], raw: str, *, label: str) -> Optional[int]:
+    by_name = {name: idx for idx, name in enumerate(header)}
+    by_lower = {name.lower(): idx for idx, name in enumerate(header)}
+    if raw in by_name:
+        return by_name[raw]
+    raw_lower = raw.lower()
+    if raw_lower in by_lower:
+        return by_lower[raw_lower]
+
+    stripped_matches = [idx for idx, name in enumerate(header) if name.strip() == raw]
+    if len(stripped_matches) == 1:
+        return stripped_matches[0]
+    if len(stripped_matches) > 1:
+        raise ValueError(f"column mapping for {label} is ambiguous after trimming header whitespace: {raw}")
+
+    stripped_lower_matches = [idx for idx, name in enumerate(header) if name.strip().lower() == raw_lower]
+    if len(stripped_lower_matches) == 1:
+        return stripped_lower_matches[0]
+    if len(stripped_lower_matches) > 1:
+        raise ValueError(f"column mapping for {label} is ambiguous after trimming header whitespace: {raw}")
+    return None
+
+
 def resolve_column(header: List[str], value: object, label: str, *, required: bool = False) -> Optional[int]:
     if value is None:
         if required:
@@ -210,12 +233,9 @@ def resolve_column(header: List[str], value: object, label: str, *, required: bo
         if required:
             raise ValueError(f"missing required column mapping: {label}")
         return None
-    by_name = {name: idx for idx, name in enumerate(header)}
-    by_lower = {name.lower(): idx for idx, name in enumerate(header)}
-    if raw in by_name:
-        return by_name[raw]
-    if raw.lower() in by_lower:
-        return by_lower[raw.lower()]
+    idx = _lookup_header_index(header, raw, label=label)
+    if idx is not None:
+        return idx
     raise ValueError(f"column not found for {label}: {raw}")
 
 
