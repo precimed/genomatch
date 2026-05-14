@@ -17,7 +17,7 @@ from .sample_axis_utils import (
     require_psam_fid_presence_consistent,
     sex_to_label,
 )
-from .vtable_utils import read_vmap
+from .tabular_rows import VMapRowsTable
 from .workflow_wrapper_utils import (
     delete_bfile_outputs,
     delete_pfile_outputs,
@@ -99,10 +99,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def require_supported_args(args: argparse.Namespace) -> None:
+def require_supported_args(args: argparse.Namespace) -> VMapRowsTable:
     if not str(args.vmap).endswith(".vmap"):
         raise ValueError("--vmap must point to a .vmap")
-    read_mapped_vmap_table(Path(args.vmap))
+    vmap_table = read_mapped_vmap_table(Path(args.vmap))
     if args.input_format in {"sumstats", "sumstats-clean"}:
         if args.target_fam:
             raise ValueError("--target-fam is supported only for --input-format=bfile")
@@ -140,6 +140,7 @@ def require_supported_args(args: argparse.Namespace) -> None:
                 raise ValueError("--target-fam is supported only for --input-format=bfile")
         if args.sample_axis is not None and (args.target_fam or args.target_psam):
             raise ValueError("--sample-axis cannot be combined with --target-fam or --target-psam")
+    return vmap_table
 
 
 def bfile_source_prefix(input_path: str) -> str:
@@ -255,14 +256,20 @@ def discover_source_shards(source_prefix_arg: str, suffixes: tuple[str, ...]) ->
     return discovered
 
 
-def build_union_target_sample(args: argparse.Namespace, prefix: Path, *, allow_overwrite: bool) -> Path | None:
+def build_union_target_sample(
+    args: argparse.Namespace,
+    prefix: Path,
+    vmap_table: VMapRowsTable,
+    *,
+    allow_overwrite: bool,
+) -> Path | None:
     if args.sample_axis != "union":
         return None
     source_prefix = source_prefix_for_args(args)
     if "@" not in source_prefix:
         logger.info("%s: --sample-axis union is a no-op for non-sharded source input", WRAPPER_NAME)
         return None
-    vmap_rows = filtered_vmap_rows(read_vmap(Path(args.vmap)), only_mapped_target=True)
+    vmap_rows = filtered_vmap_rows(vmap_table.to_rows(), only_mapped_target=True)
     referenced_shards = sorted(build_needed_source_indices(vmap_rows))
     if len(referenced_shards) <= 1:
         logger.info(
@@ -392,7 +399,7 @@ def delete_wrapper_outputs(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parse_args()
-    require_supported_args(args)
+    vmap_table = require_supported_args(args)
 
     prefix = resolved_prefix(args)
 
@@ -408,7 +415,7 @@ def main() -> int:
             )
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    synthesized_path = build_union_target_sample(args, prefix, allow_overwrite=args.force)
+    synthesized_path = build_union_target_sample(args, prefix, vmap_table, allow_overwrite=args.force)
     if synthesized_path is not None:
         if args.input_format == "bfile":
             args.target_fam = str(synthesized_path)
