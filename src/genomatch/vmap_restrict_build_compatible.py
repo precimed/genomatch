@@ -24,6 +24,7 @@ from .vtable_utils import (
     convert_contig_label,
     duplicate_target_rows_mask_table,
     load_variant_object_tables,
+    metadata_with_variants_count,
     normalize_contig_for_reference,
     require_contig_naming,
     require_table_matches_contig_naming,
@@ -977,7 +978,7 @@ def main() -> int:
             qc_output_path.unlink()
         write_vtable_table(output_path, VariantRowsTable.from_frame(out_vtable_frame, copy=False), assume_validated=True)
         output_row_count = len(out_vtable_frame)
-    write_metadata(output_path, dict(loaded.raw_metadata))
+    write_metadata(output_path, metadata_with_variants_count(loaded.raw_metadata, output_row_count))
     summary = {
         "input": str(source_path),
         "output": str(output_path),

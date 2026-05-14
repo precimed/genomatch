@@ -12,6 +12,8 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - For multi-base alleles, `flip_swap` means apply that same reverse-complement operation and then swap `a1` and `a2`
 - Build mismatch is an error; no implicit liftover is performed
 - `guess_build.py` is the only build-guessing entrypoint
+- Exact set tools may use object metadata `variants_count` to choose memory-efficient scan order, but this is an implementation detail and must not change documented output order, ID policy, provenance, or emitted object type.
+- If any input to `intersect_variants.py`, `restrict_vmap.py`, or `union_variants.py` lacks `variants_count`, the tool must warn and fall back to user-declared input order for its internal scan plan.
 - `.vmap` provenance is `source_shard + source_index`, where `source_index` is a non-negative shard-local row index and `source_shard` is stored exactly as emitted by the provenance-bearing source step
 - Declared coordinate order is defined in [core-objects.md](core-objects.md) and is reused by both `sort_variants.py` and `liftover_build.py`
 
@@ -36,6 +38,7 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - output is mapped-only `.vmap`
 - `restrict_vmap.py` does not compute, infer, or change `allele_op`
 - `restrict_vmap.py` does not provide a sort mode; users who need sorted output should sort the source `.vmap` before restriction
+- for memory efficiency, `restrict_vmap.py` may intersect smaller restriction inputs before scanning the source `.vmap`; if the source `.vmap` is not the smallest object, the implementation may continue reducing candidate membership until it reaches the source, then introduce the source `.vmap` IDs, order, provenance, and `allele_op`, and continue filtering against remaining restriction inputs
 
 ## Intersections
 
@@ -50,6 +53,7 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - `intersect_variants.py` always emits `.vtable`
 - input `.vmap` provenance and `allele_op` are ignored and dropped
 - `intersect_variants.py` does not provide a sort mode; users who need sorted intersection output should sort the desired first input before intersection
+- for memory efficiency, `intersect_variants.py` may start candidate-key intersection from the smallest input, but output IDs and row order still come from the first CLI input
 
 ## Unions
 
@@ -59,8 +63,8 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - `union_variants.py` requires the same `genome_build` and the same `contig_naming` across all inputs
 - `union_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- duplicate exact rows are deduplicated by first occurrence across the full input stream, scanning inputs in CLI order and rows in file order
-- output IDs come from that first retained occurrence
-- after exact deduplication, `union_variants.py` emits declared coordinate order using the same sorting contract as `sort_variants.py`
-- stable ordering for ties is inherited from that declared-coordinate sort, so rows with the same declared contig and numeric position retain first-occurrence order
+- `union_variants.py` computes the provenance-free set union of exact target keys across all inputs
+- output IDs are target-derived `chrom:pos:a1:a2`, not copied from any particular input row
+- `union_variants.py` sorts the union by declared coordinate order using the same sorting contract as `sort_variants.py`, then emits one row per exact target key
 - `union_variants.py` emits `.vtable`
+- for memory efficiency, `union_variants.py` may use smaller inputs first for internal candidate aggregation; output remains the same source-agnostic target-key union in declared coordinate order

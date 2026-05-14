@@ -182,4 +182,7 @@ def test_sort_variants_preserves_metadata(tmp_path):
     result = run_py("sort_variants.py", "--input", source, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8")) == metadata
+    assert json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8")) == {
+        **metadata,
+        "variants_count": 2,
+    }

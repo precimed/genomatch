@@ -15,6 +15,7 @@ from .vtable_utils import (
     read_vmap_table,
     read_vtable_table,
     require_contig_naming,
+    validate_variants_count_if_present,
     validate_vmap_metadata,
     validate_vtable_metadata,
 )
@@ -29,6 +30,7 @@ class TargetObjectInfo:
     object_type: str
     target_metadata: dict
     raw_metadata: dict
+    variants_count: int | None
 
 
 def load_target_object_info(path: Path) -> TargetObjectInfo:
@@ -43,6 +45,7 @@ def load_target_object_info(path: Path) -> TargetObjectInfo:
                 **({"contig_naming": metadata["contig_naming"]} if "contig_naming" in metadata else {}),
             },
             raw_metadata=metadata,
+            variants_count=metadata.get("variants_count"),
         )
     if path.name.endswith(".vmap"):
         validate_vmap_metadata(metadata)
@@ -51,6 +54,7 @@ def load_target_object_info(path: Path) -> TargetObjectInfo:
             object_type="variant_map",
             target_metadata=dict(metadata["target"]),
             raw_metadata=metadata,
+            variants_count=metadata.get("variants_count"),
         )
     raise ValueError(f"unsupported variant object path: {path}")
 
@@ -146,3 +150,14 @@ def restrict_frame_to_membership_chunks(driver_frame: pd.DataFrame, restriction_
 
     retain_mask = driver_keys.isin(matched_keys)
     return driver_frame.loc[retain_mask].reset_index(drop=True), row_count
+
+
+def restrict_frame_to_membership_frame(driver_frame: pd.DataFrame, membership_frame: pd.DataFrame) -> pd.DataFrame:
+    driver_keys = exact_key_index(driver_frame)
+    membership_keys = exact_key_index(membership_frame)
+    retain_mask = driver_keys.isin(membership_keys)
+    return driver_frame.loc[retain_mask].reset_index(drop=True)
+
+
+def validate_loaded_row_count(info: TargetObjectInfo, observed_count: int) -> None:
+    validate_variants_count_if_present(info.path, info.raw_metadata, observed_count)

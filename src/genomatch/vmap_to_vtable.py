@@ -14,6 +14,7 @@ from .vtable_utils import (
     require_rows_match_contig_naming,
     validate_vmap_metadata,
     variant_rows_from_vmap_rows,
+    metadata_with_variants_count,
     write_metadata,
     write_vtable,
 )
@@ -44,10 +45,13 @@ def main() -> int:
     write_vtable(output_path, rows)
     write_metadata(
         output_path,
-        make_vtable_metadata(
-            genome_build=target_meta["genome_build"],
-            contig_naming=target_meta["contig_naming"],
-            provenance={"created_by": "convert_vmap_to_target.py", "derived_from": str(source_path)},
+        metadata_with_variants_count(
+            make_vtable_metadata(
+                genome_build=target_meta["genome_build"],
+                contig_naming=target_meta["contig_naming"],
+                provenance={"created_by": "convert_vmap_to_target.py", "derived_from": str(source_path)},
+            ),
+            len(rows),
         ),
     )
     logger.info("convert_vmap_to_target.py: wrote %s with %s rows", output_path, len(rows))

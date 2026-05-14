@@ -122,9 +122,15 @@ The following patterns are normative when applicable:
 - Large intermediate files must be placed under a user-controlled output or scratch prefix because HPC environments may have small or quota-limited `/tmp` partitions.
 
 1. Streaming set operations are allowed when first-input semantics are preserved:
-- `intersect_variants.py` may hold the first input in memory, stream later inputs, and intersect by per-input membership sets.
+- `intersect_variants.py` may choose its in-memory driver from the count-aware scan plan, which may be smaller than the first CLI input. When `variants_count` is missing from any input, the scan plan falls back to user-declared input order.
 - streaming must preserve first-input output order, first-input IDs, metadata validation, exact `chrom:pos:a1:a2` intersection semantics, and `.vtable` output.
 
 1. Streaming `.vmap` restriction is allowed when source semantics are preserved:
 - `restrict_vmap.py` may hold a restriction input in memory, stream later restriction inputs to compute the intersection of restriction keys, and replay or stream the source `.vmap` as needed.
 - streaming must preserve source `.vmap` output order, IDs, provenance, `allele_op`, metadata validation, exact `chrom:pos:a1:a2` restriction-by-intersection semantics, and `.vmap` output.
+
+1. Row-count metadata may guide set-operation planning:
+- `.vmap` and `.vtable` sidecars may provide `variants_count`, which implementations may use to start intersections, restrictions, or unions from smaller objects.
+- Missing `variants_count` must not break backward-compatible reads; `intersect_variants.py`, `restrict_vmap.py`, and `union_variants.py` must warn and fall back to user-declared input order.
+- Present `variants_count` may be validated when an object is fully scanned as part of the normal algorithm. Implementations must not add an extra full scan solely for validation, and streaming paths may skip validation when validation would complicate the data path.
+- Planning from smaller objects must preserve the public set-operation contracts for output order, ID policy, provenance, and emitted object type.

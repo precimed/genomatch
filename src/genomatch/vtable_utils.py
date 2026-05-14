@@ -182,6 +182,28 @@ def write_metadata(path: Path, metadata: Dict[str, object]) -> None:
         handle.write("\n")
 
 
+def metadata_with_variants_count(metadata: Dict[str, object], variants_count: int) -> Dict[str, object]:
+    result = dict(metadata)
+    result["variants_count"] = variants_count
+    return result
+
+
+def _validate_variants_count_metadata(metadata: Dict[str, object], *, label: str) -> None:
+    if "variants_count" not in metadata:
+        return
+    variants_count = metadata["variants_count"]
+    if isinstance(variants_count, bool) or not isinstance(variants_count, int) or variants_count < 0:
+        raise ValueError(f"{label} metadata variants_count must be a non-negative integer")
+
+
+def validate_variants_count_if_present(path: Path, metadata: Dict[str, object], observed_count: int) -> None:
+    variants_count = metadata.get("variants_count")
+    if variants_count is not None and variants_count != observed_count:
+        raise ValueError(
+            f"{path} metadata variants_count={variants_count} does not match observed row count {observed_count}"
+        )
+
+
 def validate_metadata_for_path(path: Path, metadata: Dict[str, object]) -> None:
     if path.name.endswith(".vtable"):
         validate_vtable_metadata(metadata)
@@ -195,6 +217,7 @@ def validate_metadata_for_path(path: Path, metadata: Dict[str, object]) -> None:
 def validate_vtable_metadata(metadata: Dict[str, object]) -> None:
     if metadata.get("object_type") != "variant_table":
         raise ValueError("vtable metadata must have object_type=variant_table")
+    _validate_variants_count_metadata(metadata, label="vtable")
     genome_build = metadata.get("genome_build")
     contig_naming = metadata.get("contig_naming")
     if genome_build not in SUPPORTED_GENOME_BUILDS:
@@ -206,6 +229,7 @@ def validate_vtable_metadata(metadata: Dict[str, object]) -> None:
 def validate_vmap_metadata(metadata: Dict[str, object]) -> None:
     if metadata.get("object_type") != "variant_map":
         raise ValueError("vmap metadata must have object_type=variant_map")
+    _validate_variants_count_metadata(metadata, label="vmap")
     target = metadata.get("target")
     if not isinstance(target, dict):
         raise ValueError("vmap metadata must define a target object")

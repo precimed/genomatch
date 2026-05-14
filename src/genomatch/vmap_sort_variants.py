@@ -11,6 +11,7 @@ from ._cli_utils import run_cli
 from .tabular_rows import VariantRowsTable, VMapRowsTable
 from .vtable_utils import (
     load_metadata,
+    metadata_with_variants_count,
     read_vmap_table,
     read_vtable_table,
     require_contig_naming,
@@ -101,7 +102,7 @@ def main() -> int:
         dropped = 0
 
     write_sorted_object(output_path, object_type=object_type, frame=sorted_frame)
-    write_metadata(output_path, dict(metadata))
+    write_metadata(output_path, metadata_with_variants_count(metadata, len(sorted_frame)))
     qc_path = output_path.with_name(output_path.name + ".qc.tsv")
     if qc_path.exists():
         qc_path.unlink()

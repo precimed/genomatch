@@ -65,7 +65,12 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert read_tsv(lifted) == expected_lifted_table_rows(entries)
     lifted_meta = json.loads(lifted.with_name(lifted.name + ".meta.json").read_text(encoding="utf-8"))
-    assert lifted_meta == {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"}
+    assert lifted_meta == {
+        "object_type": "variant_table",
+        "genome_build": "GRCh38",
+        "contig_naming": "ncbi",
+        "variants_count": len(entries),
+    }
     expected_qc = [["source_shard", "source_index", "source_id", "status"]]
     for idx, entry in enumerate(entries):
         expected_qc.append([".", str(idx), entry.rsid, "lifted"])

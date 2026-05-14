@@ -111,6 +111,7 @@ def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_ran
     assert metadata["object_type"] == "variant_map"
     assert metadata["target"]["genome_build"] == "GRCh37"
     assert metadata["derived_from"] == str(source_template)
+    assert metadata["variants_count"] == 4
 
 
 def test_prepare_variants_sharded_resume_noops_when_final_exists(tmp_path):

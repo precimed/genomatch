@@ -1,5 +1,10 @@
 import json
 
+import pandas as pd
+
+import genomatch.intersect_variants as intersect_module
+from genomatch.exact_set_utils import TargetObjectInfo
+from genomatch.tabular_rows import VariantRowsTable
 from utils import read_tsv, run_py, write_json, write_lines
 
 
@@ -18,6 +23,84 @@ def test_intersect_variants_preserves_first_input_order(tmp_path):
     assert f"loaded 3 variants from {first}" in result.stderr
     assert f"loaded 2 variants from {second}" in result.stderr
     assert f"after intersecting {second}, 2 variants remain" in result.stderr
+    assert "variants_count missing from metadata" in result.stderr
+    assert "using CLI input order" in result.stderr
+
+
+def test_intersect_variants_uses_count_order_but_preserves_first_output_order(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    write_lines(first, ["1\t300\tlast\tA\tC", "1\t100\tkeep\tA\tG", "1\t200\tdrop\tC\tT"])
+    write_lines(second, ["1\t100\tother\tA\tG"])
+    write_json(
+        first.with_name(first.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi", "variants_count": 3},
+    )
+    write_json(
+        second.with_name(second.name + ".meta.json"),
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi", "variants_count": 1},
+    )
+
+    result = run_py("intersect_variants.py", first, second, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "keep", "A", "G"]]
+    assert result.stderr.index(f"loaded 1 variants from {second}") < result.stderr.index(f"loaded 3 variants from {first}")
+    assert "variants_count missing from metadata" not in result.stderr
+
+
+def test_intersect_count_order_does_not_reread_first_input_when_it_is_driver(tmp_path, monkeypatch):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    first_frame = pd.DataFrame([["1", "100", "keep", "A", "G"]], columns=["chrom", "pos", "id", "a1", "a2"])
+    second_frame = pd.DataFrame(
+        [["1", "100", "other", "A", "G"], ["1", "200", "other2", "C", "T"]],
+        columns=["chrom", "pos", "id", "a1", "a2"],
+    )
+    frames = {first: first_frame, second: second_frame}
+    read_counts = {first: 0, second: 0}
+    infos = [
+        TargetObjectInfo(
+            path=first,
+            object_type="variant_table",
+            target_metadata={"genome_build": "GRCh37", "contig_naming": "ncbi"},
+            raw_metadata={
+                "object_type": "variant_table",
+                "genome_build": "GRCh37",
+                "contig_naming": "ncbi",
+                "variants_count": 1,
+            },
+            variants_count=1,
+        ),
+        TargetObjectInfo(
+            path=second,
+            object_type="variant_table",
+            target_metadata={"genome_build": "GRCh37", "contig_naming": "ncbi"},
+            raw_metadata={
+                "object_type": "variant_table",
+                "genome_build": "GRCh37",
+                "contig_naming": "ncbi",
+                "variants_count": 2,
+            },
+            variants_count=2,
+        ),
+    ]
+
+    def fake_read_target_table(path):
+        read_counts[path] += 1
+        return VariantRowsTable.from_frame(frames[path].copy(), copy=False)
+
+    def fake_restrict_frame_to_membership_chunks(frame, path):
+        return frame, len(frames[path])
+
+    monkeypatch.setattr(intersect_module, "read_target_table", fake_read_target_table)
+    monkeypatch.setattr(intersect_module, "restrict_frame_to_membership_chunks", fake_restrict_frame_to_membership_chunks)
+
+    result = intersect_module.intersect_count_order([first, second], infos)
+
+    assert read_counts[first] == 1
+    assert result.reset_index(drop=True).equals(first_frame)
 
 
 def test_intersect_variants_streams_later_input_by_full_input_membership(tmp_path):
@@ -291,7 +374,12 @@ def test_intersect_variants_first_vmap_output_metadata_is_vtable(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "100", "from_vmap", "A", "G"]]
     metadata = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert metadata == {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    assert metadata == {
+        "object_type": "variant_table",
+        "genome_build": "GRCh37",
+        "contig_naming": "ncbi",
+        "variants_count": 1,
+    }
 
 
 def test_intersect_variants_rejects_duplicate_first_vmap_target_keys(tmp_path):

@@ -32,6 +32,7 @@ def test_drop_strand_ambiguous_vtable_emits_vtable(tmp_path):
         "object_type": "variant_table",
         "genome_build": "GRCh37",
         "contig_naming": "ncbi",
+        "variants_count": 2,
     }
 
 

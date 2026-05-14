@@ -13,6 +13,7 @@ from .reference_utils import fetch_reference_bases, resolve_internal_reference_f
 from .vtable_utils import (
     VariantRow,
     load_variant_object,
+    metadata_with_variants_count,
     normalize_contig_for_reference,
     require_contig_naming,
     require_rows_match_contig_naming,
@@ -137,7 +138,7 @@ def main() -> int:
     sampled_rows = sample_rows_for_guess(rows, int(args.sample_rows))
     build_guess = guess_build(sampled_rows, contig_naming)
 
-    output_meta = dict(current_meta)
+    output_meta = metadata_with_variants_count(current_meta, len(rows))
     if loaded.object_type == "variant_map":
         target_meta = dict(output_meta["target"])
         metadata_can_change = args.force or target_meta.get("genome_build") == "unknown"

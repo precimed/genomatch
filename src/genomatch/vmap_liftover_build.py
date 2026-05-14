@@ -25,6 +25,7 @@ from .vtable_utils import (
     compose_allele_ops_series,
     convert_contig_label,
     load_variant_object_tables,
+    metadata_with_variants_count,
     normalize_chrom_label,
     require_contig_naming,
     require_table_matches_contig_naming,
@@ -565,7 +566,7 @@ def main() -> int:
             copy=False,
         )
         write_vtable_table(output_path, variant_table, assume_validated=True)
-    write_metadata(output_path, out_meta)
+    write_metadata(output_path, metadata_with_variants_count(out_meta, len(raw_rows_table)))
     write_vmap_status_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_rows)
     logger.info(
         "liftover_build.py: wrote %s with %s output rows and %s QC rows",

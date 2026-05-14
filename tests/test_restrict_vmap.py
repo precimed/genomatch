@@ -45,6 +45,37 @@ def test_restrict_vmap_preserves_source_order_ids_provenance_and_allele_op(tmp_p
         ["1", "100", "src1", "A", "G", ".", "0", "identity"],
         ["1", "200", "src2", "C", "T", ".", "1", "swap"],
     ]
+    assert "variants_count missing from metadata" in result.stderr
+    assert "using CLI input order" in result.stderr
+
+
+def test_restrict_vmap_uses_count_order_but_preserves_source_output_order(tmp_path):
+    source = tmp_path / "source.vmap"
+    restriction = tmp_path / "membership.vtable"
+    out = tmp_path / "out.vmap"
+    write_vmap(
+        source,
+        [
+            "1\t300\tsrc3\tA\tC\t.\t2\tflip",
+            "1\t100\tsrc1\tA\tG\t.\t0\tidentity",
+            "1\t200\tsrc2\tC\tT\t.\t1\tswap",
+        ],
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}, "variants_count": 3},
+    )
+    write_vtable(
+        restriction,
+        ["1\t100\tother1\tA\tG"],
+        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi", "variants_count": 1},
+    )
+
+    result = run_py("restrict_vmap.py", source, restriction, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "src1", "A", "G", ".", "0", "identity"]]
+    assert result.stderr.index(f"loaded 1 restriction variants from {restriction}") < result.stderr.index(
+        f"loaded 3 source variants from {source}"
+    )
+    assert "variants_count missing from metadata" not in result.stderr
 
 
 def test_restrict_vmap_ignores_restriction_vmap_provenance(tmp_path):

@@ -15,6 +15,7 @@ from .vtable_utils import (
     VariantRow,
     canonical_contig_from_label,
     load_variant_object,
+    metadata_with_variants_count,
     repair_contig_label,
     require_contig_naming,
     require_rows_match_contig_naming,
@@ -147,7 +148,7 @@ def write_variant_object_like_input(
         write_vtable(output_path, rows)  # type: ignore[arg-type]
     else:
         write_vmap(output_path, rows)  # type: ignore[arg-type]
-    write_metadata(output_path, metadata)
+    write_metadata(output_path, metadata_with_variants_count(metadata, len(rows)))
     if not preserve_qc and qc_path.exists():
         qc_path.unlink()
 

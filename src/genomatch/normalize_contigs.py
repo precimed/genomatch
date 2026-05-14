@@ -16,6 +16,7 @@ from .vtable_utils import (
     VariantRowsTable,
     duplicate_target_rows_mask_table,
     load_variant_object_tables,
+    metadata_with_variants_count,
     write_metadata,
     write_vmap_status_qc,
     write_vmap_table,
@@ -72,7 +73,7 @@ def main() -> int:
         write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
     else:
         write_vtable_table(output_path, VariantRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
-    write_metadata(output_path, normalized_output_metadata(loaded, args.to))
+    write_metadata(output_path, metadata_with_variants_count(normalized_output_metadata(loaded, args.to), len(out_frame)))
     logger.info(
         "normalize_contigs.py: normalized %s rows to %s; dropped %s unresolved rows and %s duplicate target rows.",
         result.normalized_count,

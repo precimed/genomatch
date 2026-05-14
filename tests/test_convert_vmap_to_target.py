@@ -23,4 +23,5 @@ def test_convert_vmap_to_target_materializes_target_side(tmp_path):
         "contig_naming": "ncbi",
         "created_by": "convert_vmap_to_target.py",
         "derived_from": str(source),
+        "variants_count": 2,
     }

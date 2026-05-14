@@ -27,9 +27,12 @@ Required sidecar metadata:
 {
   "object_type": "variant_table",
   "genome_build": "GRCh37",
-  "contig_naming": "ncbi"
+  "contig_naming": "ncbi",
+  "variants_count": 123456
 }
 ```
+
+`variants_count` is the number of variant rows in the object. It is required for newly written `.vtable` objects and optional when reading existing objects for backward compatibility.
 
 `.vtable` is the provenance-free materialized object in v1. It is produced primarily by:
 
@@ -87,9 +90,12 @@ Required sidecar metadata:
   "target": {
     "genome_build": "GRCh37",
     "contig_naming": "ncbi"
-  }
+  },
+  "variants_count": 123456
 }
 ```
+
+`variants_count` is the number of variant rows in the object. It is required for newly written `.vmap` objects and optional when reading existing objects for backward compatibility.
 
 Importer-emitted `.vmap` is the normal starting artifact for provenance-preserving workflows. Its target side contains retained canonical imported rows; its source side carries exact raw source provenance as `(source_shard, source_index)`.
 
@@ -98,6 +104,8 @@ Canonical `.vmap` is mapped-only: every row must correspond to one source payloa
 ## Invariants
 
 - Metadata is authoritative for `genome_build` and `contig_naming` once those fields are present.
+- `variants_count`, when present, is producer metadata for planning memory-efficient operations. Readers may use it before scanning an object, but result semantics must not depend on it being present.
+- When a tool fully scans an object anyway, it may validate present `variants_count` against the observed row count and fail clearly on mismatch. Tools are not required to perform an extra full scan only to validate `variants_count`, and streaming implementations may skip validation when doing so would complicate the data path.
 - Build mismatch must fail clearly unless the user explicitly runs a liftover tool.
 - Canonical target-side rows stored in `.vtable` and `.vmap` support biallelic variants with allele strings stored verbatim as non-empty sequences of `A` / `C` / `G` / `T` characters.
 - Generic exact set operations, allele transforms, provenance-preserving operations, and apply operations must support both SNP and non-SNP biallelic alleles without rewriting them based on allele length alone.
@@ -133,7 +141,7 @@ The exact meaning of `source_shard` depends on the first provenance-bearing step
 - Single-input filter/repair/reference-compatible restriction tools preserve retained target-row order unless explicitly documented otherwise.
 - intersect_variants.py output order follows the first input and emits `.vtable`.
 - restrict_vmap.py output order follows the source `.vmap` and emits `.vmap`.
-- union_variants.py emits declared coordinate order after deduplicating by first occurrence across all inputs.
+- union_variants.py emits the source-agnostic target-key union in declared coordinate order.
 - sort_variants.py emits declared coordinate order.
 - liftover_build.py emits declared coordinate order after liftover.
 - Any tool that re-sorts must say so explicitly

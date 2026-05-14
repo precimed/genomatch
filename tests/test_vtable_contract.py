@@ -1,6 +1,13 @@
 import pytest
 
-from genomatch.vtable_utils import VariantRow, read_vmap, read_vtable, write_vtable
+from genomatch.vtable_utils import (
+    VariantRow,
+    read_vmap,
+    read_vtable,
+    validate_vmap_metadata,
+    validate_vtable_metadata,
+    write_vtable,
+)
 
 
 def test_read_vtable_rejects_invalid_pos(tmp_path):
@@ -41,3 +48,23 @@ def test_read_vmap_normalizes_alleles_to_uppercase(tmp_path):
     rows = read_vmap(source)
     assert rows[0].a1 == "A"
     assert rows[0].a2 == "C"
+
+
+def test_metadata_variants_count_is_optional_but_validated_when_present():
+    validate_vtable_metadata({"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    validate_vmap_metadata(
+        {
+            "object_type": "variant_map",
+            "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"},
+            "variants_count": 0,
+        }
+    )
+    with pytest.raises(ValueError, match="variants_count"):
+        validate_vtable_metadata(
+            {
+                "object_type": "variant_table",
+                "genome_build": "GRCh37",
+                "contig_naming": "ncbi",
+                "variants_count": "1",
+            }
+        )

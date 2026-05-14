@@ -25,6 +25,7 @@ from .vtable_utils import (
     VariantRow,
     infer_contig_naming,
     make_vmap_metadata,
+    metadata_with_variants_count,
     parse_chr2use,
     write_metadata,
     write_vmap_table,
@@ -155,7 +156,7 @@ def finalize_imported_vmap_vectorized(
         {"genome_build": genome_build, "contig_naming": contig_naming},
         provenance={"created_by": created_by, "derived_from": str(derived_from)},
     )
-    write_metadata(output_path, metadata)
+    write_metadata(output_path, metadata_with_variants_count(metadata, len(vmap_frame)))
 
     if qc_rows_frame is None:
         qc_view = pd.DataFrame(columns=IMPORT_QC_COLUMNS)

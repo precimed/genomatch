@@ -31,6 +31,7 @@ def test_restrict_contigs_vtable_emits_vtable(tmp_path):
         "object_type": "variant_table",
         "genome_build": "GRCh37",
         "contig_naming": "ncbi",
+        "variants_count": 3,
     }
 
 
@@ -64,6 +65,7 @@ def test_restrict_contigs_vmap_preserves_original_provenance_and_type(tmp_path):
     assert out_meta == {
         "object_type": "variant_map",
         "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"},
+        "variants_count": 3,
     }
 
 

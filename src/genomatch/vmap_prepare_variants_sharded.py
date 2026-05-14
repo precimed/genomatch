@@ -9,7 +9,14 @@ from ._cli_utils import run_cli
 from .contig_utils import SUPPORTED_CONTIG_NAMINGS, contig_label_for_naming, normalize_chrom_label
 from .importer_utils import DiscoveredInputShard, resolve_import_input_paths
 from .vmap_prepare_variants import all_retained_stage_outputs
-from .vtable_utils import CANONICAL_CONTIG_RANK, SUPPORTED_GENOME_BUILDS, load_metadata, metadata_path_for, write_metadata
+from .vtable_utils import (
+    CANONICAL_CONTIG_RANK,
+    SUPPORTED_GENOME_BUILDS,
+    load_metadata,
+    metadata_path_for,
+    metadata_with_variants_count,
+    write_metadata,
+)
 from .workflow_wrapper_utils import (
     delete_variant_object,
     planned_existing_variant_outputs,
@@ -200,6 +207,18 @@ def vmap_has_rows(path: Path) -> bool:
         return bool(handle.readline())
 
 
+def summed_variants_count_from_metadata(paths: list[Path]) -> int | None:
+    total = 0
+    for path in paths:
+        count = load_metadata(path).get("variants_count")
+        if count is None:
+            return None
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ValueError(f"{path} metadata variants_count must be a non-negative integer")
+        total += count
+    return total
+
+
 def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_output = path.with_name(path.stem + ".tmp.vmap")
@@ -214,12 +233,17 @@ def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict)
     if temp_qc.exists():
         temp_qc.unlink()
     try:
+        metadata_variants_count = summed_variants_count_from_metadata(final_paths)
+        count_copied_lines = metadata_variants_count is None
+        variants_count = 0 if count_copied_lines else metadata_variants_count
         with open(temp_output, "w", encoding="utf-8", newline="\n") as output:
             for final_path in final_paths:
                 with open(final_path, "r", encoding="utf-8", newline="") as handle:
                     for line in handle:
                         output.write(line)
-        write_metadata(temp_output, metadata)
+                        if count_copied_lines:
+                            variants_count += 1
+        write_metadata(temp_output, metadata_with_variants_count(metadata, variants_count))
         temp_output.replace(path)
         temp_meta.replace(final_meta)
         if temp_qc.exists():

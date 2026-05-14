@@ -218,7 +218,12 @@ def test_liftover_build_resolves_grch38_to_t2t_edge(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert meta == {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}
+    assert meta == {
+        "object_type": "variant_table",
+        "genome_build": "T2T-CHM13v2.0",
+        "contig_naming": "ncbi",
+        "variants_count": 1,
+    }
 
 
 def test_liftover_build_resolves_t2t_to_grch38_edge(tmp_path):
@@ -262,7 +267,12 @@ def test_liftover_build_resolves_t2t_to_grch38_edge(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert meta == {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"}
+    assert meta == {
+        "object_type": "variant_table",
+        "genome_build": "GRCh38",
+        "contig_naming": "ncbi",
+        "variants_count": 1,
+    }
 
 
 def test_liftover_build_resolves_grch37_to_t2t_edge(tmp_path):
@@ -306,7 +316,12 @@ def test_liftover_build_resolves_grch37_to_t2t_edge(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert meta == {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}
+    assert meta == {
+        "object_type": "variant_table",
+        "genome_build": "T2T-CHM13v2.0",
+        "contig_naming": "ncbi",
+        "variants_count": 1,
+    }
 
 
 def test_liftover_build_resolves_t2t_to_grch37_edge(tmp_path):
@@ -350,7 +365,12 @@ def test_liftover_build_resolves_t2t_to_grch37_edge(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert meta == {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    assert meta == {
+        "object_type": "variant_table",
+        "genome_build": "GRCh37",
+        "contig_naming": "ncbi",
+        "variants_count": 1,
+    }
 
 
 def test_liftover_build_resume_reuses_retained_bcftools_output(tmp_path):
@@ -860,7 +880,12 @@ def test_liftover_build_accepts_ucsc_named_input(tmp_path):
         ["chr1", "5", "rs1", "G", "A"],
     ]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert meta == {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ucsc"}
+    assert meta == {
+        "object_type": "variant_table",
+        "genome_build": "GRCh38",
+        "contig_naming": "ucsc",
+        "variants_count": 2,
+    }
 
 
 def test_liftover_build_fails_on_missing_chain_entry(tmp_path):
@@ -1068,7 +1093,12 @@ def test_liftover_build_accepts_plink_family_input(tmp_path, contig_naming, chro
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [[chrom, "60005", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
-    assert meta == {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": contig_naming}
+    assert meta == {
+        "object_type": "variant_table",
+        "genome_build": "GRCh38",
+        "contig_naming": contig_naming,
+        "variants_count": 1,
+    }
 
 
 def test_liftover_build_rejects_plink_splitx_input(tmp_path):
