@@ -26,42 +26,6 @@ In that workflow:
 
 `prepare_variants.py` is the convenience wrapper for the preparation stage of the common workflow. It advances a retained stage-by-stage `.vmap` waterfall and then copies the last retained stage to `<output>.vmap`.
 
-### Flow
-
-```text
-raw input
-  |
-  v
-import_<format>.py
-  -> <prefix>.imported.vmap
-  |
-  v
-normalize_contigs.py        [only if current contig naming != --dst-contig-naming]
-  -> <prefix>.normalized.vmap
-  |
-  v
-guess_build.py          [in place; skipped under --resume when build is resolved]
-  |
-  v
-restrict_build_compatible.py [--allow-strand-flips] [--norm-indels] [--sort --drop-duplicates when build already matches --dst-build]
-  -> <prefix>.build_compatible.vmap
-  |
-  +--> liftover_build.py --target-build <dst-build>   [if build differs]
-  |     -> <prefix>.lifted.vmap
-  |
-  +--> normalize_contigs.py --to plink_splitx         [only when requested final contig naming is plink_splitx and that final normalization was deferred until build resolution]
-  |     -> <prefix>.splitx.vmap
-  |
-  +--> drop_strand_ambiguous.py                      [optional]
-  |     -> <prefix>.strand_filtered.vmap
-  |
-  \--> restrict_contigs.py --chr2use/--contigs <value> [optional]
-        -> <prefix>.contigs.vmap
-  |
-  \--> copy last retained stage
-        -> <output>.vmap
-```
-
 ### Contract
 
 - `current_path` means the latest retained `.vmap` stage in the wrapper waterfall
@@ -189,15 +153,6 @@ Final concatenation:
 ## `project_payload.py`
 
 `project_payload.py` is the convenience wrapper for the post-prepare payload-application stage. It applies an explicit mapped-only input `.vmap` to the original payload and dispatches to the appropriate canonical `apply_vmap_*` tool. It does not run `restrict_vmap.py`. Users who want to apply a payload to a shared membership set must first run `restrict_vmap.py` themselves and pass the resulting `.vmap` to `project_payload.py --vmap`.
-
-### Flow 
-
-```text
-input .vmap
-    |
-    \--> apply_vmap_*.py
-          -> rewritten payload
-```
 
 ### Contract
 

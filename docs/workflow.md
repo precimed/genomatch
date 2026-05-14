@@ -2,12 +2,12 @@
 
 Most users should use the workflow-level tools:
 
-- `prepare_variants.py`
-- `prepare_variants_sharded.py`
-- `intersect_variants.py`
-- `union_variants.py`
-- `restrict_vmap.py`
-- `project_payload.py`
+- [`prepare_variants.py`](#prepare-variants) prepares one raw input into a final `.vmap`.
+- [`prepare_variants_sharded.py`](#prepare-sharded-variants) prepares chromosome-sharded genotype or VCF inputs into one final `.vmap`.
+- [`intersect_variants.py`](#intersect-variants) derives a shared provenance-free membership `.vtable` from prepared inputs.
+- [`union_variants.py`](#union-variants) derives a source-agnostic union membership `.vtable` from prepared inputs.
+- [`restrict_vmap.py`](#restrict-vmap) filters one payload-specific `.vmap` to a membership set.
+- [`project_payload.py`](#project-payloads) rewrites an original payload through an explicit mapped-only `.vmap`.
 
 For a worked example, start with [tutorial-1.md](tutorial-1.md). Use the tables below as a quick wrapper reference. The detailed tool and wrapper contracts remain in the spec.
 
@@ -17,7 +17,7 @@ For a worked example, start with [tutorial-1.md](tutorial-1.md). Use the tables 
 - A `.vmap` is the prepared variant table plus the source provenance needed to project the same original payload later. It does not contain the payload itself.
 - `intersect_variants.py` and `union_variants.py` combine prepared variant sets and emit a `.vtable`.
 - A `.vtable` is only a shared membership table. It has no source-payload provenance, so it cannot be projected directly.
-- Use `restrict_vmap.py` to combine one payload-specific `.vmap` with a membership `.vtable` or another `.vmap`, producing a restricted `.vmap` for that payload.
+- Use `restrict_vmap.py` to filter one payload-specific `.vmap` to a shared membership table, producing a restricted `.vmap` for that payload.
 - `project_payload.py` rewrites the original payload through its own restricted `.vmap`.
 - Variant matching uses prepared `chr:bp:a1:a2` target rows, not variant IDs.
 - Choose the target genome build and contig naming up front; reference-aware preparation needs `MATCH_CONFIG`.
@@ -26,24 +26,23 @@ For a worked example, start with [tutorial-1.md](tutorial-1.md). Use the tables 
 
 For deeper object-model details, see [primitives.md](primitives.md#object-model-reference).
 
-## Workflow vs primitives
-
-You can use this toolkit at two levels:
-
-- use the primitive tools when you need explicit control over import, normalization, liftover, intersection, and payload application
-- use `prepare_variants.py` / `prepare_variants_sharded.py`, `intersect_variants.py`, `union_variants.py`, and `project_payload.py` workflow when you want to
-  - prepare several inputs (e.g. cohort, reference, and summary-statistics payloads) into the same build and contig naming
-  - intersect a subset of inputs to get a shared membership `.vtable`, or union prepared inputs when that is the desired membership set
-  - apply original payloads through explicit payload-specific `.vmap` restrictions
-
-For individual-level data, `prepare_variants.py`, `prepare_variants_sharded.py`, and `project_payload.py` can be executed
-within trusted research environments hosting sensitive data.
-`prepare_variants.py` produces only lists of variants which can be copied to a joint location for
-`intersect_variants.py`.
-
-## Preparing variants
+## Prepare variants
 
 `prepare_variants.py` is the convenience wrapper for preparing one raw input into a final `<output>.vmap` that can later be intersected or projected back onto the original payload. It orchestrates import, contig normalization, metadata resolution, same-build restriction or liftover, and optional strand-ambiguous / contig filtering, while retaining the intermediate `.vmap` stages. For the exact stage graph and `--resume` / `--force` behavior, see [spec/workflow.md](../spec/workflow.md).
+
+Illustrative stage flow:
+
+| Stage | Description | Retained output |
+| --- | --- | --- |
+| Import | Always runs `import_<format>.py`; passes importer controls such as `--max-allele-length`, `--shards`, and sumstats-only `--id-vtable` when supplied | `<prefix>.imported.vmap` |
+| Contig normalization | Runs `normalize_contigs.py --to <dst-contig-naming>` when the current object omits `contig_naming` or differs from `--dst-contig-naming`; final `plink_splitx` can be deferred until build is known | `<prefix>.normalized.vmap` |
+| Build resolution | Runs `guess_build.py` in place, unless `--resume` can skip because build is already resolved | current retained `.vmap` |
+| Same-build reference filtering | Always runs before any optional liftover; invokes `restrict_build_compatible.py`, passing `--allow-strand-flips` unless disabled, `--norm-indels` unless disabled, and `--sort --drop-duplicates` when current build already matches `--dst-build` | `<prefix>.build_compatible.vmap` |
+| Liftover | Runs `liftover_build.py --target-build <dst-build>` when the current build differs from `--dst-build` after same-build filtering | `<prefix>.lifted.vmap` |
+| Deferred split-X normalization | Runs `normalize_contigs.py --to plink_splitx` when `--dst-contig-naming=plink_splitx` and final split-X normalization was deferred until build resolution | `<prefix>.splitx.vmap` |
+| Strand filter | Runs `drop_strand_ambiguous.py` when `--drop-strand-ambiguous` is supplied | `<prefix>.strand_filtered.vmap` |
+| Contig filter | Runs `restrict_contigs.py --chr2use/--contigs <value>` when `--chr2use` / `--contigs` is supplied | `<prefix>.contigs.vmap` |
+| Final copy | Always copies the last retained stage | `<output>.vmap` |
 
 | `prepare_variants.py` argument | Meaning |
 | --- | --- |
@@ -59,6 +58,8 @@ within trusted research environments hosting sensitive data.
 | `--prefix` | Optional retained-intermediate stem; defaults to `--output` |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
 
+## Prepare sharded variants
+
 `prepare_variants_sharded.py` is the memory-bounded sharded-input variant of `prepare_variants.py`. It accepts `bim`, `pvar`, and `vcf` inputs whose `--input` contains `@`, groups selected input shards by unambiguous target contig, runs the full `prepare_variants.py` stage graph once per target-contig group, and concatenates the per-contig-group final `.vmap` files into one final `<output>.vmap`. Its stage semantics are inherited from `prepare_variants.py`; see [spec/workflow.md](../spec/workflow.md).
 
 | `prepare_variants_sharded.py` argument | Meaning |
@@ -69,17 +70,23 @@ within trusted research environments hosting sensitive data.
 | Other preparation flags | Same meaning as `prepare_variants.py` and passed through to each per-contig-group invocation |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
 
-## Combining prepared variant sets
+## Intersect variants
 
-| Tool | Typical input | Emits | Notes |
-| --- | --- | --- | --- |
-| `intersect_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact symmetric source-agnostic target-key intersection; output has target-derived IDs in declared coordinate order |
-| `union_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact source-agnostic target-key union; output is re-sorted into declared coordinate order |
-| `restrict_vmap.py` | source `.vmap` plus one or more `.vmap` / `.vtable` restrictions | `.vmap` | Exact source-order restriction by intersection of all restriction inputs; output order, IDs, provenance, and `allele_op` come from the source `.vmap` |
+`intersect_variants.py` accepts two or more prepared `.vmap` / `.vtable` inputs and emits a provenance-free `.vtable` containing exact `chrom:pos:a1:a2` keys present in every input. Output IDs are target-derived `chrom:pos:a1:a2`, and output rows are in declared coordinate order.
 
-## Projecting payloads
+## Union variants
 
-`project_payload.py` is the convenience wrapper for applying an original payload through an explicit prepared `.vmap`. It requires `--vmap`, does not accept a target `.vtable`, and does not run `restrict_vmap.py`; users who want to apply a payload to a shared membership table must first run `restrict_vmap.py` themselves. Payload row order is always `.vmap` row order. For genotype payloads, the wrapper can also reconcile subject axes via explicit target sample files or wrapper-level union synthesis. For the exact payload-application flow, output rules, and target-sample reconciliation semantics, see [spec/workflow.md](../spec/workflow.md).
+`union_variants.py` accepts two or more prepared `.vmap` / `.vtable` inputs and emits a provenance-free `.vtable` containing the source-agnostic exact-key union. Output IDs are target-derived `chrom:pos:a1:a2`, and output rows are in declared coordinate order.
+
+## Restrict vmap
+
+`restrict_vmap.py` accepts one source `.vmap` plus one or more `.vmap` / `.vtable` membership inputs and emits a restricted `.vmap`. Output order, IDs, provenance, and `allele_op` come from the source `.vmap`; restriction inputs affect membership only.
+
+Membership inputs can be either `.vtable` or `.vmap` files. When a `.vmap` is used as membership, only its target-side `chrom:pos:a1:a2` rows are considered; its source provenance and `allele_op` are ignored.
+
+## Project payloads
+
+`project_payload.py` is the convenience wrapper for applying an original payload through an explicit prepared `.vmap`. It requires `--vmap`, does not accept a target `.vtable`, and does not run `restrict_vmap.py`; users who want to apply a payload to a shared membership table must first run `restrict_vmap.py` themselves. Payload row order is always `.vmap` row order. For genotype payloads, the wrapper can also reconcile subject axes via explicit target sample files or wrapper-level union synthesis. For the exact payload-application contract, output rules, and target-sample reconciliation semantics, see [spec/workflow.md](../spec/workflow.md).
 
 | `project_payload.py` argument | Meaning |
 | --- | --- |
