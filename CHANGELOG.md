@@ -6,6 +6,26 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+### Added
+- Added expanded user documentation under `docs/`, including Tutorial 1, a worked reference-universe projection example with downloadable release fixtures; the top-level README is now a concise entry point.
+- `scripts/normalize_bed_contigs_ncbi.sh` for normalizing BED contig labels to canonical NCBI-style primary contigs and reporting dropped noncanonical rows.
+
+### Changed
+- `restrict_vmap.py` replaces `match_vmap_to_target.py` as the way to trim a prepared `.vmap` to a target set.
+- `project_payload.py` now projects exactly the variants in `--vmap`. To project a subset or shared set, build that `.vmap` first with `restrict_vmap.py`; use `intersect_variants.py` or `union_variants.py` first when you need to define the shared set.
+- `intersect_variants.py` and `union_variants.py` now write source-independent `.vtable` outputs with `chrom:pos:a1:a2` IDs in declared coordinate order; `intersect_variants.py` inputs are now positional.
+
+### Removed
+- Removed `--only-mapped-target` from all `apply_vmap_*` tools. This is now the only apply behavior: applying a `.vmap` can no longer add genotype or summary-statistics rows that have no corresponding source row.
+- Removed missing-target sentinel rows from `.vmap` objects. Unmatched variants are now left out of the `.vmap` instead of written with `source_index=-1` and `allele_op=missing`.
+
+### Fixed
+- Fixed summary-statistics metadata handling for padded column headers by matching trimmed/case-insensitive names only when the result is unambiguous; also recognizes a wider set of missing-value tokens and allows `.gz` in `path_sumStats`.
+
+### Performance
+- Reduced peak memory use in `apply_vmap_to_sumstats.py` by reading payload columns in chunks, scattering retained rows into `.vmap` order, and writing output in row blocks. Sumstats projection now emits explicit canonical variant columns, writes tab-delimited output with empty missing fields, emits `<output>.meta.yaml`, and supports repeated source provenance.
+- Exact set operations can now choose smaller driver inputs using `variants_count` metadata while preserving documented output order and ID semantics.
+
 ## [v0.3.2] - 2026-05-04
 
 ### Added
