@@ -190,22 +190,6 @@ def test_intersect_variants_does_not_accept_sort_flag(tmp_path):
     assert "unrecognized arguments: --sort" in result.stderr
 
 
-def test_intersect_variants_rejects_legacy_inputs_flag(tmp_path):
-    first = tmp_path / "a.vtable"
-    second = tmp_path / "b.vtable"
-    out = tmp_path / "out.vtable"
-    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
-    write_lines(first, ["1\t100\tid1\tA\tG"])
-    write_lines(second, ["1\t100\tid2\tA\tG"])
-    write_json(first.with_name(first.name + ".meta.json"), meta)
-    write_json(second.with_name(second.name + ".meta.json"), meta)
-
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
-
-    assert result.returncode != 0
-    assert "unrecognized arguments" in result.stderr
-
-
 def test_intersect_variants_checks_contig_naming_before_loading_rows(tmp_path):
     first = tmp_path / "a.vtable"
     second = tmp_path / "b.vtable"

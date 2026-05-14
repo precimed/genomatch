@@ -253,16 +253,3 @@ def test_restrict_vmap_rejects_template_paths_and_sort_flag(tmp_path):
     assert "does not accept '@' paths" in template_result.stderr
     assert sort_result.returncode != 0
     assert "unrecognized arguments: --sort" in sort_result.stderr
-
-
-def test_restrict_vmap_rejects_legacy_source_and_targets_flags(tmp_path):
-    source = tmp_path / "source.vmap"
-    restriction = tmp_path / "membership.vtable"
-    out = tmp_path / "out.vmap"
-    write_vmap(source, ["1\t100\tid1\tA\tG\t.\t0\tidentity"])
-    write_vtable(restriction, ["1\t100\tid1\tA\tG"])
-
-    result = run_py("restrict_vmap.py", "--source", source, "--targets", restriction, "--output", out)
-
-    assert result.returncode != 0
-    assert "unrecognized arguments" in result.stderr

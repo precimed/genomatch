@@ -53,7 +53,7 @@ The intended cleanup workflow is:
 2. if import omitted `contig_naming` or declared a different naming than the desired downstream convention, repair target contig labels with `normalize_contigs.py`
 3. set or confirm metadata on the current `.vmap` using `guess_build.py` or an explicit metadata edit
 4. optionally filter retained target rows with `restrict_contigs.py`
-5. continue with `restrict_build_compatible.py`, liftover, sorting, match, and apply using artifacts that already exclude unresolved contigs
+5. continue with `restrict_build_compatible.py`, liftover, sorting, restriction, and apply using artifacts that already exclude unresolved contigs
 
 Wrapper note: `prepare_variants.py` may need a special-case orchestration when the requested final naming is `plink_splitx` and build is still unknown. In that case it may first normalize to build-independent `plink`, then resolve build, and only then normalize to final `plink_splitx` after any required liftover. This is a wrapper sequencing rule, not a change to canonical `normalize_contigs.py` behavior.
 

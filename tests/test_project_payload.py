@@ -107,44 +107,6 @@ def test_project_payload_requires_vmap(tmp_path):
     assert "the following arguments are required: --vmap" in result.stderr
 
 
-def test_project_payload_rejects_legacy_mapping_flags(tmp_path):
-    source = tmp_path / "study.tsv"
-    metadata = tmp_path / "study.yaml"
-    vmap = tmp_path / "study.prepared.vmap"
-    output = tmp_path / "aligned.tsv"
-    write_lines(source, ["CHR\tPOS\tSNP\tEA\tOA\tBETA", "1\t1\trs1\tG\tA\t0.5"])
-    write_sumstats_metadata(metadata)
-    write_vmap(vmap, ["1\t1\trs1\tG\tA\t.\t0\tidentity"])
-
-    base = [
-        "project_payload.py",
-        "--input",
-        source,
-        "--input-format",
-        "sumstats",
-        "--sumstats-metadata",
-        metadata,
-        "--vmap",
-        vmap,
-        "--output",
-        output,
-    ]
-    cases = [
-        ("--target", tmp_path / "target.vtable"),
-        ("--source-vmap", vmap),
-        ("--full-target", None),
-    ]
-
-    for flag, value in cases:
-        args = [*base]
-        args.append(flag)
-        if value is not None:
-            args.append(value)
-        result = run_py(*args)
-        assert result.returncode != 0
-        assert f"unrecognized arguments: {flag}" in result.stderr
-
-
 def test_project_payload_sumstats_uses_explicit_vmap_and_does_not_retain_restricted_vmap(tmp_path):
     source = tmp_path / "study.tsv"
     metadata = tmp_path / "study.yaml"

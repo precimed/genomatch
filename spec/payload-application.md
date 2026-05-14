@@ -151,6 +151,7 @@ This subsection is implementation guidance only; any implementation that preserv
 - `apply_vmap_to_sumstats.py` writes a YAML metadata sidecar at `<output>.meta.yaml` for both projection mode and `--clean` mode
 - `src/genomatch/schemas/raw-sumstats-metadata.yaml` is the normative schema contract for the output sidecar as well as input summary-stat metadata
 - the output sidecar records retained payload column mappings using the same top-level `col_*` keys as raw input metadata; for example, a retained projected beta column is recorded as `col_BETA: <emitted column name>`, not in a nested mapping structure
+- if input metadata declares a `col_*` mapping for a retained payload/stat column, that column must exist in the input file; an absent metadata-declared column is an error and must not be represented in the output sidecar as an omitted key or null value
 - `path_sumStats` in the output sidecar is the filename-only basename of `--output`, consistent with the filename-only contract for input `path_sumStats`
 - the output sidecar records at least: output `path_sumStats`, `delimiter: "\t"`, `missing_value: ""`, target `genome_build` and `contig_naming` from the `.vmap`, canonical output variant column mappings (`col_CHR: CHR`, `col_POS: POS`, `col_SNP: SNP`, `col_EffectAllele: EffectAllele`, `col_OtherAllele: OtherAllele`), retained payload `col_*` mappings, and `clean`
 - in `--clean` mode, the sidecar also records `fill_mode` and `use_af_inference`
@@ -187,15 +188,15 @@ Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined i
 - if `--skip-ploidy-check` is supplied, genotype-content ploidy validation and `.qc.tsv` incompatibility reporting are skipped; `.ploidy` emission is unchanged
 - `apply_vmap_to_bfile.py` follows the shared ploidy-model validation contract and does not redefine ploidy by rewriting offending genotype content
 
-## Bounded-memory requirement for `apply_vmap_to_bfile.py`
+## Shared bounded-memory requirement for genotype payload application
 
-BFILE payloads may be very large. Implementations must not require loading the full genotype matrix for all variants into memory at once.
+BFILE and PFILE payloads may be very large. `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py` must not require loading the full genotype matrix for all variants into memory at once.
 
 Normative requirements:
 
-- `apply_vmap_to_bfile.py` must read and write genotype data in bounded chunks
+- genotype apply tools must read and write genotype data in bounded chunks
 - this applies to both single-file and `@`-sharded source payloads
-- for `@`-sharded source payloads, implementations may batch internally by source shard and source row ranges
+- internal batching may group by source shard and source row ranges
 - internal batching must not change output semantics
 - exact `.vmap` row-order output semantics must still hold even when `.vmap` order interleaves rows from multiple source shards
 
@@ -246,15 +247,3 @@ Discovery and output rules:
 - if the output prefix does not contain `@`, emit one PFILE payload across all `.vmap` rows in `.vmap` row order
 - if the output prefix contains `@`, emit one PFILE payload per target contig with rows in `.vmap` row order
 - every emitted output shard must include `.pgen`, `.pvar`, and `.psam`
-
-## Bounded-memory requirement for `apply_vmap_to_pfile.py`
-
-PFILE payloads may be very large. Implementations must not require loading the full genotype matrix for all variants into memory at once.
-
-Normative requirements:
-
-- `apply_vmap_to_pfile.py` must read and write genotype data in bounded chunks
-- this applies to both single-file and `@`-sharded source payloads
-- internal batching may group by source shard and source row ranges
-- internal batching must not change output semantics
-- exact `.vmap` row-order output semantics must still hold even when `.vmap` rows interleave multiple source shards

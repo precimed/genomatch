@@ -139,7 +139,7 @@ The exact meaning of `source_shard` depends on the first provenance-bearing step
 - Canonical importers preserve retained discovery order
 - For sharded imports this means deterministic shard order plus within-shard row order.
 - Single-input filter/repair/reference-compatible restriction tools preserve retained target-row order unless explicitly documented otherwise.
-- intersect_variants.py output order follows the first input and emits `.vtable`.
+- intersect_variants.py emits the source-agnostic target-key intersection in declared coordinate order.
 - restrict_vmap.py output order follows the source `.vmap` and emits `.vmap`.
 - union_variants.py emits the source-agnostic target-key union in declared coordinate order.
 - sort_variants.py emits declared coordinate order.

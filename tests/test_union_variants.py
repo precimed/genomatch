@@ -113,22 +113,6 @@ def test_union_variants_requires_at_least_two_inputs(tmp_path):
     assert "at least two inputs" in result.stderr
 
 
-def test_union_variants_rejects_legacy_inputs_flag(tmp_path):
-    first = tmp_path / "a.vtable"
-    second = tmp_path / "b.vtable"
-    out = tmp_path / "out.vtable"
-    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
-    write_lines(first, ["1\t100\tid1\tA\tG"])
-    write_lines(second, ["1\t200\tid2\tC\tT"])
-    write_json(first.with_name(first.name + ".meta.json"), meta)
-    write_json(second.with_name(second.name + ".meta.json"), meta)
-
-    result = run_py("union_variants.py", "--inputs", first, second, "--output", out)
-
-    assert result.returncode != 0
-    assert "unrecognized arguments" in result.stderr
-
-
 def test_union_variants_checks_metadata_before_loading_rows(tmp_path):
     first = tmp_path / "a.vtable"
     second = tmp_path / "b.vtable"

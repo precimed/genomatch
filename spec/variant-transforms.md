@@ -131,9 +131,9 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 
 ## Liftover allele operations
 
-For biallelic SNVs, `liftover_build.py` should derive `allele_op` from `bcftools +liftover` output rather than inferring it only from the emitted alleles.
+For biallelic SNVs, `liftover_build.py` must derive `allele_op` from `bcftools +liftover` output rather than inferring it only from the emitted alleles.
 
-To make those states explicit and auditable, the toolkit should invoke `bcftools +liftover` with:
+To make those states explicit and auditable, the toolkit must invoke `bcftools +liftover` with:
 
 - `--flip-tag FLIP`
 - `--swap-tag SWAP`
@@ -147,4 +147,4 @@ The intended mapping is:
 - no `FLIP` flag and `SWAP=1`: `swap`
 - `FLIP` flag and `SWAP=1`: `flip_swap`
 
-If liftover produces a case not representable by canonical v1 `allele_op` values, such as `SWAP=-1` for a new reference allele outside the original source allele pair, the toolkit should fail clearly or reject that variant with auditable QC rather than coercing it into a canonical op.
+If liftover produces a case not representable by canonical v1 `allele_op` values, such as `SWAP=-1` for a new reference allele outside the original source allele pair, the toolkit must fail clearly or reject that variant with auditable QC rather than coercing it into a canonical op.

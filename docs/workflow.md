@@ -73,7 +73,7 @@ within trusted research environments hosting sensitive data.
 
 | Tool | Typical input | Emits | Notes |
 | --- | --- | --- | --- |
-| `intersect_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact symmetric intersection; output order and IDs come from the first input, provenance is dropped |
+| `intersect_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact symmetric source-agnostic target-key intersection; output has target-derived IDs in declared coordinate order |
 | `union_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact source-agnostic target-key union; output is re-sorted into declared coordinate order |
 | `restrict_vmap.py` | source `.vmap` plus one or more `.vmap` / `.vtable` restrictions | `.vmap` | Exact source-order restriction by intersection of all restriction inputs; output order, IDs, provenance, and `allele_op` come from the source `.vmap` |
 

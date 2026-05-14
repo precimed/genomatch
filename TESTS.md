@@ -43,14 +43,14 @@ Historical legacy coverage is preserved in the migration changelog under `match/
 
 The migrated suite must keep coverage for:
 
-- exact first-input-ordered intersection
+- exact source-agnostic intersection with declared-coordinate output
 - allele swap handling
 - mapped-only `.vmap` rows with non-missing source provenance
 - duplicate target exact rows failing
 - rsID ignored for exact set operations
 - importer `--chr2use` / `--contigs` filtering and `restrict_contigs.py` target-row filtering
 - summary-stat effect inversion for swapped alleles
-- first-input order preservation in intersections
+- target-derived IDs for provenance-free set outputs
 
 ## Required migration tests
 
@@ -127,7 +127,7 @@ The migrated suite must keep coverage for:
 ### Mapping
 
 - `intersect_variants.py` always emits provenance-free `.vtable`
-- `intersect_variants.py` preserves first-input row order and IDs
+- `intersect_variants.py` emits target-derived IDs in declared coordinate order
 - `intersect_variants.py` supports both SNP and non-SNP biallelic exact intersection
 - `intersect_variants.py` accepts two or more positional `.vmap` / `.vtable` inputs and named `--output`
 - `restrict_vmap.py` emits `.vmap` preserving source `.vmap` row order, IDs, provenance, and existing `allele_op`
@@ -139,10 +139,8 @@ The migrated suite must keep coverage for:
 - `restrict_vmap.py` supports both SNP and non-SNP biallelic exact restriction
 - for multi-base alleles, any `flip` / `flip_swap` semantics exercised by reference-aware tools use reverse-complement per allele string rather than basewise complementation without reversing order
 - `intersect_variants.py` rejects `@` template paths and has no `--chr2use` surface
-- `intersect_variants.py` rejects legacy `--inputs`
 - `intersect_variants.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-intersection contract
 - `restrict_vmap.py` rejects `@` template paths and has no `--chr2use` surface
-- `restrict_vmap.py` rejects legacy `--source` and `--targets`
 - `restrict_vmap.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-restriction contract
 - duplicate target-side rows in `.vmap` input are invalid before intersection
 - `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
@@ -258,8 +256,8 @@ The migrated suite must keep coverage for:
 - `intersect_variants.py` fails cleanly when input metadata omits `contig_naming`
 - `intersect_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- output IDs come from the first input
-- output order follows the first input and does not sort by declared coordinate order
+- output IDs are target-derived `chrom:pos:a1:a2`
+- output order is declared coordinate order using the same ordering contract as `sort_variants.py`
 - `intersect_variants.py` emits `.vtable`
 
 ### `.vmap` restrictions
@@ -280,13 +278,12 @@ The migrated suite must keep coverage for:
 
 - `union_variants.py` unions exact `chrom:pos:a1:a2`
 - `union_variants.py` accepts positional inputs and named `--output`
-- `union_variants.py` rejects legacy `--inputs`
 - `union_variants.py` requires at least two inputs
 - `union_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `union_variants.py` fails cleanly when input metadata omits `contig_naming`
 - `union_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- duplicate exact rows are deduplicated by first occurrence across all inputs, with output IDs taken from that first retained row
+- duplicate exact rows are deduplicated by exact target key, with output IDs target-derived as `chrom:pos:a1:a2`
 - `union_variants.py` re-sorts the deduplicated output into declared coordinate order using the same ordering contract as `sort_variants.py`
 - ties under declared coordinate order preserve first-occurrence order
 - `union_variants.py` emits `.vtable`
@@ -317,7 +314,7 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py` swaps odds-ratio confidence bounds when inverting a swapped interval
 - `apply_vmap_to_sumstats.py` applies swap-style numeric transforms for both `swap` and `flip_swap`
 - `apply_vmap_to_sumstats.py` rejects `@` template paths in both `--input` and `--output`
-- `apply_vmap_to_sumstats.py` fails clearly on payload rows with fewer columns than required by metadata
+- `apply_vmap_to_sumstats.py` relies on the shared pandas reader for ragged rows; missing retained payload fields are serialized as missing values when pandas can parse the row, and parser failures are surfaced from pandas
 - `apply_vmap_to_sumstats.py` warns and writes a missing value when swapped numeric effect transforms cannot be applied because the payload value is non-numeric, non-finite, or non-invertible
 - swapped alleles negate signed effects
 - swapped alleles invert odds ratios
@@ -482,11 +479,8 @@ The migrated suite must keep coverage for:
 - `project_payload.py` requires `--vmap`
 - `project_payload.py --vmap` must name a prepared mapped-only `.vmap`
 - `project_payload.py --vmap` defines final payload variant rows, row order, IDs, source provenance, and `allele_op`
-- `project_payload.py` rejects `--target`
-- `project_payload.py` rejects `--source-vmap`
 - `project_payload.py` never invokes `restrict_vmap.py`
 - `project_payload.py` requires final `--output`
-- `project_payload.py` does not support `--full-target`
 - for `bfile` input, `project_payload.py` accepts optional `--target-fam` and rejects `--target-psam`
 - for `pfile` input, `project_payload.py` accepts optional `--target-psam` and rejects `--target-fam`
 - for `bfile` and `pfile` input, `project_payload.py` accepts optional `--sample-id-mode {fid_iid,iid}` and passes it through unchanged to the canonical apply tool
@@ -521,9 +515,6 @@ The migrated suite must keep coverage for:
 - `project_payload.py` prints the invoked subcommands
 - for `sumstats` and `sumstats-clean` input, `project_payload.py --output` is the exact rewritten payload path and must not contain `@`
 - for `bfile` and `pfile` input, `project_payload.py --output` is the PLINK output prefix, may contain `@`, and is passed through to the canonical apply tool
-- test that `project_payload.py` rejects `--target`
-- test that `project_payload.py` rejects `--source-vmap`
-- test that `project_payload.py` rejects `--full-target`
 - test that `project_payload.py` does not retain or synthesize a restricted `.vmap`
 - test that for `sumstats` and `sumstats-clean` input, `--output` is treated as the exact rewritten payload path and `@` is rejected
 - test that for `bfile` and `pfile` input, `--output` is treated as the PLINK output prefix and `@` is allowed

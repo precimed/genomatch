@@ -107,9 +107,7 @@ Additional raw source fields or identifiers may be included when useful, but the
 - `import_pvar.py` writes `.vmap` and metadata
 - `import_vcf.py` writes `.vmap` and metadata
 - `import_sumstats.py` writes `.vmap` and metadata
-- importers preserve input contig labels exactly; they do not normalize or repair rows
-- importers omit `contig_naming` and emit a warning when retained rows are mixed or invalid
-- importers infer the first compatible supported naming in priority order `ncbi`, `ucsc`, `plink`, `plink_splitx`
+- importers preserve input contig labels, contig-naming inference, and mixed/invalid contig handling according to the Tool rules above
 - `import_sumstats.py` honors the cleansumstats metadata contract
 - for `import_sumstats.py`, `--input` may be omitted; in that case, use `path_sumStats` from `--sumstats-metadata`
 - when `import_sumstats.py --input` is omitted, resolve `path_sumStats` as `<directory of --sumstats-metadata>/<path_sumStats>`
