@@ -123,8 +123,8 @@ The following patterns are normative when applicable:
 
 1. Streaming set operations are allowed when first-input semantics are preserved:
 - `intersect_variants.py` may hold the first input in memory, stream later inputs, and intersect by per-input membership sets.
-- streaming must preserve first-input output order, first-input IDs, metadata validation, and exact `chrom:pos:a1:a2` intersection semantics.
+- streaming must preserve first-input output order, first-input IDs, metadata validation, exact `chrom:pos:a1:a2` intersection semantics, and `.vtable` output.
 
-1. Streaming source-to-target matching is allowed when target-order semantics are preserved:
-- `match_vmap_to_target.py` may hold target rows in memory and stream source `.vmap` rows.
-- streaming must preserve target-row output order, target duplicate rejection, source provenance preservation, first-match-wins behavior, and swap-aware allele classification.
+1. Streaming `.vmap` restriction is allowed when source semantics are preserved:
+- `restrict_vmap.py` may hold a restriction input in memory, stream later restriction inputs to compute the intersection of restriction keys, and replay or stream the source `.vmap` as needed.
+- streaming must preserve source `.vmap` output order, IDs, provenance, `allele_op`, metadata validation, exact `chrom:pos:a1:a2` restriction-by-intersection semantics, and `.vmap` output.

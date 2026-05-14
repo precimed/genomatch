@@ -2,17 +2,17 @@
 
 This document defines summary-statistic harmonization for the clean summary-stat application path.
 
-It implements a module for `apply_vmap_to_sumstats.py` which applies after output rows are matched to the target side of a `.vmap`,
+It implements a module for `apply_vmap_to_sumstats.py` which applies after output rows are assembled from `.vmap`,
 but before effect-direction normalization is applied based on `allele_op`.
-Row retention and `--only-mapped-target` behavior are defined by [payload-application.md](payload-application.md), not by this module.
+Row retention is defined by the mapped-only `.vmap` supplied to `apply_vmap_to_sumstats.py`, not by this module.
 This module is a missing-value and missing-column completion pipeline. It does not attempt to verify semantic consistency between overlapping fields that are already present, for example `BETA` vs `OR`, `EAF` vs `OAF`, `P` vs `Z`, or row-level `N` vs metadata totals. Existing non-missing values are retained unless an explicit transform or range rule says otherwise.
+Missingness in this document refers to payload fields and columns in retained summary-stat rows; it does not define target-row insertion or unmatched-variant rows.
 
 This specification describes a pipeline, with each step updating the current stage in place for the purpose of the next step.
 Each step accepts a dataframe (`sumstats`) and `metadata` describing its columns, and returns modified `sumstats`+`metadata`.
 
 This module never drops or re-orders lines; each row of the output `sumstats` dataframe corresponds to the row of the input.
 Rows containing only missing values are valid input and valid output for this module.
-If the caller uses `--only-mapped-target`, any later dropping of rows with missing `P` is outside this module and belongs to the caller contract in [payload-application.md](payload-application.md).
 
 Harmonization pipeline is a fixed sequence of transformation steps. CLI parsing, file I/O, and wrapper orchestration are described in [payload-application.md](payload-application.md).
 

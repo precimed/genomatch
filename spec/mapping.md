@@ -1,50 +1,60 @@
 # Mapping
 
-This file defines exact matching and set-operation semantics. Target-side row-transform semantics are defined in [variant-transforms.md](variant-transforms.md).
+This file defines exact set-operation semantics. Target-side row-transform semantics are defined in [variant-transforms.md](variant-transforms.md).
 
-## Matching semantics
+## Exact set semantics
 
-- Matching is by `chrom:pos:a1:a2`
-- rsID does not drive matching
-- Target row order defines output row order
-- Same-build exact matching emits only `identity`, `swap` or `missing`
-- Same-build exact matching must support both SNP and non-SNP biallelic alleles; `swap` is defined by allele ordering, not by allele length
+- Set membership is by exact `chrom:pos:a1:a2`
+- rsID is not used for exact set operations
+- Prepared target objects are allele-canonical. Filtering and intersection are exact set operations, not harmonization steps.
+- Exact set operations must support both SNP and non-SNP biallelic alleles without rewriting them based on allele length alone.
 - For multi-base alleles, `flip` means strand reverse-complement of each allele string: complement each base (`A <-> T`, `C <-> G`) and reverse the resulting string
 - For multi-base alleles, `flip_swap` means apply that same reverse-complement operation and then swap `a1` and `a2`
-- Missing target rows remain in `.vmap` with `source_shard=.` `source_index=-1` and `allele_op=missing`
 - Build mismatch is an error; no implicit liftover is performed
 - `guess_build.py` is the only build-guessing entrypoint
-- `.vmap` provenance is `source_shard + source_index`, where `source_index` is shard-local and `source_shard` is stored exactly as emitted by the provenance-bearing source step
+- `.vmap` provenance is `source_shard + source_index`, where `source_index` is a non-negative shard-local row index and `source_shard` is stored exactly as emitted by the provenance-bearing source step
 - Declared coordinate order is defined in [core-objects.md](core-objects.md) and is reused by both `sort_variants.py` and `liftover_build.py`
 
-## Mapping
+## No target-order remapping
 
-- `match_vmap_to_target.py` emits only `identity`, `swap`, or `missing`
-- `match_vmap_to_target.py` requires the same `genome_build` and the same `contig_naming` across all inputs; wrong-strand resolution is not part of this tool
-- `match_vmap_to_target.py` requires the source input to be a `.vmap`
-- `match_vmap_to_target.py` accepts the target input as a `.vtable` or a `.vmap`
-- matching operates only on the target side of the source `.vmap`
-- if the target input is a `.vmap`, matching also operates only on its target side and ignores its provenance entirely
-- if the target input is a `.vmap`, the tool must emit a warning that target provenance is ignored
-- users who want a provenance-free target and no warning should materialize it first with `convert_vmap_to_target.py`
-- the source provenance carried by the input `.vmap` is irrelevant to the matching logic itself but must still be preserved in the emitted `.vmap`
-- output order follows the target input order, whether that order comes from a `.vtable` or from the target side of a `.vmap`
-- `match_vmap_to_target.py` emits `.vmap`
+- There is no canonical operation that projects a source `.vmap` into another object's row order.
+- `restrict_vmap.py` filters a source `.vmap` by exact membership in all supplied restriction inputs; output IDs, row order, provenance, and `allele_op` remain those of the source `.vmap`.
+- Users who need a particular `.vmap` order should produce the source `.vmap` in that order, for example with `sort_variants.py` for declared coordinate order.
+
+## Restricting `.vmap`
+
+- `restrict_vmap.py` restricts one source `.vmap` by exact `chrom:pos:a1:a2` membership in all supplied `.vtable` / `.vmap` restriction inputs
+- CLI shape is `restrict_vmap.py <source.vmap> <restriction> [<restriction> ...] --output <output.vmap>`
+- `restrict_vmap.py` requires the same `genome_build` and the same `contig_naming` across all inputs
+- `restrict_vmap.py` performs no implicit normalization
+- mismatched build or contig naming fails clearly
+- the source input must be `.vmap`
+- restriction inputs may be `.vtable` or `.vmap`
+- a source row is retained only if its exact `chrom:pos:a1:a2` key appears in every restriction input; multi-restriction semantics are intersection, not union
+- restriction input `.vmap` provenance is ignored; only target-side rows are used as membership filters
+- output IDs, row order, provenance, and `allele_op` come from the source `.vmap`
+- output is mapped-only `.vmap`
+- `restrict_vmap.py` does not compute, infer, or change `allele_op`
+- `restrict_vmap.py` does not provide a sort mode; users who need sorted output should sort the source `.vmap` before restriction
 
 ## Intersections
 
 - `intersect_variants.py` intersects exact `chrom:pos:a1:a2`
+- CLI shape is `intersect_variants.py <input> <input> [<input> ...] --output <output.vtable>`
+- `intersect_variants.py` is the symmetric provenance-free set-intersection tool
 - `intersect_variants.py` requires the same `genome_build` and the same `contig_naming` across all inputs
 - `intersect_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
 - output IDs come from the first input
 - output order follows the first input and is not re-sorted by declared coordinate order
+- `intersect_variants.py` always emits `.vtable`
+- input `.vmap` provenance and `allele_op` are ignored and dropped
 - `intersect_variants.py` does not provide a sort mode; users who need sorted intersection output should sort the desired first input before intersection
-- `intersect_variants.py` emits `.vtable`
 
 ## Unions
 
 - `union_variants.py` unions exact `chrom:pos:a1:a2`
+- CLI shape is `union_variants.py <input> <input> [<input> ...] --output <output.vtable>`
 - `union_variants.py` requires at least two inputs
 - `union_variants.py` requires the same `genome_build` and the same `contig_naming` across all inputs
 - `union_variants.py` performs no implicit normalization

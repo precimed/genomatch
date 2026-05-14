@@ -133,4 +133,4 @@ The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`
 - if a raw summary-stat `SNP` value has no match in the filtered `.vtable.id` lookup set, the source row must be dropped with auditable import QC reason `id_not_found`
 - if a raw summary-stat `SNP` value matches multiple rows in the filtered `.vtable.id` lookup set, the source row must be dropped with auditable import QC reason `ambiguous_id_match`
 - if `--id-vtable` is not supplied and the importer can not determine target-side `chrom` and `pos` from the raw summary-stat input, the importer must fail clearly
-- `--id-vtable` is an import-time coordinate-enrichment step only; downstream exact matching semantics remain `chr:bp:a1:a2`, ignoring `id`
+- `--id-vtable` is an import-time coordinate-enrichment step only; downstream exact set semantics remain `chr:bp:a1:a2`, ignoring `id`

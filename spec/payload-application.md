@@ -5,11 +5,11 @@
 This section applies to all `apply_vmap_*` tools.
 
 - payload-application tools write corrected output variant IDs by default
-- the default corrected output ID is generated from the retained `.vmap` target row as `chrom:pos:a1:a2`
-- default output IDs are generated from the retained `.vmap` target rows that are emitted; `.vmap` `id` values are not authoritative for the default final payload IDs
+- the default corrected output ID is generated from the `.vmap` target row as `chrom:pos:a1:a2`
+- default output IDs are generated from the `.vmap` target rows that are emitted; `.vmap` `id` values are not authoritative for the default final payload IDs
 - this rule affects only the payload output ID fields: summary-stat `SNP`, PLINK 1 `.bim` column 2, and PLINK 2 `.pvar` `ID`
-- matching, provenance lookup, allele operations, and row ordering continue to ignore `id` and operate on target coordinates, alleles, and stored source provenance
-- all `apply_vmap_*` tools accept optional `--retain-snp-id`; when supplied, every retained output row uses the retained target-side `.vmap` `id` value instead of the generated corrected target ID
+- provenance lookup, allele operations, and row ordering continue to ignore `id` and operate on target coordinates, alleles, and stored source provenance
+- all `apply_vmap_*` tools accept optional `--retain-snp-id`; when supplied, every output row uses the target-side `.vmap` `id` value instead of the generated corrected target ID
 
 ## Shared `apply_vmap_*` contract for genotype payloads
 
@@ -18,11 +18,10 @@ This section applies to `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`.
 - both tools consume a genotype payload plus a `.vmap`
 - both tools resolve source payload rows by exact `source_shard + source_index`; they do not normalize or reinterpret source provenance implicitly
 - `source_shard` is exact stored provenance, not a biological chromosome field
-- both tools use retained target-side `.vmap` rows as the definition of output variant rows
-- by default, both tools preserve full target-row order from the `.vmap`
-- if the same mapped source row is referenced by multiple retained target rows, both tools must allow that reuse and emit each retained target row independently in retained target-row order
-- if `--only-mapped-target` is supplied, both tools must drop rows with `source_index == -1` before writing output while preserving retained relative target-row order
-- if `--only-mapped-target` leaves zero retained rows, both tools must fail cleanly rather than emit an empty payload
+- both tools use `.vmap` rows as the exact definition of output variant rows
+- both tools preserve `.vmap` row order
+- if the same source row is referenced by multiple `.vmap` rows, both tools must allow that reuse and emit each `.vmap` row independently in `.vmap` row order
+- empty `.vmap` input must fail cleanly rather than emit an empty payload
 - `@` templates are a payload-only convention; they do not apply to canonical `.vtable` or `.vmap` artifacts
 - both tools support single-file source input and filename-based `@` source discovery
 - both tools support target-side `@` output sharding
@@ -31,7 +30,6 @@ This section applies to `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`.
 - reject missing required source shards
 - reject out-of-range shard-local `source_index`
 - do not apply smart label resolution at lookup time; provenance lookup is exact
-- preserve the `.vmap` invariant that `source_index == -1` implies `source_shard == "."` and `allele_op == "missing"`
 - both tools accept optional `--sample-id-mode {fid_iid,iid}`; the default is `fid_iid`
 - `--sample-id-mode` defines subject-key matching only for explicit target-sample reconciliation, not for source-variant provenance lookup
 
@@ -64,10 +62,9 @@ This section applies to `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`.
 - for PFILE payloads under `--sample-id-mode=fid_iid`, `FID` presence is determined from the `.psam` header, not from whether `FID` values are empty or populated
 - for PFILE payloads under `--sample-id-mode=fid_iid`, if `FID` is present then empty or missing `FID` values still participate in the subject key as stored values and do not trigger fallback to `IID`
 - when an explicit target sample file is supplied, both tools must always summarize reconciliation-added missingness
-- reconciliation-added missingness is defined on retained mapped rows only
-- reconciliation-added missingness is counted as retained mapped output row / output subject cells that are missing only because the selected output sample axis contains a subject absent from that row's referenced source shard
-- retained unmatched target rows do not contribute to reconciliation-added missingness summaries or warnings
-- when an explicit target sample file is supplied, both tools must warn if any retained output subject has more than 50% reconciliation-added missingness across retained mapped rows
+- reconciliation-added missingness is defined on `.vmap` rows only
+- reconciliation-added missingness is counted as output row / output subject cells that are missing only because the selected output sample axis contains a subject absent from that row's referenced source shard
+- when an explicit target sample file is supplied, both tools must warn if any retained output subject has more than 50% reconciliation-added missingness across `.vmap` rows
 - when an explicit target sample file is supplied, both tools must warn if any retained output variant has more than 50% reconciliation-added missingness across output subjects
 
 ## Abstract allele-operation level
@@ -76,7 +73,6 @@ This section applies to `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`.
 - `flip`: no genotype-index rewrite; only nucleotide interpretation differs
 - `swap`: rewrite the genotype payload to swap the two alleles relative to target allele order
 - `flip_swap`: same genotype-rewrite semantics as `swap`
-- `missing`: emit an unmatched or all-missing target row if unmatched rows are retained; otherwise drop it under `--only-mapped-target`
 
 Genotype rewriting is driven by allele ordering, not by nucleotide complementation itself.
 
@@ -97,7 +93,6 @@ That plan can hold:
 
 With that structure, both `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py` can follow the same high-level row algorithm:
 
-- initialize an all-missing output row on the full output sample axis
 - load the mapped source row from its referenced source shard
 - scatter source-sample values into the output row by the precomputed shard-specific scatter map
 - apply any allele-operation rewrite required by `swap` or `flip_swap`
@@ -118,9 +113,7 @@ This subsection is implementation guidance only; any implementation that preserv
 - `apply_vmap_to_sumstats.py` does not use source-side POS / SNP / effect-allele / other-allele columns in the input payload, even when defined by the metadata
 - joined source variant fields (`CHR:POS_A1_A2` or `CHR:POS`) described in the positional layout documented by `schemas/raw-sumstats-metadata.yaml` are also ignored in `apply_vmap_to_sumstats.py`; output variant columns are populated from target `.vmap` rows
 - source-side variant columns and joined variant fields are dropped from the output
-- `apply_vmap_to_sumstats.py` preserves full target-row order by default throughout its pipeline; payload columns for the unmatched target rows are populated by missing values
-- with `--only-mapped-target`, unmatched target rows are dropped before writing output
-- with `--only-mapped-target` in `--clean` mode, rows whose `P` value remains missing after harmonization are also dropped before writing output; in this context, missing `P` is treated as an all-missing payload row
+- `apply_vmap_to_sumstats.py` preserves `.vmap` row order throughout its pipeline
 - `apply_vmap_to_sumstats.py` defines output variant columns from the `.vmap` target rows, not from source payload values; these columns are named and derived as follows:
   - `CHR` from target `chrom`
   - `POS` from target `pos`
@@ -128,7 +121,7 @@ This subsection is implementation guidance only; any implementation that preserv
   - `EffectAllele` from target `a1`
   - `OtherAllele` from target `a2`
 - in `--clean` mode, a transformation of payload columns is performed according to `spec/sumstats-harmonization.md`,
-  after the base payload-application step has matched retained output rows to the target side of a `.vmap`,
+  after the base payload-application step has assembled output rows from `.vmap`,
   but before effect-direction normalization is applied based on `allele_op`.
 - in `--clean` mode, `--fill-mode {column,row}` and `--use-af-inference` are exposed to the user
 - `Direction` is passed through unchanged by clean harmonization and unchanged by `swap` / `flip_swap`
@@ -159,22 +152,19 @@ This subsection is implementation guidance only; any implementation that preserv
 Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined in [ploidy-model.md](ploidy-model.md).
 
 - the payload type is PLINK 1 BED/BIM/FAM
-- `apply_vmap_to_bfile.py` defines output `.bim` rows from retained target-side `.vmap` rows, writes genetic-position / cM as `0`, and writes the SNP field according to the shared output-ID rule above
+- `apply_vmap_to_bfile.py` defines output `.bim` rows from `.vmap` rows, writes genetic-position / cM as `0`, and writes the SNP field according to the shared output-ID rule above
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
 - if `--target-fam` is not supplied, `apply_vmap_to_bfile.py` must propagate the source payload `.fam` to every emitted output `.fam`
 - if neither `--target-fam` nor `--sample-axis native` is supplied, all referenced source shards in one invocation must have identical `.fam` contents; implementations may enforce this as a single global precheck across all referenced shards
 - if `--target-fam` is supplied, that file defines the output sample axis exactly and must be copied exactly to every emitted output `.fam`
 - `identity` and `flip` leave BFILE genotype encoding unchanged
 - `swap` and `flip_swap` are genotype-swapping operations
-- `missing` emits all-missing genotypes for retained unmatched rows
-- by default, unmatched target rows are retained as missing-genotype rows
-- if every retained `.vmap` row is unmatched (`source_index = -1`), fail cleanly rather than emit an all-missing PLINK payload
 - when `@` is present in the source prefix, shard discovery is filename-based and each discovered shard prefix must have matching `.bim`, `.bed`, and `.fam` components
-- if the output prefix does not contain `@`, emit one PLINK payload across all retained target rows in target-row order
-- if the output prefix contains `@`, emit one PLINK payload per target contig with retained rows in target-row order after optional `--only-mapped-target` filtering
+- if the output prefix does not contain `@`, emit one PLINK payload across all `.vmap` rows in `.vmap` row order
+- if the output prefix contains `@`, emit one PLINK payload per target contig with rows in `.vmap` row order
 - every emitted PLINK output must include `.bed`, `.bim`, and `.fam`
 - `apply_vmap_to_bfile.py` emits `.ploidy` according to the shared ploidy-model contract
-- `apply_vmap_to_bfile.py` emits `<output>.qc.tsv` when ploidy-validation incompatibilities are observed in retained output rows
+- `apply_vmap_to_bfile.py` emits `<output>.qc.tsv` when ploidy-validation incompatibilities are observed in output rows
 - `<output>.qc.tsv` columns are `source_shard`, `source_index`, `id`, `status`, `n_affected`
 - `status` is one of `haploid_het_incompatible` or `absent_nonmissing`
 - `n_affected` is the number of output samples with that incompatibility for the row
@@ -195,63 +185,54 @@ Normative requirements:
 - this applies to both single-file and `@`-sharded source payloads
 - for `@`-sharded source payloads, implementations may batch internally by source shard and source row ranges
 - internal batching must not change output semantics
-- exact target-row output semantics must still hold even when target order interleaves rows from multiple source shards
-- if `--only-mapped-target` is supplied, the same bounded-chunk requirement applies after filtering unmatched target rows
+- exact `.vmap` row-order output semantics must still hold even when `.vmap` order interleaves rows from multiple source shards
 
 ## `apply_vmap_to_pfile.py`
 
-`apply_vmap_to_pfile.py` is the PLINK 2 PFILE analogue of `apply_vmap_to_bfile.py`. It follows the same row-selection, provenance-resolution, allele-op, ordering, filtering, discovery, and sharding semantics as the shared genotype-payload `apply_vmap_*` contract, and differs only in payload-specific realization.
+`apply_vmap_to_pfile.py` is the PLINK 2 PFILE analogue of `apply_vmap_to_bfile.py`. It follows the same row-selection, provenance-resolution, allele-op, ordering, discovery, and sharding semantics as the shared genotype-payload `apply_vmap_*` contract, and differs only in payload-specific realization.
 
 Expected ploidy and payload-validation rules are defined in [ploidy-model.md](ploidy-model.md).
 
 - `apply_vmap_to_pfile.py` applies a `.vmap` to a PLINK 2 PFILE payload (`.pgen/.pvar/.psam`)
 - every emitted PFILE output must include `.pgen`, `.pvar`, and `.psam`
-- output `.pvar` rows are defined from retained target-side `.vmap` rows, not copied from source `.pvar`, with `ID` written according to the shared output-ID rule above
-- output allele columns in `.pvar` must match retained target-side `a1/a2`
+- output `.pvar` rows are defined from `.vmap` rows, not copied from source `.pvar`, with `ID` written according to the shared output-ID rule above
+- output allele columns in `.pvar` must match `.vmap` target-side `a1/a2`
 - if a mapped row uses `swap` or `flip_swap`, the genotype payload must be rewritten to stay consistent with the target-side allele order encoded in output `.pvar`
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`
 - if `--target-psam` is not supplied, `.psam` is propagated from the source payload sample axis
 - if neither `--target-psam` nor `--sample-axis native` is supplied, all referenced source shards in one invocation must have identical `.psam` contents; implementations may enforce `.psam` equality as one global precheck across all referenced shards
 - if `--target-psam` is supplied, that file defines the output sample axis exactly and must be copied exactly to every emitted output `.psam`
 - with `--target-psam`, `apply_vmap_to_pfile.py` must not attempt heuristic merging of arbitrary extra source `.psam` metadata columns; the explicit target `.psam` is the output metadata source of truth
-- biallelicity of each retained mapped source row is determined from the source `.pvar` allele structure for that row
-- if a retained mapped source row is non-biallelic by source `.pvar`, fail
-- supported retained mapped content is: hardcalls, hardcall phase information when present, unphased dosages, and haploid hardcalls or haploid dosages under PLINK/PGEN allele-count conventions
-- unsupported retained mapped content is: non-biallelic retained source rows, phased dosage preservation, and any retained mapped source content that cannot be represented by the chosen pgenlib read or write path
-- fail on unsupported retained mapped inputs; do not silently degrade
+- biallelicity of each referenced source row is determined from the source `.pvar` allele structure for that row
+- if a referenced source row is non-biallelic by source `.pvar`, fail
+- supported mapped content is: hardcalls, hardcall phase information when present, unphased dosages, and haploid hardcalls or haploid dosages under PLINK/PGEN allele-count conventions
+- unsupported mapped content is: non-biallelic source rows, phased dosage preservation, and any mapped source content that cannot be represented by the chosen pgenlib read or write path
+- fail on unsupported mapped inputs; do not silently degrade
 - if `--sample-axis native` is supplied, ploidy validation uses the sex column from the native `.psam` selected for each emitted output shard
 - if `--skip-ploidy-check` is supplied, genotype-content ploidy validation and incompatibility warnings are skipped
 - `apply_vmap_to_pfile.py` follows the shared ploidy-model validation contract; hardcall phase flags do not affect ploidy compatibility
 
-For retained mapped rows:
+For mapped rows:
 
 - `identity` and `flip`: copy hardcalls, hardcall phase flags, and dosages through unchanged; at payload-application time, `flip` is treated exactly like `identity`
 - `swap` and `flip_swap`: swap the two biallelic hardcall allele codes for every nonmissing allele observation, preserve hardcall phase flags unchanged, rewrite every nonmissing unphased dosage value as `2 - dosage`, preserve missing hardcall alleles as missing, preserve missing dosage values as missing, and apply the same swap rule to haploid calls and haploid dosages under the shared ploidy-model dosage convention; at payload-application time, `flip_swap` is treated exactly like `swap`
 - no imputation, hardcall derivation from dosage, dosage derivation from hardcalls, phase inference, or call repair is performed
 - payload application does not complement nucleotides; it only follows the `.vmap` `allele_op` semantics established upstream
 
-For unmatched retained rows:
-
-- when an unmatched target row is retained in output, `apply_vmap_to_pfile.py` must emit an all-missing `.pgen` row rather than fail
-- this applies to ordinary unmatched target rows retained by default and to explicit `allele_op = missing` rows
-- if every retained `.vmap` row is unmatched (`source_index = -1`), fail cleanly rather than emit an all-missing PLINK 2 payload
-- `apply_vmap_to_pfile.py` must retain whatever supported genotype channels are present in the retained mapped input rows, rather than forcing one maximally rich output structure
+- `apply_vmap_to_pfile.py` must retain whatever supported genotype channels are present in the mapped input rows, rather than forcing one maximally rich output structure
 - supported channels are hardcalls, hardcall phase information, and unphased dosages
 - the tool must preserve available supported channels through to output
-- if retained mapped rows are incoherent in which supported channels are present across variants, the tool should warn, still retain whatever supported channels are available for each retained mapped row, and still emit unmatched or all-missing rows coherently with the output representation used by the implementation; this inconsistency is not by itself a hard failure
-- unsupported retained mapped content still causes failure
-- retained mapped rows with unsupported source payload content must fail rather than degrade to missing; this includes non-biallelic retained mapped rows, retained mapped rows requiring unsupported preservation, and retained mapped rows that cannot be read or written under the chosen pgenlib path for supported channels
-- an inserted all-missing row must be coherent with the emitted output representation used by the implementation rather than requiring one canonical missing-row encoding
-- for every channel the implementation emits for an inserted all-missing row, every sample must be represented as missing in that channel
-- exact low-level representation of all-missing hardcall-phase state is implementation-specific
+- if mapped rows are incoherent in which supported channels are present across variants, the tool should warn and still retain whatever supported channels are available for each mapped row; this inconsistency is not by itself a hard failure
+- unsupported mapped content still causes failure
+- mapped rows with unsupported source payload content must fail rather than degrade to missing; this includes non-biallelic mapped rows, mapped rows requiring unsupported preservation, and mapped rows that cannot be read or written under the chosen pgenlib path for supported channels
 
 Discovery and output rules:
 
 - when `@` is present in the source prefix, shard discovery is filename-based and each discovered shard prefix must have matching `.pgen`, `.pvar`, and `.psam` components
 - if source-prefix `@` discovery finds zero shards, fail cleanly
-- resolve each retained mapped row to the unique discovered payload shard for its exact `source_shard`
-- if the output prefix does not contain `@`, emit one PFILE payload across all retained target rows in retained target-row order
-- if the output prefix contains `@`, emit one PFILE payload per target contig with retained rows
+- resolve each `.vmap` row to the unique discovered payload shard for its exact `source_shard`
+- if the output prefix does not contain `@`, emit one PFILE payload across all `.vmap` rows in `.vmap` row order
+- if the output prefix contains `@`, emit one PFILE payload per target contig with rows in `.vmap` row order
 - every emitted output shard must include `.pgen`, `.pvar`, and `.psam`
 
 ## Bounded-memory requirement for `apply_vmap_to_pfile.py`
@@ -264,5 +245,4 @@ Normative requirements:
 - this applies to both single-file and `@`-sharded source payloads
 - internal batching may group by source shard and source row ranges
 - internal batching must not change output semantics
-- exact target-row output semantics must still hold even when retained target rows interleave multiple source shards
-- if `--only-mapped-target` is supplied, the same bounded-chunk requirement applies after filtering unmatched target rows
+- exact `.vmap` row-order output semantics must still hold even when `.vmap` rows interleave multiple source shards

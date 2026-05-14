@@ -53,7 +53,7 @@ This does not apply to tools that only relabel contigs or reorder rows without c
 
 - `normalize_contigs.py`
 - `sort_variants.py`
-- matching, intersection, union, and materialization tools
+- `restrict_vmap.py`, intersection, union, and materialization tools
 
 ## Payload application
 
@@ -90,7 +90,7 @@ For BFILE payload application:
 
 `.ploidy` contract:
 
-- `apply_vmap_to_bfile.py` emits `.ploidy` whenever retained target rows include any row that is non-diploid in at least one sex.
+- `apply_vmap_to_bfile.py` emits `.ploidy` whenever `.vmap` rows include any row that is non-diploid in at least one sex.
 - `.ploidy` is a per-variant expected ploidy summary, not a per-sample validation report.
 - Each `.ploidy` row stores exactly `(male_ploidy, female_ploidy)` for the corresponding emitted output row.
 - `.ploidy` emission is independent of whether some samples have unknown sex.

@@ -1,6 +1,6 @@
 # Variant transforms
 
-This file defines target-side row-transform semantics. Exact matching, intersection, and union semantics remain defined in [mapping.md](mapping.md).
+This file defines target-side row-transform semantics. Exact intersection, restriction, and union semantics remain defined in [mapping.md](mapping.md).
 
 Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.md](ploidy-model.md).
 
@@ -28,8 +28,7 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 
 ## Strand-flip scope
 
-- `--allow-strand-flips` is not part of `match_vmap_to_target.py`
-- The same-build contract is strong: `match_vmap_to_target.py` assumes source and target are already on the same build and strand convention
+- Same-build set operations are exact `chrom:pos:a1:a2` operations over already-prepared target rows; they do not perform strand-flip or swap recovery.
 - Optional same-build strand-flip resolution belongs to `restrict_build_compatible.py`, which restricts same-build rows to those that are reference-compatible with the configured reference FASTA
 - By default, reference-aware tools must not accept rows that are only reference-compatible after strand complementation
 - If `--allow-strand-flips` is supplied to `restrict_build_compatible.py`, it may additionally consider strand-complemented alleles when evaluating same-build reference compatibility

@@ -42,16 +42,17 @@ Within [README.md](README.md), the following sections are intentionally normativ
 
 - `import_*` emits `.vmap`, not `.vtable`
 - importer-emitted `.vmap` is the normal starting artifact for provenance-preserving workflows
-- `.vmap` provenance is `(source_shard, source_index)`
+- `.vmap` provenance is `(source_shard, source_index)` and every `.vmap` row must have non-missing source provenance
 - `source_shard` is the exact discovered shard label at import time, or `.` for a single-file source
 - `.vtable` remains in the system as the provenance-free materialized target-side object, produced primarily by `convert_vmap_to_target.py`, `intersect_variants.py`, and `union_variants.py`
 - `.vmap` metadata remains target-side only
 - importer-emitted rows preserve source-format allele meaning at import time, while reference-aware target rows emitted by `restrict_build_compatible.py` and `liftover_build.py` use ordered alleles `a1=non-reference` and `a2=reference`
 - only `import_*` tools originate new provenance in v1
-- for tools that accept both `.vtable` and `.vmap`, the default contract is to emit the same type as the input and preserve provenance only for `.vmap` input
+- for tools that accept both `.vtable` and `.vmap`, the default contract is to emit the same type as the input and preserve provenance only for `.vmap` input, unless the tool explicitly defines a provenance-free `.vtable` output
 - for tools that accept `.vmap` as a table-like input, `.vmap` is interpreted as its target side unless a tool-specific spec says otherwise
-- `match_vmap_to_target.py` may accept a target `.vtable` or a target `.vmap`; if the target is `.vmap`, only its target side participates in matching and its provenance is ignored
 - target-side transforms on `.vmap` preserve provenance unless the tool explicitly materializes a provenance-free `.vtable` or otherwise documents a provenance break
+- `intersect_variants.py` always emits a provenance-free `.vtable`
+- `restrict_vmap.py` restricts one source `.vmap` by exact membership in all supplied `.vtable` / `.vmap` inputs and emits a mapped-only `.vmap` preserving source provenance and `allele_op`
 
 ## Canonical tools surface
 
@@ -66,9 +67,9 @@ Within [README.md](README.md), the following sections are intentionally normativ
 - `restrict_build_compatible.py`
 - `liftover_build.py`
 - `sort_variants.py`
-- `match_vmap_to_target.py`
 - `convert_vmap_to_target.py`
 - `intersect_variants.py`
+- `restrict_vmap.py`
 - `union_variants.py`
 - `apply_vmap_to_sumstats.py`
 - `apply_vmap_to_bfile.py`

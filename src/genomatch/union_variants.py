@@ -4,54 +4,26 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Tuple
+
+import pandas as pd
 
 from ._cli_utils import run_cli
+from .exact_set_utils import (
+    exact_key_index,
+    load_target_object_info,
+    read_target_table,
+    require_shared_target_metadata,
+    vtable_metadata_from_target_info,
+)
+from .tabular_rows import VariantRowsTable
 from .vtable_utils import (
-    VariantRow,
-    load_metadata,
-    read_vmap,
-    read_vtable,
     require_contig_naming,
-    require_rows_match_contig_naming,
-    sort_target_rows_by_declared_coordinate,
-    validate_vmap_metadata,
-    validate_vtable_metadata,
-    variant_rows_from_vmap_rows,
+    sort_target_table_by_declared_coordinate,
     write_metadata,
-    write_vtable,
+    write_vtable_table,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def variant_key(row: VariantRow) -> Tuple[str, str, str, str]:
-    return (row.chrom, row.pos, row.a1, row.a2)
-
-
-def load_union_metadata(path: Path) -> dict:
-    metadata = load_metadata(path)
-    if path.name.endswith(".vtable"):
-        validate_vtable_metadata(metadata)
-        return metadata
-    if path.name.endswith(".vmap"):
-        validate_vmap_metadata(metadata)
-        target_meta = dict(metadata["target"])
-        target_meta["object_type"] = "variant_table"
-        return target_meta
-    raise ValueError(f"unsupported input: {path}")
-
-
-def load_union_rows(path: Path, metadata: dict) -> list[VariantRow]:
-    if path.name.endswith(".vtable"):
-        rows = read_vtable(path)
-        require_rows_match_contig_naming(rows, require_contig_naming(metadata, label="variant table"), label="variant table")
-        return rows
-    if path.name.endswith(".vmap"):
-        rows = variant_rows_from_vmap_rows(read_vmap(path))
-        require_rows_match_contig_naming(rows, require_contig_naming(metadata, label="variant map target"), label="variant map target")
-        return rows
-    raise ValueError(f"unsupported input: {path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,7 +33,7 @@ def parse_args() -> argparse.Namespace:
             "and sort the result into declared coordinate order."
         )
     )
-    parser.add_argument("--inputs", nargs="+", required=True, help="Input .vtable/.vmap files")
+    parser.add_argument("inputs", nargs="+", help="Input .vtable/.vmap files")
     parser.add_argument("--output", required=True, help="Output .vtable")
     return parser.parse_args()
 
@@ -74,59 +46,42 @@ def print_accumulated(path: Path, row_count: int) -> None:
     logger.info("union_variants.py: after unioning %s, %s variants accumulated", path, row_count)
 
 
-def format_metadata_summary(input_paths: list[Path], loaded_meta: list[dict]) -> str:
-    lines = ["input metadata:"]
-    for path, meta in zip(input_paths, loaded_meta):
-        contig_naming = meta.get("contig_naming", "<missing>")
-        lines.append(
-            f"- {path}: genome_build={meta['genome_build']}, contig_naming={contig_naming}"
-        )
-    return "\n".join(lines)
-
-
-def require_shared_metadata(input_paths: list[Path], loaded_meta: list[dict]) -> None:
-    builds = {str(meta["genome_build"]) for meta in loaded_meta}
-    metadata_summary = format_metadata_summary(input_paths, loaded_meta)
-    contig_namings = set()
-    for meta in loaded_meta:
-        try:
-            contig_namings.add(require_contig_naming(meta, label="variant object"))
-        except ValueError as exc:
-            raise ValueError(f"{exc}\n{metadata_summary}") from exc
-    if len(builds) != 1:
-        raise ValueError(f"all inputs must have the same genome_build\n{metadata_summary}")
-    if len(contig_namings) != 1:
-        raise ValueError(f"all inputs must have the same contig_naming\n{metadata_summary}")
+def drop_duplicate_target_identities(frame: pd.DataFrame) -> pd.DataFrame:
+    duplicate_mask = exact_key_index(frame).duplicated(keep="first")
+    if not duplicate_mask.any():
+        return frame
+    return frame.loc[~duplicate_mask].reset_index(drop=True)
 
 
 def main() -> int:
     args = parse_args()
     if len(args.inputs) < 2:
         raise ValueError("union_variants.py requires at least two inputs")
+    if "@" in args.output or any("@" in item for item in args.inputs):
+        raise ValueError("union_variants.py does not accept '@' paths")
+    output_path = Path(args.output)
+    if not output_path.name.endswith(".vtable"):
+        raise ValueError("union_variants.py requires --output to end with .vtable")
+
     input_paths = [Path(item) for item in args.inputs]
-    logger.info("union_variants.py: unioning %s inputs -> %s", len(input_paths), args.output)
-    loaded_meta = [load_union_metadata(path) for path in input_paths]
-    require_shared_metadata(input_paths, loaded_meta)
-    first_meta = loaded_meta[0]
-    contig_naming = require_contig_naming(first_meta, label="variant table")
+    logger.info("union_variants.py: unioning %s inputs -> %s", len(input_paths), output_path)
+    infos = [load_target_object_info(path) for path in input_paths]
+    require_shared_target_metadata(infos)
+    contig_naming = require_contig_naming(infos[0].target_metadata, label="variant table")
 
-    seen = set()
-    out_rows = []
-    for path, metadata in zip(input_paths, loaded_meta):
-        rows = load_union_rows(path, metadata)
-        print_loaded(path, len(rows))
-        for row in rows:
-            key = variant_key(row)
-            if key in seen:
-                continue
-            seen.add(key)
-            out_rows.append(row)
-        print_accumulated(path, len(out_rows))
+    accumulated = pd.DataFrame(columns=["chrom", "pos", "id", "a1", "a2"], dtype="object")
+    for path in input_paths:
+        table = read_target_table(path)
+        frame = table.to_frame(copy=False)
+        print_loaded(path, len(frame))
+        accumulated = pd.concat([accumulated, frame], ignore_index=True, copy=False)
+        print_accumulated(path, len(accumulated))
 
-    sorted_rows = sort_target_rows_by_declared_coordinate(out_rows, contig_naming, label="variant table")
-    write_vtable(Path(args.output), sorted_rows)
-    write_metadata(Path(args.output), dict(first_meta))
-    logger.info("union_variants.py: wrote %s with %s union rows", args.output, len(sorted_rows))
+    sorted_frame = sort_target_table_by_declared_coordinate(accumulated, contig_naming, label="variant table")
+    sorted_frame = drop_duplicate_target_identities(sorted_frame)
+    write_vtable_table(output_path, VariantRowsTable.from_frame(sorted_frame, copy=False), assume_validated=True)
+    write_metadata(output_path, vtable_metadata_from_target_info(infos[0]))
+    logger.info("union_variants.py: wrote %s with %s union rows", output_path, len(sorted_frame))
     return 0
 
 

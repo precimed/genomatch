@@ -41,6 +41,7 @@ dependencies = [
 "project_payload.py" = "genomatch.project_payload:cli_main"
 "restrict_build_compatible.py" = "genomatch.restrict_build_compatible:cli_main"
 "restrict_contigs.py" = "genomatch.restrict_contigs:cli_main"
+"restrict_vmap.py" = "genomatch.restrict_vmap:cli_main"
 "sort_variants.py" = "genomatch.sort_variants:cli_main"
 "union_variants.py" = "genomatch.union_variants:cli_main"
 

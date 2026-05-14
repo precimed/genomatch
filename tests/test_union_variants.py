@@ -31,7 +31,7 @@ def test_union_variants_deduplicates_first_occurrence_and_sorts(tmp_path):
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
 
-    result = run_py("union_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("union_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
@@ -44,7 +44,7 @@ def test_union_variants_deduplicates_first_occurrence_and_sorts(tmp_path):
     assert f"loaded 3 variants from {first}" in result.stderr
     assert f"after unioning {first}, 3 variants accumulated" in result.stderr
     assert f"loaded 4 variants from {second}" in result.stderr
-    assert f"after unioning {second}, 5 variants accumulated" in result.stderr
+    assert f"after unioning {second}, 7 variants accumulated" in result.stderr
 
 
 def test_union_variants_requires_at_least_two_inputs(tmp_path):
@@ -56,10 +56,26 @@ def test_union_variants_requires_at_least_two_inputs(tmp_path):
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
 
-    result = run_py("union_variants.py", "--inputs", source, "--output", out)
+    result = run_py("union_variants.py", source, "--output", out)
 
     assert result.returncode != 0
     assert "at least two inputs" in result.stderr
+
+
+def test_union_variants_rejects_legacy_inputs_flag(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t200\tid2\tC\tT"])
+    write_json(first.with_name(first.name + ".meta.json"), meta)
+    write_json(second.with_name(second.name + ".meta.json"), meta)
+
+    result = run_py("union_variants.py", "--inputs", first, second, "--output", out)
+
+    assert result.returncode != 0
+    assert "unrecognized arguments" in result.stderr
 
 
 def test_union_variants_checks_metadata_before_loading_rows(tmp_path):
@@ -71,7 +87,7 @@ def test_union_variants_checks_metadata_before_loading_rows(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"})
 
-    result = run_py("union_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("union_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "same genome_build" in result.stderr
@@ -89,7 +105,7 @@ def test_union_variants_checks_contig_naming_before_loading_rows(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ucsc"})
 
-    result = run_py("union_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("union_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "same contig_naming" in result.stderr
@@ -107,10 +123,26 @@ def test_union_variants_fails_cleanly_on_missing_contig_naming(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
 
-    result = run_py("union_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("union_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "contig_naming" in result.stderr
     assert "normalize_contigs.py" in result.stderr
     assert f"{first}: genome_build=GRCh37, contig_naming=<missing>" in result.stderr
     assert "invalid vtable row" not in result.stderr
+
+
+def test_union_variants_rejects_template_paths(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t200\tid2\tC\tT"])
+    write_json(first.with_name(first.name + ".meta.json"), meta)
+    write_json(second.with_name(second.name + ".meta.json"), meta)
+
+    result = run_py("union_variants.py", first, "b.@.vtable", "--output", out)
+
+    assert result.returncode != 0
+    assert "does not accept '@' paths" in result.stderr

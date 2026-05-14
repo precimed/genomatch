@@ -40,11 +40,11 @@ Historical legacy coverage is preserved in the migration changelog under `match/
 
 The migrated suite must keep coverage for:
 
-- exact target-ordered matching
+- exact first-input-ordered intersection
 - allele swap handling
-- missing target rows encoded as `source_shard=.` `source_index=-1` and `allele_op=missing`
+- mapped-only `.vmap` rows with non-missing source provenance
 - duplicate target exact rows failing
-- rsID ignored for matching
+- rsID ignored for exact set operations
 - importer `--chr2use` / `--contigs` filtering and `restrict_contigs.py` target-row filtering
 - summary-stat effect inversion for swapped alleles
 - first-input order preservation in intersections
@@ -123,18 +123,25 @@ The migrated suite must keep coverage for:
 
 ### Mapping
 
-- `match_vmap_to_target.py` default mode emits only `identity`, `swap`, or `missing`
-- `match_vmap_to_target.py` has no `--allow-strand-flips` surface in the intended contract
-- `match_vmap_to_target.py` supports both SNP and non-SNP biallelic exact matching, with `swap` defined by allele ordering rather than allele length
+- `intersect_variants.py` always emits provenance-free `.vtable`
+- `intersect_variants.py` preserves first-input row order and IDs
+- `intersect_variants.py` supports both SNP and non-SNP biallelic exact intersection
+- `intersect_variants.py` accepts two or more positional `.vmap` / `.vtable` inputs and named `--output`
+- `restrict_vmap.py` emits `.vmap` preserving source `.vmap` row order, IDs, provenance, and existing `allele_op`
+- `restrict_vmap.py` accepts positional inputs with source `.vmap` first, then one or more `.vmap` / `.vtable` restrictions, plus named `--output`
+- `restrict_vmap.py` treats restriction inputs as exact `chrom:pos:a1:a2` membership filters only
+- `restrict_vmap.py` accepts one or more `.vtable` / `.vmap` restriction inputs
+- with multiple restriction inputs, `restrict_vmap.py` retains only source rows present in every restriction input
+- `restrict_vmap.py` ignores restriction-input `.vmap` provenance
+- `restrict_vmap.py` supports both SNP and non-SNP biallelic exact restriction
 - for multi-base alleles, any `flip` / `flip_swap` semantics exercised by reference-aware tools use reverse-complement per allele string rather than basewise complementation without reversing order
-- `match_vmap_to_target.py` rejects `@` template paths and has no `--chr2use` surface
-- `match_vmap_to_target.py` requires the source input to be a `.vmap`
-- `match_vmap_to_target.py` accepts the target input as a `.vtable` or `.vmap`
-- `match_vmap_to_target.py` emits `.vmap`
-- matching uses the target side of the source `.vmap` only and output must preserve provenance from the incoming `.vmap`
-- if the target input is a `.vmap`, matching uses only its target side, ignores its provenance entirely, and emits a warning
-- `match_vmap_to_target.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-matching contract
-- duplicate target-side rows in the source `.vmap` are invalid before matching
+- `intersect_variants.py` rejects `@` template paths and has no `--chr2use` surface
+- `intersect_variants.py` rejects legacy `--inputs`
+- `intersect_variants.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-intersection contract
+- `restrict_vmap.py` rejects `@` template paths and has no `--chr2use` surface
+- `restrict_vmap.py` rejects legacy `--source` and `--targets`
+- `restrict_vmap.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-restriction contract
+- duplicate target-side rows in `.vmap` input are invalid before intersection
 - `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
 - `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles
 - `drop_strand_ambiguous.py` emits the same type as the input and preserves original provenance only when filtering an input `.vmap`
@@ -142,6 +149,7 @@ The migrated suite must keep coverage for:
 - declared coordinate order is declared contig order, then numeric position, with stable input order for ties
 - `.vmap` rows carry `source_shard + source_index` provenance
 - `.vmap` preserves original `source_shard` and shard-local `source_index`
+- `.vmap` rows must have non-missing source provenance and non-negative `source_index`
 - `.vmap` metadata carries target-side metadata only
 - `convert_vmap_to_target.py` materializes target rows and breaks provenance intentionally
 - `liftover_build.py` resolves chain and FASTA assets from config + metadata only
@@ -242,6 +250,7 @@ The migrated suite must keep coverage for:
 ### Intersections
 
 - `intersect_variants.py` intersects exact `chrom:pos:a1:a2`
+- `intersect_variants.py` accepts positional inputs and named `--output`
 - `intersect_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `intersect_variants.py` fails cleanly when input metadata omits `contig_naming`
 - `intersect_variants.py` performs no implicit normalization
@@ -250,9 +259,25 @@ The migrated suite must keep coverage for:
 - output order follows the first input and does not sort by declared coordinate order
 - `intersect_variants.py` emits `.vtable`
 
+### `.vmap` restrictions
+
+- `restrict_vmap.py` restricts exact `chrom:pos:a1:a2`
+- `restrict_vmap.py` accepts positional inputs and named `--output`
+- `restrict_vmap.py` requires the same `genome_build` and the same `contig_naming` across inputs
+- `restrict_vmap.py` fails cleanly when input metadata omits `contig_naming`
+- `restrict_vmap.py` performs no implicit normalization
+- mismatched build or contig naming fails clearly
+- duplicate target-side rows in the source `.vmap` are invalid before restriction
+- output IDs, order, provenance, and `allele_op` come from the source `.vmap`
+- restriction inputs affect membership only
+- multiple restriction inputs are combined by intersection, not union
+- `restrict_vmap.py` emits `.vmap`
+
 ### Unions
 
 - `union_variants.py` unions exact `chrom:pos:a1:a2`
+- `union_variants.py` accepts positional inputs and named `--output`
+- `union_variants.py` rejects legacy `--inputs`
 - `union_variants.py` requires at least two inputs
 - `union_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `union_variants.py` fails cleanly when input metadata omits `contig_naming`
@@ -265,15 +290,14 @@ The migrated suite must keep coverage for:
 
 ### Payload application
 
-- `apply_vmap_to_sumstats.py` preserves full target-row order by default
+- `apply_vmap_to_sumstats.py` preserves `.vmap` row order
 - `apply_vmap_to_sumstats.py` resolves source rows by exact `source_shard + source_index`
 - for imported single-file sumstats payloads, `source_shard` is `.`
 - `apply_vmap_to_sumstats.py` supports single-file payloads only
 - `apply_vmap_to_sumstats.py` fails cleanly on out-of-range shard-local provenance
-- `apply_vmap_to_sumstats.py` keeps unmatched target rows in output by default and drops them only when `--only-mapped-target` is supplied
 - `apply_vmap_to_sumstats.py` defines output variant columns, including `CHR`, from target `.vmap` rows
-- `apply_vmap_to_sumstats.py` writes output `SNP` as `chrom:pos:a1:a2` from the retained `.vmap` target row by default
-- `apply_vmap_to_sumstats.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `SNP`
+- `apply_vmap_to_sumstats.py` writes output `SNP` as `chrom:pos:a1:a2` from the `.vmap` target row by default
+- `apply_vmap_to_sumstats.py --retain-snp-id` writes target-side `.vmap` `id` values as output `SNP`
 - `apply_vmap_to_sumstats.py` does not require source-side POS / SNP / effect-allele / other-allele payload columns
 - without `--clean`, `apply_vmap_to_sumstats.py` preserves the input delimiter in output
 - `apply_vmap_to_sumstats.py` writes gzip-compressed output when `--output` ends with `.gz`
@@ -294,25 +318,22 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py --clean` derives `EAF` from `OAF` when needed and drops `OAF`-family columns afterward
 - `apply_vmap_to_sumstats.py --clean` applies the second validation pass after derivation so invalid derived values are cleared back to missing
 - `apply_vmap_to_sumstats.py --clean` applies swap / flip_swap transforms to cleaned numeric effect columns while preserving `Direction` unchanged
-- `apply_vmap_to_sumstats.py --clean` must still keep retained unmatched target rows all-missing rather than letting harmonization fill metadata-derived values onto them
-- `apply_vmap_to_sumstats.py --clean --only-mapped-target` additionally drops retained mapped rows whose `P` value is still missing after harmonization
 - `apply_vmap_to_sumstats.py --clean` writes tab-delimited output with canonical cleaned payload column ordering and serializes missing values as empty fields
 - `apply_vmap_to_sumstats.py --clean` covers cleaned-schema fields such as `StudyN` only as explicitly defined by the current cleaned-sumstats spec
-- genotype-payload `apply_vmap_*` tools (`apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`) preserve full target-row order by default
+- genotype-payload `apply_vmap_*` tools (`apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`) preserve `.vmap` row order
 - genotype-payload `apply_vmap_*` tools resolve source rows by exact `source_shard + source_index`
 - for genotype-payload `apply_vmap_*` tools, `source_shard` lookup is exact stored provenance and not chromosome interpretation
 - genotype-payload `apply_vmap_*` tools support single-file and `@` source-prefix discovery plus optional target-contig `@` output sharding
 - genotype-payload `apply_vmap_*` tools replace output `@` with the retained target-side contig label exactly as it appears in `.vmap chrom`
 - genotype-payload `apply_vmap_*` tools do not emit empty `@` output shards for contigs with no retained rows
 - genotype-payload `apply_vmap_*` tools reject missing required source shards and out-of-range shard-local provenance
-- genotype-payload `apply_vmap_*` tools fail cleanly when `--only-mapped-target` leaves zero retained rows rather than emitting an empty payload
+- genotype-payload `apply_vmap_*` tools fail cleanly on empty `.vmap` input rather than emitting an empty payload
 - genotype-payload `apply_vmap_*` tools do not apply smart label resolution at lookup time
-- genotype-payload `apply_vmap_*` tools use the shared abstract allele-op contract: `identity` and `flip` keep the mapped row in the same genotype orientation, `swap` and `flip_swap` perform allele-order genotype rewrites, and `missing` emits a retained unmatched/all-missing row unless dropped by `--only-mapped-target`
+- genotype-payload `apply_vmap_*` tools use the shared abstract allele-op contract: `identity` and `flip` keep the mapped row in the same genotype orientation, while `swap` and `flip_swap` perform allele-order genotype rewrites
 - for `@`-sharded PLINK payloads, lookup is by exact imported `source_shard`, not by chromosome interpretation
 - `apply_vmap_to_bfile.py` `@` shard discovery accepts PLINK split-X PAR shard filename aliases `XY` and `chrXY`
-- `apply_vmap_to_bfile.py` fails cleanly when every retained target row is unmatched rather than emitting an all-missing PLINK payload
 - `apply_vmap_to_bfile.py` defines output `.bim` rows entirely from target `.vmap` rows with genetic position / cM fixed to `0`
-- `apply_vmap_to_bfile.py` writes output `.bim` SNP IDs as `chrom:pos:a1:a2` from retained `.vmap` target rows by default
+- `apply_vmap_to_bfile.py` writes output `.bim` SNP IDs as `chrom:pos:a1:a2` from `.vmap` target rows by default
 - `apply_vmap_to_bfile.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `.bim` SNP IDs
 - `apply_vmap_to_bfile.py` propagates the payload `.fam` to every emitted output when `--target-fam` is not supplied
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
@@ -323,7 +344,7 @@ The migrated suite must keep coverage for:
 - under `--sample-id-mode=fid_iid`, BFILE subject keys are `(FID, IID)`; under `--sample-id-mode=iid`, BFILE subject keys are `IID`
 - `apply_vmap_to_bfile.py` fails on duplicate subject keys within one source shard
 - `apply_vmap_to_bfile.py` fails on duplicate subject keys in `--target-fam`
-- with an explicit `--target-fam`, `apply_vmap_to_bfile.py` always summarizes reconciliation-added missingness on retained mapped rows
+- with an explicit `--target-fam`, `apply_vmap_to_bfile.py` always summarizes reconciliation-added missingness on `.vmap` rows
 - with an explicit `--target-fam`, `apply_vmap_to_bfile.py` warns when any retained output subject or retained output variant exceeds 50% reconciliation-added missingness
 - `apply_vmap_to_bfile.py` treats `identity` and `flip` as unchanged genotype encoding
 - `apply_vmap_to_bfile.py` treats `swap` and `flip_swap` as genotype-swapping operations
@@ -335,16 +356,16 @@ The migrated suite must keep coverage for:
 - for BFILE, target absent accepts only missing and treats any nonmissing observed state as incompatible
 - `apply_vmap_to_bfile.py` does not rewrite offending genotype content to missing as part of ploidy validation
 - `apply_vmap_to_bfile.py` emits aggregate auditable ploidy-validation warnings rather than one warning per offending genotype
-- `apply_vmap_to_bfile.py` emits `.ploidy` whenever retained target rows include any row that is non-diploid in at least one sex; `.ploidy` stores one `(male_ploidy, female_ploidy)` pair per emitted row and is not a per-sample validation report
+- `apply_vmap_to_bfile.py` emits `.ploidy` whenever `.vmap` rows include any row that is non-diploid in at least one sex; `.ploidy` stores one `(male_ploidy, female_ploidy)` pair per emitted row and is not a per-sample validation report
 - for `@`-sharded BFILE output, `.ploidy` emission is decided per emitted shard; shards with at least one non-diploid row emit `.ploidy`, while shards containing only `(2, 2)` rows do not
 - `apply_vmap_to_bfile.py` supports non-sharded output prefixes that already contain dots
 - `apply_vmap_to_bfile.py` covers shard merge, shard split, and arbitrary cross-contig relocation between `@`-sharded source input and `@`-sharded output, validating that the emitted genotype calls land in the correct target shard and row
 - `apply_vmap_to_bfile.py` reads and writes genotype data in bounded chunks rather than loading the full genotype matrix for all variants into memory
-- bounded-chunk behavior must hold for both single-file and `@`-sharded PLINK payloads without changing output semantics, including cases where target order interleaves rows from multiple source shards
+- bounded-chunk behavior must hold for both single-file and `@`-sharded PLINK payloads without changing output semantics, including cases where `.vmap` order interleaves rows from multiple source shards
 - `apply_vmap_to_pfile.py` applies the same shared genotype-payload `apply_vmap_*` contract to PLINK 2 `.pgen/.pvar/.psam`
 - `apply_vmap_to_pfile.py` defines output `.pvar` rows and allele columns from retained target `.vmap` rows, not from source `.pvar`
-- `apply_vmap_to_pfile.py` writes output `.pvar` IDs as `chrom:pos:a1:a2` from retained `.vmap` target rows by default
-- `apply_vmap_to_pfile.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `.pvar` IDs
+- `apply_vmap_to_pfile.py` writes output `.pvar` IDs as `chrom:pos:a1:a2` from `.vmap` target rows by default
+- `apply_vmap_to_pfile.py --retain-snp-id` writes target-side `.vmap` `id` values as output `.pvar` IDs
 - `apply_vmap_to_pfile.py` propagates the payload `.psam` to every emitted output when `--target-psam` is not supplied
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`
 - with `--target-psam`, `apply_vmap_to_pfile.py` copies that target `.psam` exactly to every emitted output and uses it as the output sample axis
@@ -357,11 +378,11 @@ The migrated suite must keep coverage for:
 - under `--sample-id-mode=fid_iid`, empty `FID` values do not trigger fallback to `IID`
 - `apply_vmap_to_pfile.py` fails on duplicate subject keys within one source shard
 - `apply_vmap_to_pfile.py` fails on duplicate subject keys in `--target-psam`
-- with an explicit `--target-psam`, `apply_vmap_to_pfile.py` always summarizes reconciliation-added missingness on retained mapped rows
+- with an explicit `--target-psam`, `apply_vmap_to_pfile.py` always summarizes reconciliation-added missingness on `.vmap` rows
 - with an explicit `--target-psam`, `apply_vmap_to_pfile.py` warns when any retained output subject or retained output variant exceeds 50% reconciliation-added missingness
 - with `--target-psam`, `apply_vmap_to_pfile.py` copies the explicit target `.psam` exactly and does not heuristically merge arbitrary extra source `.psam` metadata columns
-- `apply_vmap_to_pfile.py` supports retained mapped biallelic hardcalls, hardcall phase information, unphased dosages, and haploid hardcalls or haploid dosages under PLINK/PGEN allele-count conventions
-- `apply_vmap_to_pfile.py` fails on unsupported retained mapped inputs, including non-biallelic retained rows, phased dosage preservation, and retained mapped content not representable through the chosen pgenlib read or write path
+- `apply_vmap_to_pfile.py` supports mapped biallelic hardcalls, hardcall phase information, unphased dosages, and haploid hardcalls or haploid dosages under PLINK/PGEN allele-count conventions
+- `apply_vmap_to_pfile.py` fails on unsupported mapped inputs, including non-biallelic retained rows, phased dosage preservation, and mapped content not representable through the chosen pgenlib read or write path
 - `apply_vmap_to_pfile.py` copies hardcalls, hardcall phase flags, and dosages unchanged for `identity` and `flip`
 - `apply_vmap_to_pfile.py` swaps biallelic hardcall allele codes and rewrites every nonmissing unphased dosage as `2 - dosage` for `swap` and `flip_swap`, while preserving missing values and phase flags
 - `apply_vmap_to_pfile.py` follows the shared ploidy model for expected target-side ploidy and validation
@@ -375,9 +396,7 @@ The migrated suite must keep coverage for:
 - for `restrict_build_compatible.py --norm-indels`, the `ploidy_class_changed` comparison is against the final normalized candidate row that would otherwise be emitted, immediately before final output/QC accounting
 - `apply_vmap_to_pfile.py` does not rewrite offending genotype content to missing as part of ploidy validation
 - `apply_vmap_to_pfile.py` emits aggregate auditable ploidy-validation warnings rather than one warning per offending genotype
-- `apply_vmap_to_pfile.py` emits all-missing retained unmatched rows when at least one retained mapped row remains, but fails cleanly if every retained row is unmatched
-- `apply_vmap_to_pfile.py` writes `.pgen` using one coherent file-wide output channel configuration that preserves hardcalls, hardcall phase information, and unphased dosages across all emitted rows, including inserted all-missing rows
-- inserted all-missing PFILE rows must emit every enabled channel and carry phase flags with no useful phase information
+- `apply_vmap_to_pfile.py` writes `.pgen` using one coherent file-wide output channel configuration that preserves hardcalls, hardcall phase information, and unphased dosages across all emitted rows
 - `apply_vmap_to_pfile.py` reads and writes genotype data in bounded chunks rather than loading the full genotype matrix for all variants into memory
 
 ### Convenience wrapper
@@ -449,18 +468,14 @@ The migrated suite must keep coverage for:
 
 - `project_payload.py` requires raw `--input`
 - `project_payload.py` requires `--input-format`
-- `project_payload.py` requires `--target`
-- `project_payload.py --target` always defines the target row set
-- `project_payload.py --target` accepts `.vtable` or `.vmap`
-- `project_payload.py` accepts optional `--source-vmap`
-- if `project_payload.py --target` is a `.vtable`, `--source-vmap` is required
-- if `project_payload.py --target` is a `.vmap`, `--source-vmap` is optional
-- if `project_payload.py --source-vmap` is supplied, the wrapper runs exact `match_vmap_to_target.py` semantics first, with no extra normalization or relaxed allele handling
-- if `project_payload.py --target` is a `.vmap` and `--source-vmap` is supplied, target provenance is ignored with the underlying `match_vmap_to_target.py` warning
-- if `project_payload.py --target` is a `.vmap` and `--source-vmap` is omitted, provenance comes from `--target` and the wrapper skips `match_vmap_to_target.py`
+- `project_payload.py` requires `--vmap`
+- `project_payload.py --vmap` must name a prepared mapped-only `.vmap`
+- `project_payload.py --vmap` defines final payload variant rows, row order, IDs, source provenance, and `allele_op`
+- `project_payload.py` rejects `--target`
+- `project_payload.py` rejects `--source-vmap`
+- `project_payload.py` never invokes `restrict_vmap.py`
 - `project_payload.py` requires final `--output`
-- `project_payload.py` accepts optional `--prefix`; it defaults to `--output`, except that for `bfile` and `pfile` output prefixes containing `@` it defaults to `--output` with each `@` replaced by `all_targets`
-- `project_payload.py` accepts optional `--full-target`
+- `project_payload.py` does not support `--full-target`
 - for `bfile` input, `project_payload.py` accepts optional `--target-fam` and rejects `--target-psam`
 - for `pfile` input, `project_payload.py` accepts optional `--target-psam` and rejects `--target-fam`
 - for `bfile` and `pfile` input, `project_payload.py` accepts optional `--sample-id-mode {fid_iid,iid}` and passes it through unchanged to the canonical apply tool
@@ -470,12 +485,10 @@ The migrated suite must keep coverage for:
 - for `project_payload.py --input-format sumstats-clean`, `--fill-mode` and `--use-af-inference` are accepted and passed through unchanged to `apply_vmap_to_sumstats.py --clean`
 - `project_payload.py` requires `--sumstats-metadata` for `sumstats` and `sumstats-clean` input and rejects it for `bfile` and `pfile`
 - `project_payload.py` supports `sumstats`, `sumstats-clean`, `bfile`, and `pfile` input
-- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, `project_payload.py` skips the match step and applies `--target` directly
-- `project_payload.py` retains the matched `.vmap` exactly at `<prefix>.vmap`
-- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, no retained matched `<prefix>.vmap` is written
-- if `project_payload.py --sample-axis union` synthesizes a target sample file, it retains that file exactly as `<prefix>.target_samples.fam` for `bfile` input or `<prefix>.target_samples.psam` for `pfile` input
-- `project_payload.py --sample-axis union` only unions subject keys across referenced retained mapped shards, after wrapper row-retention filtering: mapped-only by default, or full-target under `--full-target`
-- `project_payload.py --sample-axis union` excludes shards discovered on disk that contribute no retained mapped variants
+- if `project_payload.py --sample-axis union` synthesizes a target sample file, it retains that file exactly as `<output-prefix>.target_samples.fam` for `bfile` input or `<output-prefix>.target_samples.psam` for `pfile` input
+- for output prefixes containing `@`, the synthesized target-sample `<output-prefix>` is derived by replacing each `@` with `all_targets`
+- `project_payload.py --sample-axis union` unions subject keys across exactly the source shards referenced by the input `.vmap`
+- `project_payload.py --sample-axis union` excludes shards discovered on disk that are not referenced by input `.vmap` rows
 - `project_payload.py --sample-axis union` warns and is a no-op for non-`@` input or when only one referenced shard remains
 - `project_payload.py --sample-axis union` synthesizes deterministic first-occurrence subject order across participating shards in deterministic shard order
 - for `bfile` input, `project_payload.py --sample-axis union` synthesizes `.fam` rows as `FID IID 0 0 sex -9`
@@ -485,30 +498,26 @@ The migrated suite must keep coverage for:
 - in `project_payload.py --sample-axis union`, missing sex plus known sex for the same subject key warns and keeps the known sex
 - in `project_payload.py --sample-axis union`, conflicting known male and known female codes for the same subject key fail
 - in `project_payload.py --sample-axis union`, duplicate subject keys within one source shard fail
-- `project_payload.py --prefix` must not contain `@`
 - `project_payload.py` then runs the format-appropriate `apply_vmap_*` tool
 - `project_payload.py` dispatches `sumstats-clean` input to `apply_vmap_to_sumstats.py --clean`
 - `project_payload.py` rejects `--fill-mode` and `--use-af-inference` outside `--input-format=sumstats-clean`
 - `project_payload.py` does not support `--resume`
 - `project_payload.py` supports `--force`
 - by default, `project_payload.py` fails if any wrapper-managed output already exists
-- for `bfile` and `pfile` output prefixes containing `@`, `project_payload.py` determines wrapper-managed PLINK outputs by replacing `@` with target contigs from `--target`, without glob-based inference
-- `project_payload.py` passes `--only-mapped-target` to the format-appropriate `apply_vmap_*` tool by default
-- `project_payload.py --full-target` suppresses that wrapper-added `--only-mapped-target`
+- for `bfile` and `pfile` output prefixes containing `@`, `project_payload.py` determines wrapper-managed PLINK outputs by replacing `@` with target contig labels present in the input `.vmap`, without glob-based inference
 - `project_payload.py --target-fam`, `--target-psam`, and `--sample-id-mode` are passed through unchanged to the format-appropriate canonical apply tool
 - `project_payload.py --retain-snp-id` is passed through unchanged to the format-appropriate canonical apply tool; without it, projected payload IDs use the apply-time corrected target ID default
 - `project_payload.py` prints the invoked subcommands
 - for `sumstats` and `sumstats-clean` input, `project_payload.py --output` is the exact rewritten payload path and must not contain `@`
 - for `bfile` and `pfile` input, `project_payload.py --output` is the PLINK output prefix, may contain `@`, and is passed through to the canonical apply tool
-- test that the wrapper retains the matched `.vmap` produced by `match_vmap_to_target.py`
-- test that the retained matched mapping is written as exactly `<prefix>.vmap`
-- test that omitted `--prefix` defaults to `--output` for non-sharded outputs
-- test that omitted `--prefix` for `bfile` and `pfile` output prefixes containing `@` defaults to the same value with each `@` replaced by `all_targets`
-- test that `project_payload.py --prefix` rejects `@`
+- test that `project_payload.py` rejects `--target`
+- test that `project_payload.py` rejects `--source-vmap`
+- test that `project_payload.py` rejects `--full-target`
+- test that `project_payload.py` does not retain or synthesize a restricted `.vmap`
 - test that for `sumstats` and `sumstats-clean` input, `--output` is treated as the exact rewritten payload path and `@` is rejected
 - test that for `bfile` and `pfile` input, `--output` is treated as the PLINK output prefix and `@` is allowed
 - test that `project_payload.py` does not accept `--resume`
-- test that by default `project_payload.py` fails if the retained matched `.vmap`, retained synthesized target sample file, or final projected payload output already exists
+- test that by default `project_payload.py` fails if a retained synthesized target sample file or final projected payload output already exists
 - test that `--force` deletes wrapper-managed outputs first, including retained synthesized target sample files, and then reruns cleanly from scratch
 - test that `project_payload.py` prints the invoked subcommands
 
@@ -517,4 +526,4 @@ The migrated suite must keep coverage for:
 - Prefer small hand-written `.vtable`, `.vmap`, and sumstats fixtures.
 - Keep external-tool integration out of the default unit suite unless the canonical tool requires it.
 - Canonical tests must not depend on `.match`, source-side `.vmap` metadata, dual-build BIM, or hidden cross-build behavior.
-- The canonical cleanup workflow is import -> normalize or repair target contigs -> `restrict_build_compatible.py` with optional `--allow-strand-flips`, optional `--norm-indels`, and optional `--sort` -> optional liftover -> optional explicit standalone `sort_variants.py` -> optional `restrict_contigs.py` -> downstream match, materialize, and apply.
+- The canonical cleanup workflow is import -> normalize or repair target contigs -> `restrict_build_compatible.py` with optional `--allow-strand-flips`, optional `--norm-indels`, and optional `--sort` -> optional liftover -> optional explicit standalone `sort_variants.py` -> optional `restrict_contigs.py` -> downstream restriction/intersection, materialize, and apply.

@@ -37,7 +37,7 @@ Required sidecar metadata:
 - `intersect_variants.py`
 - `union_variants.py`
 
-It may also be used as the target input to matching operations where source provenance is irrelevant to the matching logic itself.
+It may also be used as a restriction input to `restrict_vmap.py` when only exact set membership is needed.
 
 Canonical `.vtable` and `.vmap` artifacts are always single files. `@` templates are not part of the public object contract for canonical variant objects.
 
@@ -78,7 +78,6 @@ Allowed `allele_op` values in v1:
 - `swap`
 - `flip`
 - `flip_swap`
-- `missing`
 
 Required sidecar metadata:
 
@@ -94,12 +93,14 @@ Required sidecar metadata:
 
 Importer-emitted `.vmap` is the normal starting artifact for provenance-preserving workflows. Its target side contains retained canonical imported rows; its source side carries exact raw source provenance as `(source_shard, source_index)`.
 
+Canonical `.vmap` is mapped-only: every row must correspond to one source payload row. Missing or unmatched target rows are represented by absence from `.vmap`, not by sentinel provenance rows.
+
 ## Invariants
 
 - Metadata is authoritative for `genome_build` and `contig_naming` once those fields are present.
 - Build mismatch must fail clearly unless the user explicitly runs a liftover tool.
 - Canonical target-side rows stored in `.vtable` and `.vmap` support biallelic variants with allele strings stored verbatim as non-empty sequences of `A` / `C` / `G` / `T` characters.
-- Generic exact-match, swap, intersection, provenance, and apply operations must support both SNP and non-SNP biallelic alleles without rewriting them based on allele length alone.
+- Generic exact set operations, allele transforms, provenance-preserving operations, and apply operations must support both SNP and non-SNP biallelic alleles without rewriting them based on allele length alone.
 - Build-guessing is explicit and lives only in `guess_build.py`.
 - Reference-dependent tools resolve assets from `match/config.yaml` plus input metadata; there are no CLI reference overrides in v1.
 - Current reference-aware operations use UCSC-style internal reference FASTA and top-level chain config entries after strict validation against declared metadata.
@@ -108,7 +109,9 @@ Importer-emitted `.vmap` is the normal starting artifact for provenance-preservi
 - `liftover_build.py` is the only cross-build conversion entrypoint.
 - `.vmap` target duplicates by `chrom:pos:a1:a2` are not allowed.
 - Source duplicates are tolerated; first occurrence wins.
-- If `source_index == -1`, then `source_shard` must be `.` and `allele_op` must be `missing`.
+- `source_index` must be a non-negative shard-local row index.
+- `source_shard` must be present for every `.vmap` row; `.` means a single-file source.
+- `.vmap` must not contain unmatched target rows or missing-provenance sentinels.
 - If metadata declares `contig_naming`, every target row must be valid under that convention. This is an object invariant; downstream tools are not required to re-validate it at every boundary.
 - `.vmap` metadata is target-side only.
 - `.vmap` provenance is stored on disk in each row as `(source_shard, source_index)`.
@@ -128,8 +131,8 @@ The exact meaning of `source_shard` depends on the first provenance-bearing step
 - Canonical importers preserve retained discovery order
 - For sharded imports this means deterministic shard order plus within-shard row order.
 - Single-input filter/repair/reference-compatible restriction tools preserve retained target-row order unless explicitly documented otherwise.
-- match_vmap_to_target.py output order follows the target input order, whether the target is a `.vtable` or the target side of a `.vmap`.
-- intersect_variants.py output order follows the first input.
+- intersect_variants.py output order follows the first input and emits `.vtable`.
+- restrict_vmap.py output order follows the source `.vmap` and emits `.vmap`.
 - union_variants.py emits declared coordinate order after deduplicating by first occurrence across all inputs.
 - sort_variants.py emits declared coordinate order.
 - liftover_build.py emits declared coordinate order after liftover.

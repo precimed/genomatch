@@ -299,6 +299,37 @@ def iter_vmap_rows(path: Path) -> Iterator[VMapRow]:
             yield VMapRow(row.chrom, row.pos, row.id, row.a1, row.a2, row.source_shard, int(row.source_index), row.allele_op)
 
 
+def iter_vtable_table_chunks(path: Path, *, label: str = "vtable row") -> Iterator[VariantRowsTable]:
+    for chunk in _iter_tabular_chunks(path, _VTABLE_COLUMNS, label=label):
+        if chunk.isna().any(axis=None):
+            raise ValueError(f"invalid {label} in {path}")
+        table = VariantRowsTable.from_frame(chunk, copy=False)
+        frame = table.to_frame(copy=False)
+        frame["a1"] = frame["a1"].str.strip().str.upper()
+        frame["a2"] = frame["a2"].str.strip().str.upper()
+        _validate_vtable_frame(frame, label, assume_normalized_alleles=True)
+        yield table
+
+
+def iter_vmap_table_chunks(path: Path, *, check_duplicates: bool = True) -> Iterator[VMapRowsTable]:
+    for chunk in _iter_tabular_chunks(path, _VMAP_COLUMNS, label="vmap"):
+        if chunk.isna().any(axis=None):
+            raise ValueError(f"invalid vmap row in {path}")
+        source_index = chunk["source_index"].str.strip()
+        source_index_numeric = pd.to_numeric(source_index, errors="coerce")
+        valid_tokens = source_index.str.fullmatch(SIGNED_INT_TOKEN_PATTERN).fillna(False)
+        if (~valid_tokens | source_index_numeric.isna()).any():
+            raise ValueError(f"invalid vmap row in {path}")
+        chunk = chunk.copy()
+        chunk["source_index"] = source_index_numeric.astype("int64")
+        table = VMapRowsTable.from_frame(chunk, copy=False)
+        frame = table.to_frame(copy=False)
+        frame["a1"] = frame["a1"].str.strip().str.upper()
+        frame["a2"] = frame["a2"].str.strip().str.upper()
+        _validate_vmap_frame(frame, assume_normalized_alleles=True, check_duplicates=check_duplicates)
+        yield table
+
+
 def read_vtable_table(path: Path) -> VariantRowsTable:
     # Assumes: path points to a tab-delimited vtable payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).

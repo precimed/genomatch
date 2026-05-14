@@ -2,23 +2,25 @@
 
 This file is the authoritative wrapper-spec document for `prepare_variants.py`, `prepare_variants_sharded.py`, and `project_payload.py`.
 
-These wrappers are orchestration only. They compose canonical tools into a common workflow and do not define alternate import, normalization, contig, metadata, liftover, matching, intersection, or payload-application semantics. Those semantics remain defined by the underlying canonical-tool specs, especially [importers.md](importers.md), [contigs-and-metadata.md](contigs-and-metadata.md), [variant-transforms.md](variant-transforms.md), [mapping.md](mapping.md), and [payload-application.md](payload-application.md).
+These wrappers are orchestration only. They compose canonical tools into a common workflow and do not define alternate import, normalization, contig, metadata, liftover, intersection, or payload-application semantics. Those semantics remain defined by the underlying canonical-tool specs, especially [importers.md](importers.md), [contigs-and-metadata.md](contigs-and-metadata.md), [variant-transforms.md](variant-transforms.md), [mapping.md](mapping.md), and [payload-application.md](payload-application.md).
 
 ## Common workflow
 
 The common wrapper workflow ties together:
 
 1. `prepare_variants.py` to prepare each raw input into a shared build and contig-naming convention
-2. `intersect_variants.py` to derive one shared target `.vtable` from prepared inputs
-3. `project_payload.py` to project each original payload into that shared target row set
+2. `intersect_variants.py` to derive a shared provenance-free membership `.vtable`
+3. `restrict_vmap.py` to derive one payload-specific `.vmap` per payload that should be applied
+4. `project_payload.py` to apply each explicit `.vmap` back to its original payload
 
 In that workflow:
 
 - `prepare_variants.py` emits one prepared `.vmap` per raw input, while retaining stage-by-stage wrapper outputs
 - `prepare_variants_sharded.py` is the memory-bounded chromosome-sharded input variant of `prepare_variants.py`; it emits one final prepared `.vmap` while retaining per-contig-group stage outputs
-- `intersect_variants.py` consumes prepared `.vmap` or `.vtable` inputs and emits one shared `.vtable`
-- `project_payload.py` matches a prepared source `.vmap` to that shared target `.vtable` and rewrites the original payload into target-row order
-- exact intersection, matching, and payload-application semantics remain defined by the canonical tools rather than by the wrappers
+- `intersect_variants.py` consumes prepared `.vmap` or `.vtable` inputs and emits one shared membership `.vtable` with row order and IDs from the first input
+- `restrict_vmap.py` restricts one prepared source `.vmap` to that shared membership `.vtable` or another table-like membership set while preserving source `.vmap` row order, IDs, provenance, and `allele_op`
+- `project_payload.py` applies an explicit mapped-only input `.vmap`; it does not construct or restrict mappings
+- exact intersection and payload-application semantics remain defined by the canonical tools rather than by the wrappers
 
 ## `prepare_variants.py`
 
@@ -186,55 +188,29 @@ Final concatenation:
 
 ## `project_payload.py`
 
-`project_payload.py` is the convenience wrapper for the post-prepare projection stage. `--target` always defines the target row set. If provenance must be supplied separately, the wrapper matches a source `.vmap` onto that target first, retains the matched mapping object, and then rewrites the original payload into the target row set.
+`project_payload.py` is the convenience wrapper for the post-prepare payload-application stage. It applies an explicit mapped-only input `.vmap` to the original payload and dispatches to the appropriate canonical `apply_vmap_*` tool. It does not accept a target `.vtable`, does not accept a separate source `.vmap`, and does not run `restrict_vmap.py`. Users who want to apply a payload to a shared membership set must first run `restrict_vmap.py` themselves and pass the resulting `.vmap` to `project_payload.py --vmap`.
 
 ### Flow 
 
-- case 1: `--target` is `.vmap` and `--source-vmap` is omitted
-
-  ```text
-  target .vmap
-      |
-      \--> apply_vmap_*.py
-            -> rewritten payload
-  ```
-
-- case 2: `--source-vmap` is supplied
-
-  ```text
-  prepared source .vmap         target .vtable/.vmap
-            |                         |
-            +-----------+-------------+
-                        |
-                        v
-  match_vmap_to_target.py
-    -> <prefix>.vmap
+```text
+input .vmap
     |
     \--> apply_vmap_*.py
           -> rewritten payload
-  ```
+```
 
 ### Contract
 
 - require raw `--input`, except for `--input-format sumstats` and `--input-format sumstats-clean` where `--input` may be omitted
 - require `--input-format`
-- require `--target`
-- `--target` always defines the target row set
-- `--target` must name a `.vtable` or `.vmap`
-- accept optional `--source-vmap`
-- if supplied, `--source-vmap` must name a prepared `.vmap`
-- if `--target` names a `.vtable`, require `--source-vmap`
-- if `--target` names a `.vmap`, `--source-vmap` is optional
-- provenance comes from `--source-vmap` when supplied; otherwise, if `--target` is a `.vmap`, provenance comes from `--target`
-- if `--source-vmap` is supplied, run exact `match_vmap_to_target.py` semantics first, with no extra normalization or relaxed allele handling
-- if `--target` names a `.vmap` and `--source-vmap` is supplied, preserve exact `match_vmap_to_target.py` behavior: ignore target provenance and emit its warning
-- accept optional `--prefix`, defaulting it to `--output`
+- require `--vmap`
+- `--vmap` must name a prepared mapped-only `.vmap`
+- the input `.vmap` defines final payload variant rows, row order, IDs, source provenance, and `allele_op`
+- reject `--target`
+- reject `--source-vmap`
+- never run `restrict_vmap.py`
 - require final `--output`
-- retain the matched `.vmap` from `match_vmap_to_target.py`
-- the retained matched `.vmap` path is exactly `<prefix>.vmap`
-- when `--target` is a `.vmap` and `--source-vmap` is omitted, no retained matched `<prefix>.vmap` is produced
-- omitted `--prefix` means the exact `--output` value, except for PLINK output prefixes containing `@`, where the default retained prefix is derived by replacing each `@` with `all_targets`
-- accept optional `--full-target`
+- `--full-target` is not supported
 - for `bfile` input, accept optional `--target-fam` and reject `--target-psam`
 - for `pfile` input, accept optional `--target-psam` and reject `--target-fam`
 - for `bfile` and `pfile` input, accept optional `--sample-id-mode {fid_iid,iid}` and pass it through unchanged to the underlying `apply_vmap_*` tool; default to `fid_iid`
@@ -244,17 +220,14 @@ Final concatenation:
 - for `bfile` and `pfile` input, accept optional `--skip-ploidy-check` and pass it through unchanged to the underlying `apply_vmap_*` tool
 - reject `--skip-ploidy-check` for `sumstats` and `sumstats-clean` input
 - for `--input-format sumstats-clean`, accept optional `--fill-mode {column,row}` and `--use-af-inference` and pass them through unchanged to `apply_vmap_to_sumstats.py --clean`
-- accept optional `--retain-snp-id` and pass it through unchanged to the underlying `apply_vmap_*` tool; by default, final projected payload IDs are generated from retained `.vmap` target rows as defined in [payload-application.md](payload-application.md#output-variant-ids)
+- accept optional `--retain-snp-id` and pass it through unchanged to the underlying `apply_vmap_*` tool; by default, final projected payload IDs are generated from `.vmap` target rows as defined in [payload-application.md](payload-application.md#output-variant-ids)
 - require `--sumstats-metadata` for `sumstats` and `sumstats-clean` input and reject it for `bfile` and `pfile`
 - for `sumstats` and `sumstats-clean`, when `--input` is omitted, resolve input from `path_sumStats` in `--sumstats-metadata` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - support `sumstats`, `sumstats-clean`, `bfile`, and `pfile` input formats
-- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, skip the match step and use `--target` directly as the mapping object for the apply step
 - dispatch to `apply_vmap_to_sumstats.py` for `sumstats` input
 - dispatch to the clean summary-stat apply path for `sumstats-clean` input
 - for `sumstats-clean` input, pass `--fill-mode` and `--use-af-inference` through unchanged to the clean apply path
 - dispatch to `apply_vmap_to_bfile.py` for `bfile` input and to `apply_vmap_to_pfile.py` for `pfile` input
-- by default, pass `--only-mapped-target` to the underlying `apply_vmap_*` tool
-- if `--full-target` is supplied, omit that wrapper-added `--only-mapped-target`
 - if `--target-fam` or `--target-psam` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - if `--sample-id-mode` is supplied for `bfile` or `pfile` input, pass it through unchanged to the underlying `apply_vmap_*` tool
 - if `--sample-axis native` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
@@ -262,31 +235,28 @@ Final concatenation:
 - if `--retain-snp-id` is supplied, pass it through unchanged to the underlying `apply_vmap_*` tool
 - for `sumstats` and `sumstats-clean` input, treat `--output` as the exact rewritten payload path and reject `@`
 - for `bfile` and `pfile` input, treat `--output` as the PLINK output prefix and allow `@`
-- `--prefix` must not contain `@`
-- wrapper-managed outputs are the retained matched `<prefix>.vmap` plus the final rewritten payload outputs selected by `--output`
-- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, wrapper-managed outputs do not include `<prefix>.vmap`
-- if `--sample-axis union` synthesizes a target sample file, that synthesized file is a retained wrapper artifact written as `<prefix>.target_samples.fam` for `bfile` input or `<prefix>.target_samples.psam` for `pfile` input
-- for `bfile` and `pfile` output prefixes containing `@`, determine wrapper-managed projected payload paths by replacing `@` with each target contig label present in `--target`; do not use glob-based inference
+- if `--sample-axis union` synthesizes a target sample file, that synthesized file is a retained wrapper artifact written as `<output-prefix>.target_samples.fam` for `bfile` input or `<output-prefix>.target_samples.psam` for `pfile` input; for output prefixes containing `@`, `<output-prefix>` is derived by replacing each `@` with `all_targets`
+- for `bfile` and `pfile` output prefixes containing `@`, determine wrapper-managed projected payload paths by replacing `@` with each target contig label present in the input `.vmap`; do not use glob-based inference
 - `project_payload.py` does not support `--resume`
 - `project_payload.py` supports `--force`
 - by default, fail if any wrapper-managed output already exists
-- `--force` means: delete all wrapper-managed outputs for the planned invocation first, including the retained matched `.vmap`, any retained synthesized target sample file, and final projected payload outputs, then run cleanly from scratch
+- `--force` means: delete all wrapper-managed outputs for the planned invocation first, including any retained synthesized target sample file and final projected payload outputs, then run cleanly from scratch
 - write the rewritten payload to `--output`
 - print the invoked subcommands
-- preserve the underlying `match_vmap_to_target.py`, summary-stat apply, `apply_vmap_to_bfile.py`, and `apply_vmap_to_pfile.py` semantics rather than defining a separate mapping or payload contract
+- preserve the underlying summary-stat apply, `apply_vmap_to_bfile.py`, and `apply_vmap_to_pfile.py` semantics rather than defining a separate mapping or payload contract
 
 ### `project_payload.py`: wrapper-level `--sample-axis union`
 
 - `--sample-axis union` is a wrapper-only convenience for `bfile` and `pfile` input
 - `--sample-axis native` is not wrapper-only; `project_payload.py` passes it through to the canonical `apply_vmap_*` tool
 - it does not define alternate canonical payload semantics; instead, it synthesizes a target sample file and then invokes the canonical `apply_vmap_*` tool with that explicit target sample file
-- when `--sample-axis union` is requested, participating source shards are the referenced retained mapped shards only
-- a referenced retained mapped shard is a source shard that appears in the retained `.vmap` rows with `source_index != -1` after wrapper row-retention filtering: mapped-only by default, or full-target when `--full-target` is supplied
-- shards discovered on disk but not referenced by retained mapped rows must not participate in the union
+- when `--sample-axis union` is requested, participating source shards are exactly the source shards referenced by rows in the input `.vmap`
+- a referenced shard is a source shard that appears in the input `.vmap` rows
+- shards discovered on disk but not referenced by input `.vmap` rows must not participate in the union
 - if `--sample-axis union` is requested for non-`@` source input, warn that it is a no-op and behave as though it was omitted
-- if `--sample-axis union` is requested for `@` source input but only one referenced retained mapped shard remains, warn that it is a no-op and behave as though it was omitted
+- if `--sample-axis union` is requested for `@` source input but only one referenced shard remains, warn that it is a no-op and behave as though it was omitted
 - otherwise, `project_payload.py` must synthesize one explicit target sample file from the union of subject keys across the participating shards, using the selected `--sample-id-mode`
-- the wrapper must retain that synthesized target sample file exactly as `<prefix>.target_samples.fam` for `bfile` input or `<prefix>.target_samples.psam` for `pfile` input
+- the wrapper must retain that synthesized target sample file exactly as `<output-prefix>.target_samples.fam` for `bfile` input or `<output-prefix>.target_samples.psam` for `pfile` input; for output prefixes containing `@`, `<output-prefix>` is derived by replacing each `@` with `all_targets`
 - the wrapper must then pass that retained synthesized target sample file to the canonical `apply_vmap_*` tool via `--target-fam` or `--target-psam`
 - synthesized union subject order is deterministic first occurrence across participating shards in deterministic shard order
 - for `bfile` input, the synthesized `.fam` must contain exactly `FID IID 0 0 sex -9`
@@ -302,19 +272,13 @@ Final concatenation:
 - overlap of subject keys across different participating shards is expected
 - `project_payload.py` must treat retained synthesized target sample files as wrapper-managed outputs for default preflight existence checks and for `--force` cleanup
 
-### `project_payload.py`: retained matched `.vmap`, output paths, and `--force`
+### `project_payload.py`: output paths and `--force`
 
-- `project_payload.py` must retain the matched `.vmap` produced by `match_vmap_to_target.py`.
-- exception: if `--target` is a `.vmap` and `--source-vmap` is omitted, `project_payload.py` skips `match_vmap_to_target.py` and does not write `<prefix>.vmap`.
-- Accept optional `--prefix` for this retained intermediate. The retained matched mapping must be written as exactly `<prefix>.vmap`.
-- `--prefix` must not contain `@` because the retained matched mapping is a canonical single-file `.vmap`.
-- If `--prefix` is omitted, default `--prefix` to `--output`.
-- If `--prefix` is omitted for `bfile` or `pfile` input and `--output` contains `@`, derive the default retained prefix by replacing each `@` in `--output` with `all_targets`.
 - For `sumstats` and `sumstats-clean` input, treat `--output` as the exact rewritten payload path and reject `@`.
 - For `bfile` and `pfile` input, treat `--output` as the PLINK output prefix and allow `@`.
-- For `bfile` and `pfile` output prefixes containing `@`, determine the wrapper-managed payload outputs by replacing `@` with each target contig label present in `--target`.
+- For `bfile` and `pfile` output prefixes containing `@`, determine the wrapper-managed payload outputs by replacing `@` with each target contig label present in the input `.vmap`.
 - `project_payload.py` does not support `--resume`.
-- `project_payload.py` supports `--force` to delete the retained matched `.vmap`, any retained synthesized target sample file, and final payload outputs first, then rerun cleanly from scratch.
-- By default, `project_payload.py` must fail if any wrapper-managed output already exists, including the retained matched `.vmap`, any retained synthesized target sample file, and the final projected payload output.
-- `--force` means: delete all wrapper-managed outputs for the planned invocation first, including the retained matched `.vmap`, any retained synthesized target sample file, and final projected payload outputs, then run cleanly from scratch.
+- `project_payload.py` supports `--force` to delete any retained synthesized target sample file and final payload outputs first, then rerun cleanly from scratch.
+- By default, `project_payload.py` must fail if any wrapper-managed output already exists, including any retained synthesized target sample file and the final projected payload output.
+- `--force` means: delete all wrapper-managed outputs for the planned invocation first, including any retained synthesized target sample file and final projected payload outputs, then run cleanly from scratch.
 - `project_payload.py` must print the invoked subcommands, just like `prepare_variants.py`.

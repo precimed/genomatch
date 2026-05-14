@@ -10,7 +10,7 @@ def test_intersect_variants_preserves_first_input_order(tmp_path):
     write_lines(second, ["1\t100\tx\tA\tG", "1\t200\ty\tC\tT"])
     write_json(first.with_name(first.name + ".meta.json"), meta)
     write_json(second.with_name(second.name + ".meta.json"), meta)
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "200", "id2", "C", "T"], ["1", "100", "id1", "A", "G"]]
     assert f"loaded 3 variants from {first}" in result.stderr
@@ -32,7 +32,7 @@ def test_intersect_variants_streams_later_input_by_full_input_membership(tmp_pat
     write_json(first.with_name(first.name + ".meta.json"), meta)
     write_json(second.with_name(second.name + ".meta.json"), meta)
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "1", "first", "A", "G"], ["1", "100001", "last", "C", "T"]]
@@ -48,7 +48,7 @@ def test_intersect_variants_checks_metadata_before_loading_rows(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"})
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "same genome_build" in result.stderr
@@ -67,7 +67,7 @@ def test_intersect_variants_validates_later_vtable_like_first_input(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), meta)
     write_json(second.with_name(second.name + ".meta.json"), meta)
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "row is missing id" in result.stderr
@@ -83,7 +83,7 @@ def test_intersect_variants_does_not_canonicalize_contig_spellings(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), meta)
     write_json(second.with_name(second.name + ".meta.json"), meta)
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == []
@@ -99,10 +99,26 @@ def test_intersect_variants_does_not_accept_sort_flag(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), meta)
     write_json(second.with_name(second.name + ".meta.json"), meta)
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out, "--sort")
+    result = run_py("intersect_variants.py", first, second, "--output", out, "--sort")
 
     assert result.returncode != 0
     assert "unrecognized arguments: --sort" in result.stderr
+
+
+def test_intersect_variants_rejects_legacy_inputs_flag(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t100\tid2\tA\tG"])
+    write_json(first.with_name(first.name + ".meta.json"), meta)
+    write_json(second.with_name(second.name + ".meta.json"), meta)
+
+    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+
+    assert result.returncode != 0
+    assert "unrecognized arguments" in result.stderr
 
 
 def test_intersect_variants_checks_contig_naming_before_loading_rows(tmp_path):
@@ -114,7 +130,7 @@ def test_intersect_variants_checks_contig_naming_before_loading_rows(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ucsc"})
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "same contig_naming" in result.stderr
@@ -132,7 +148,7 @@ def test_intersect_variants_fails_cleanly_on_missing_contig_naming(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "contig_naming" in result.stderr
@@ -150,7 +166,7 @@ def test_intersect_variants_empty_later_input_yields_empty_result(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
     assert out.exists()
@@ -167,7 +183,59 @@ def test_intersect_variants_rejects_over_wide_later_vtable_row(tmp_path):
     write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
 
-    result = run_py("intersect_variants.py", "--inputs", first, second, "--output", out)
+    result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode != 0
     assert "invalid variant table row" in result.stderr
+
+
+def test_intersect_variants_accepts_vmap_and_drops_provenance(tmp_path):
+    first = tmp_path / "a.vmap"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    write_lines(first, ["1\t100\tfrom_vmap\tA\tG\t.\t0\tidentity", "1\t200\tdrop\tC\tT\t.\t1\tswap"])
+    write_lines(second, ["1\t100\tfrom_vtable\tA\tG"])
+    write_json(
+        first.with_name(first.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+    write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+
+    result = run_py("intersect_variants.py", first, second, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "from_vmap", "A", "G"]]
+
+
+def test_intersect_variants_rejects_duplicate_vmap_target_keys(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vmap"
+    out = tmp_path / "out.vtable"
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t100\tfirst\tA\tG\t.\t0\tidentity", "1\t100\tsecond\tA\tG\t.\t1\tidentity"])
+    write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    write_json(
+        second.with_name(second.name + ".meta.json"),
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+    )
+
+    result = run_py("intersect_variants.py", first, second, "--output", out)
+
+    assert result.returncode != 0
+    assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
+
+
+def test_intersect_variants_rejects_template_paths(tmp_path):
+    first = tmp_path / "a.vtable"
+    second = tmp_path / "b.vtable"
+    out = tmp_path / "out.vtable"
+    meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
+    write_lines(first, ["1\t100\tid1\tA\tG"])
+    write_lines(second, ["1\t100\tid2\tA\tG"])
+    write_json(first.with_name(first.name + ".meta.json"), meta)
+    write_json(second.with_name(second.name + ".meta.json"), meta)
+
+    result = run_py("intersect_variants.py", first, "b.@.vtable", "--output", out)
+
+    assert result.returncode != 0
+    assert "does not accept '@' paths" in result.stderr
