@@ -11,7 +11,7 @@ def test_has_identity_sample_axis_remap_requires_full_identity_mapping():
     assert has_identity_sample_axis_remap((0, -1, 2), 3) is False
 
 
-def test_apply_vmap_to_bfile_preserves_target_order_and_missing_fill_for_single_file_provenance(tmp_path):
+def test_apply_vmap_to_bfile_preserves_target_order_for_single_file_provenance(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
@@ -26,7 +26,6 @@ def test_apply_vmap_to_bfile_preserves_target_order_and_missing_fill_for_single_
         [
             "1\t200\tt2\tT\tC\t.\t1\tswap",
             "1\t100\tt1\tA\tG\t.\t0\tidentity",
-            "1\t400\tt3\tA\tC\t.\t-1\tmissing",
         ],
     )
     write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
@@ -37,49 +36,9 @@ def test_apply_vmap_to_bfile_preserves_target_order_and_missing_fill_for_single_
     assert [(row.chrom, row.snp, row.cm, row.bp, row.a1, row.a2) for row in read_bim(out_prefix.with_suffix(".bim"))] == [
         ("1", "1:200:T:C", "0", "200", "T", "C"),
         ("1", "1:100:A:G", "0", "100", "A", "G"),
-        ("1", "1:400:A:C", "0", "400", "A", "C"),
     ]
     assert out_prefix.with_suffix(".fam").read_text(encoding="utf-8") == source_prefix.with_suffix(".fam").read_text(encoding="utf-8")
     assert out_prefix.with_suffix(".fam").stat().st_mtime > source_prefix.with_suffix(".fam").stat().st_mtime
-    matrix = read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 3)
-    assert matrix == [[3, 2], [0, 3], [1, 1]]
-
-
-def test_apply_vmap_to_bfile_only_mapped_target_drops_unmatched_rows(tmp_path):
-    source_prefix = tmp_path / "source"
-    vmap = tmp_path / "map.vmap"
-    out_prefix = tmp_path / "aligned"
-    write_bfile(
-        source_prefix,
-        ["1\trs1\t0\t100\tA\tG", "1\trs2\t0\t200\tC\tT", "1\trs3\t0\t300\tG\tA"],
-        ["S1 S1 0 0 0 -9", "S2 S2 0 0 0 -9"],
-        [[0, 3], [0, 2], [3, 0]],
-    )
-    write_lines(
-        vmap,
-        [
-            "1\t200\tt2\tT\tC\t.\t1\tswap",
-            "1\t400\tt_missing\tA\tC\t.\t-1\tmissing",
-            "1\t100\tt1\tA\tG\t.\t0\tidentity",
-        ],
-    )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
-
-    result = run_py(
-        "apply_vmap_to_bfile.py",
-        "--source-prefix",
-        source_prefix,
-        "--vmap",
-        vmap,
-        "--output-prefix",
-        out_prefix,
-        "--only-mapped-target",
-    )
-    assert result.returncode == 0, result.stderr
-    assert [(row.chrom, row.snp, row.cm, row.bp, row.a1, row.a2) for row in read_bim(out_prefix.with_suffix(".bim"))] == [
-        ("1", "1:200:T:C", "0", "200", "T", "C"),
-        ("1", "1:100:A:G", "0", "100", "A", "G"),
-    ]
     matrix = read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 2)
     assert matrix == [[3, 2], [0, 3]]
 
@@ -414,7 +373,7 @@ def test_apply_vmap_to_bfile_rejects_zero_discovered_source_shards(tmp_path):
     assert "no source shards found for template" in result.stderr
 
 
-def test_apply_vmap_to_bfile_rejects_all_unmatched_target_rows(tmp_path):
+def test_apply_vmap_to_bfile_rejects_missing_provenance_sentinel_rows(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
@@ -425,30 +384,7 @@ def test_apply_vmap_to_bfile_rejects_all_unmatched_target_rows(tmp_path):
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
 
     assert result.returncode != 0
-    assert "only unmatched target rows" in result.stderr
-
-
-def test_apply_vmap_to_bfile_rejects_empty_output_after_only_mapped_target_filter(tmp_path):
-    source_prefix = tmp_path / "source"
-    vmap = tmp_path / "map.vmap"
-    out_prefix = tmp_path / "aligned"
-    write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9"], [[0]])
-    write_lines(vmap, ["1\t400\tt_missing\tA\tC\t.\t-1\tmissing"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
-
-    result = run_py(
-        "apply_vmap_to_bfile.py",
-        "--source-prefix",
-        source_prefix,
-        "--vmap",
-        vmap,
-        "--output-prefix",
-        out_prefix,
-        "--only-mapped-target",
-    )
-
-    assert result.returncode != 0
-    assert "no retained target rows remain" in result.stderr
+    assert "vmap row source_index out of range" in result.stderr
 
 
 def test_apply_vmap_to_bfile_shards_output_by_target_contig(tmp_path):
@@ -829,7 +765,6 @@ def test_apply_vmap_to_bfile_streams_single_file_payload_in_small_chunks(tmp_pat
         [
             "1\t200\tt2\tT\tC\t.\t1\tswap",
             "1\t100\tt1\tA\tG\t.\t0\tidentity",
-            "1\t400\tt3\tA\tC\t.\t-1\tmissing",
         ],
     )
     write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
@@ -846,11 +781,11 @@ def test_apply_vmap_to_bfile_streams_single_file_payload_in_small_chunks(tmp_pat
     )
 
     assert result.returncode == 0, result.stderr
-    assert [(row.chrom, row.snp) for row in read_bim(out_prefix.with_suffix(".bim"))] == [("1", "1:200:T:C"), ("1", "1:100:A:G"), ("1", "1:400:A:C")]
-    assert read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 3) == [[3, 2], [0, 3], [1, 1]]
+    assert [(row.chrom, row.snp) for row in read_bim(out_prefix.with_suffix(".bim"))] == [("1", "1:200:T:C"), ("1", "1:100:A:G")]
+    assert read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 2) == [[3, 2], [0, 3]]
 
 
-def test_apply_vmap_to_bfile_streams_interleaved_sharded_input_with_only_mapped_target(tmp_path):
+def test_apply_vmap_to_bfile_streams_interleaved_sharded_input(tmp_path):
     source_template = tmp_path / "source.@"
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
@@ -867,7 +802,6 @@ def test_apply_vmap_to_bfile_streams_interleaved_sharded_input_with_only_mapped_
         [
             "2\t500\tt_from_1a\tA\tG\t1\t0\tidentity",
             "1\t600\tt_from_2\tC\tT\t2\t0\tidentity",
-            "1\t700\tt_missing\tA\tC\t.\t-1\tmissing",
             "2\t800\tt_from_1b\tT\tC\t1\t1\tswap",
         ],
     )
@@ -882,7 +816,6 @@ def test_apply_vmap_to_bfile_streams_interleaved_sharded_input_with_only_mapped_
         vmap,
         "--output-prefix",
         out_prefix,
-        "--only-mapped-target",
     )
 
     assert result.returncode == 0, result.stderr

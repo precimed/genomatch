@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from ._cli_utils import run_cli
-from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
+from .apply_vmap_utils import build_needed_source_indices
 from .contig_utils import supported_exact_contig_tokens
 from .exact_set_utils import read_mapped_vmap_table
 from .sample_axis_utils import (
@@ -269,7 +269,7 @@ def build_union_target_sample(
     if "@" not in source_prefix:
         logger.info("%s: --sample-axis union is a no-op for non-sharded source input", WRAPPER_NAME)
         return None
-    vmap_rows = filtered_vmap_rows(vmap_table.to_rows(), only_mapped_target=True)
+    vmap_rows = vmap_table.to_rows()
     referenced_shards = sorted(build_needed_source_indices(vmap_rows))
     if len(referenced_shards) <= 1:
         logger.info(

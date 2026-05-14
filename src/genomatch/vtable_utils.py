@@ -24,7 +24,7 @@ from .contig_utils import (
 )
 
 SUPPORTED_GENOME_BUILDS = {"GRCh37", "GRCh38", "T2T-CHM13v2.0", "unknown"}
-VALID_ALLELE_OPS = {"identity", "swap", "flip", "flip_swap", "missing"}
+VALID_ALLELE_OPS = {"identity", "swap", "flip", "flip_swap"}
 ALLELE_OP_COMPOSITION = {
     ("identity", "identity"): "identity",
     ("identity", "swap"): "swap",
@@ -523,21 +523,13 @@ def _validate_vmap_frame(
         duplicate_mask = frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
         if duplicate_mask.any():
             raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
-    missing_match = frame["source_index"].eq(-1)
-    bad_missing_shard = missing_match & frame["source_shard"].ne(MISSING_SOURCE_SHARD)
-    if bad_missing_shard.any():
-        raise ValueError("vmap row with source_index=-1 must have source_shard='.'")
-    bad_missing_op = missing_match & frame["source_shard"].eq(MISSING_SOURCE_SHARD) & frame["allele_op"].ne("missing")
-    if bad_missing_op.any():
-        raise ValueError("vmap row with source_index=-1 must have allele_op=missing")
-    out_of_range = frame["source_index"].lt(0) & ~missing_match
+    out_of_range = frame["source_index"].lt(0)
     if out_of_range.any():
         raise ValueError("vmap row source_index out of range")
     required_shard = frame["source_index"].ge(0) & frame["source_shard"].eq("")
     if required_shard.any():
         raise ValueError("vmap row with source_index>=0 must define source_shard")
-    valid_nonmissing_ops = VALID_ALLELE_OPS - {"missing"}
-    invalid_op = frame["source_index"].ge(0) & frame["source_shard"].ne("") & ~frame["allele_op"].isin(valid_nonmissing_ops)
+    invalid_op = frame["source_index"].ge(0) & frame["source_shard"].ne("") & ~frame["allele_op"].isin(VALID_ALLELE_OPS)
     if invalid_op.any():
         first_idx = int(invalid_op.idxmax())
         raise ValueError(f"invalid allele_op in vmap row: {frame.at[first_idx, 'allele_op']!r}")

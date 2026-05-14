@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Set, Tuple
 
 from ._cli_utils import run_cli
-from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows, output_variant_id
+from .apply_vmap_utils import build_needed_source_indices, output_variant_id
 from .bfile_utils import (
     HAPLOID_SCHEMA,
     BimRow,
@@ -20,7 +20,6 @@ from .bfile_utils import (
     build_packed_bed_remap_plan,
     bytes_per_bed_row,
     count_target_ploidy_genotype_issues_packed,
-    missing_bed_row,
     read_bim,
     read_bed_selected_chunks,
     remap_bed_chunk,
@@ -73,11 +72,6 @@ def parse_args() -> argparse.Namespace:
         choices=SAMPLE_ID_MODE_CHOICES,
         default="fid_iid",
         help="Subject-key mode for explicit target-sample reconciliation",
-    )
-    parser.add_argument(
-        "--only-mapped-target",
-        action="store_true",
-        help="Drop target rows with source_index=-1 instead of writing unmatched target rows with missing genotypes",
     )
     parser.add_argument(
         "--retain-snp-id",
@@ -228,7 +222,7 @@ def prepare_source_payloads(
     return prepared, source_tables
 
 
-def load_retained_vmap_rows(vmap_path: Path, *, only_mapped_target: bool):
+def load_retained_vmap_rows(vmap_path: Path):
     metadata = load_metadata(vmap_path)
     validate_vmap_metadata(metadata)
     target_build = str(metadata["target"]["genome_build"])
@@ -237,15 +231,7 @@ def load_retained_vmap_rows(vmap_path: Path, *, only_mapped_target: bool):
     if not all_vmap_rows:
         raise ValueError("empty vmap")
     require_rows_match_contig_naming(all_vmap_rows, target_contig_naming, label="variant map target")
-    vmap_rows = filtered_vmap_rows(all_vmap_rows, only_mapped_target=only_mapped_target)
-    if not vmap_rows:
-        raise ValueError("no retained target rows remain after applying --only-mapped-target")
-    if all(row.source_index == -1 for row in vmap_rows):
-        raise ValueError(
-            "vmap contains only unmatched target rows; apply_vmap_to_bfile.py will not emit "
-            "an all-missing PLINK payload"
-        )
-    return target_build, vmap_rows
+    return target_build, all_vmap_rows
 
 
 def resolve_target_ploidy_rows(target_rows: Sequence[BimRow], *, target_build: str) -> List[Tuple[int, int]]:
@@ -265,8 +251,6 @@ def load_chunk_source_bed_chunks(
     needed: Dict[str, set[int]] = {}
     for idx in chunk_indices:
         row = vmap_rows[idx]
-        if row.source_index == -1:
-            continue
         needed.setdefault(row.source_shard, set()).add(row.source_index)
     source_chunks: Dict[Tuple[str, int], bytes] = {}
     for source_shard, selected_indices in sorted(needed.items()):
@@ -311,7 +295,7 @@ def main() -> int:
     if args.sample_axis == "native" and args.target_fam:
         raise ValueError("--sample-axis native cannot be combined with --target-fam")
 
-    target_build, vmap_rows = load_retained_vmap_rows(vmap_path, only_mapped_target=args.only_mapped_target)
+    target_build, vmap_rows = load_retained_vmap_rows(vmap_path)
 
     target_rows = vmap_rows_to_bim_rows(vmap_rows, retain_snp_id=args.retain_snp_id)
     validate_alleles(target_rows, "target")
@@ -323,7 +307,6 @@ def main() -> int:
         source_bed,
         source_fam,
     )
-    missing_count = sum(1 for row in vmap_rows if row.source_index == -1)
     chunk_size = resolve_chunk_size()
     global_sample_axis_plan = None
     if args.sample_axis != "native":
@@ -370,7 +353,6 @@ def main() -> int:
             assert global_sample_axis_plan is not None
             sample_axis_plan = global_sample_axis_plan
         n_samples = sample_axis_plan.output_sample_count
-        packed_missing_row = missing_bed_row(n_samples)
         output_bytes_per_snp = bytes_per_bed_row(n_samples)
         identity_sample_axis = not sample_axis_plan.reconciliation_active
         identity_remap_by_shard: Dict[str, bool] = {}
@@ -395,20 +377,17 @@ def main() -> int:
             ploidy_pair = ploidy_rows[idx]
             needs_ploidy_validation = (not args.skip_ploidy_check) and has_non_diploid_ploidy(ploidy_pair)
             needs_swap = row.allele_op in {"swap", "flip_swap"}
-            if row.source_index == -1:
-                packed_chunk = packed_missing_row
-            else:
-                key = (row.source_shard, row.source_index)
-                packed_chunk = source_chunks.get(key)
-                if packed_chunk is None:
-                    raise ValueError(
-                        f"missing source genotypes for requested SNP: "
-                        f"source_shard={row.source_shard!r}, source_index={row.source_index}"
+            key = (row.source_shard, row.source_index)
+            packed_chunk = source_chunks.get(key)
+            if packed_chunk is None:
+                raise ValueError(
+                    f"missing source genotypes for requested SNP: "
+                    f"source_shard={row.source_shard!r}, source_index={row.source_index}"
                 )
-                if needs_swap:
-                    packed_chunk = swap_bed_chunk(packed_chunk)
-                if not identity_sample_axis and not identity_remap_by_shard[row.source_shard]:
-                    packed_chunk = remap_bed_chunk(packed_chunk, packed_sample_axis_plans[row.source_shard])
+            if needs_swap:
+                packed_chunk = swap_bed_chunk(packed_chunk)
+            if not identity_sample_axis and not identity_remap_by_shard[row.source_shard]:
+                packed_chunk = remap_bed_chunk(packed_chunk, packed_sample_axis_plans[row.source_shard])
             if not needs_ploidy_validation:
                 return packed_chunk
 
@@ -507,8 +486,6 @@ def main() -> int:
                 "sample-axis reconciliation caused >50%% added missingness for %s retained mapped variants.",
                 reconciliation_summary.variants_over_threshold,
             )
-    if missing_count:
-        logger.warning("%s variants missing from source; filled with missing genotypes.", missing_count)
     logger.info("apply_vmap_to_bfile.py: completed projection for %s retained target rows", len(vmap_rows))
     return 0
 

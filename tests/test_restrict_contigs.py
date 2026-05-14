@@ -43,7 +43,7 @@ def test_restrict_contigs_vmap_preserves_original_provenance_and_type(tmp_path):
         [
             "1\t100\tmid1\tA\tG\tshardA\t8\tswap",
             "1\t200\tmid2\tT\tC\tshardA\t3\tflip",
-            "2\t300\tmid3\tC\tA\t.\t-1\tmissing",
+            "2\t300\tmid3\tC\tA\tshardB\t4\tidentity",
         ],
     )
     write_json(
@@ -59,7 +59,7 @@ def test_restrict_contigs_vmap_preserves_original_provenance_and_type(tmp_path):
     assert read_tsv(out) == [
         ["1", "100", "mid1", "A", "G", "shardA", "8", "swap"],
         ["1", "200", "mid2", "T", "C", "shardA", "3", "flip"],
-        ["2", "300", "mid3", "C", "A", ".", "-1", "missing"],
+        ["2", "300", "mid3", "C", "A", "shardB", "4", "identity"],
     ]
     out_meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert out_meta == {

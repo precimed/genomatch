@@ -516,7 +516,7 @@ def test_project_payload_rejects_non_mapped_only_vmap(tmp_path):
     )
 
     assert result.returncode != 0
-    assert "is not a mapped-only .vmap" in result.stderr
+    assert "vmap row source_index out of range" in result.stderr
 
 
 def test_project_payload_rejects_genotype_metadata_and_wrong_target_sample_flags(tmp_path):

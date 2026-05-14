@@ -5,7 +5,7 @@ import json
 def test_convert_vmap_to_target_materializes_target_side(tmp_path):
     source = tmp_path / "map.vmap"
     out = tmp_path / "out.vtable"
-    write_lines(source, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "1\t200\tt2\tC\tT\t.\t-1\tmissing"])
+    write_lines(source, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "1\t200\tt2\tC\tT\t1\t1\tidentity"])
     write_json(
         source.with_name(source.name + ".meta.json"),
         {

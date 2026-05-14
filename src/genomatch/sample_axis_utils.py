@@ -256,7 +256,7 @@ def mapped_source_shards_for_output_indices(indices: Sequence[int], vmap_rows: S
     out: List[str] = []
     for idx in indices:
         row = vmap_rows[idx]
-        if int(row.source_index) == -1 or str(row.source_shard) in seen:
+        if str(row.source_shard) in seen:
             continue
         shard = str(row.source_shard)
         seen.add(shard)
@@ -336,8 +336,6 @@ def compute_reconciliation_missingness_summary(
         return None
     mapped_rows_by_shard: Dict[str, int] = {}
     for row in vmap_rows:
-        if int(row.source_index) == -1:
-            continue
         mapped_rows_by_shard[str(row.source_shard)] = mapped_rows_by_shard.get(str(row.source_shard), 0) + 1
     mapped_variant_count = sum(mapped_rows_by_shard.values())
     output_sample_count = plan.output_sample_count

@@ -416,7 +416,6 @@ def build_vmap(source_vmap: Path, target_vtable: Path, output_path: Path) -> Non
                 matched = [*target, source[5], source[6], compose_allele_ops(source[7], "swap")]
                 break
         if matched is None:
-            output_rows.append([*target, ".", "-1", "missing"])
             continue
         used_source_indices.add(source_idx)
         output_rows.append(matched)

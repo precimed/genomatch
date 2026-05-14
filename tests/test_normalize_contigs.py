@@ -221,7 +221,7 @@ def test_normalize_contigs_to_plink_splitx_rejects_unsupported_build(tmp_path):
 def test_normalize_contigs_vmap_changes_target_side_only(tmp_path):
     source = tmp_path / "in.vmap"
     out = tmp_path / "out.vmap"
-    write_lines(source, ["23\t100\tt1\tA\tG\t23\t3\tidentity", "26\t200\tt2\tC\tT\t.\t-1\tmissing"])
+    write_lines(source, ["23\t100\tt1\tA\tG\t23\t3\tidentity", "26\t200\tt2\tC\tT\t26\t4\tidentity"])
     write_json(
         source.with_name(source.name + ".meta.json"),
         {
@@ -232,7 +232,7 @@ def test_normalize_contigs_vmap_changes_target_side_only(tmp_path):
 
     result = run_py("normalize_contigs.py", "--input", source, "--output", out, "--to", "ncbi")
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["X", "100", "t1", "A", "G", "23", "3", "identity"], ["MT", "200", "t2", "C", "T", ".", "-1", "missing"]]
+    assert read_tsv(out) == [["X", "100", "t1", "A", "G", "23", "3", "identity"], ["MT", "200", "t2", "C", "T", "26", "4", "identity"]]
 
 
 def test_normalize_contigs_vmap_drops_duplicate_targets_to_qc(tmp_path):

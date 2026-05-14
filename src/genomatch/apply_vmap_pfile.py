@@ -13,7 +13,7 @@ import numpy as np
 import pgenlib
 
 from ._cli_utils import run_cli
-from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows, output_variant_id
+from .apply_vmap_utils import build_needed_source_indices, output_variant_id
 from .contig_utils import supported_exact_contig_tokens
 from .haploid_utils import expected_ploidy_pair, is_sex_dependent_ploidy
 from .sample_axis_utils import (
@@ -88,11 +88,6 @@ def parse_args() -> argparse.Namespace:
         choices=SAMPLE_ID_MODE_CHOICES,
         default="fid_iid",
         help="Subject-key mode for explicit target-sample reconciliation",
-    )
-    parser.add_argument(
-        "--only-mapped-target",
-        action="store_true",
-        help="Drop target rows with source_index=-1 instead of writing unmatched target rows with missing payload data",
     )
     parser.add_argument(
         "--retain-snp-id",
@@ -271,7 +266,7 @@ def prepare_source_payloads(args: argparse.Namespace, needed_by_shard: Dict[str,
     return prepared, source_tables
 
 
-def load_retained_vmap_rows(vmap_path: Path, *, only_mapped_target: bool):
+def load_retained_vmap_rows(vmap_path: Path):
     metadata = load_metadata(vmap_path)
     validate_vmap_metadata(metadata)
     target_build = str(metadata["target"]["genome_build"])
@@ -280,15 +275,7 @@ def load_retained_vmap_rows(vmap_path: Path, *, only_mapped_target: bool):
     if not all_vmap_rows:
         raise ValueError("empty vmap")
     require_rows_match_contig_naming(all_vmap_rows, target_contig_naming, label="variant map target")
-    vmap_rows = filtered_vmap_rows(all_vmap_rows, only_mapped_target=only_mapped_target)
-    if not vmap_rows:
-        raise ValueError("no retained target rows remain after applying --only-mapped-target")
-    if all(row.source_index == -1 for row in vmap_rows):
-        raise ValueError(
-            "vmap contains only unmatched target rows; apply_vmap_to_pfile.py will not emit "
-            "an all-missing PLINK 2 payload"
-        )
-    return target_build, vmap_rows
+    return target_build, all_vmap_rows
 
 
 def allele_array_for_row(reader: pgenlib.PgenReader, source_index: int, n_samples: int) -> np.ndarray:
@@ -363,8 +350,6 @@ def plan_source_rows(vmap_rows, prepared_sources: Dict[str, PreparedSourceShard]
     channels_seen: Set[str] = set()
     try:
         for row in vmap_rows:
-            if row.source_index == -1:
-                continue
             key = (row.source_shard, row.source_index)
             if key in plans:
                 continue
@@ -591,7 +576,7 @@ def main() -> int:
     if args.sample_axis == "native" and args.target_psam:
         raise ValueError("--sample-axis native cannot be combined with --target-psam")
 
-    target_build, vmap_rows = load_retained_vmap_rows(vmap_path, only_mapped_target=args.only_mapped_target)
+    target_build, vmap_rows = load_retained_vmap_rows(vmap_path)
     needed_by_shard = build_needed_source_indices(vmap_rows)
     prepared_sources, source_tables = prepare_source_payloads(args, needed_by_shard)
     if args.sample_id_mode == SAMPLE_ID_MODE_FID_IID and args.sample_axis != "native":
@@ -620,7 +605,6 @@ def main() -> int:
         )
     source_row_plans = plan_source_rows(vmap_rows, prepared_sources)
 
-    missing_count = sum(1 for row in vmap_rows if row.source_index == -1)
     hardcall_phase_present = any(plan.channel == SUPPORTED_CHANNEL_PHASE for plan in source_row_plans.values())
     dosage_present = any(plan.channel == SUPPORTED_CHANNEL_DOSAGE for plan in source_row_plans.values())
     chunk_size = resolve_chunk_size()
@@ -670,13 +654,6 @@ def main() -> int:
                 for chunk in chunked_indices(indices, chunk_size):
                     for idx in chunk:
                         row = vmap_rows[idx]
-                        if row.source_index == -1:
-                            if dosage_present:
-                                writer.append_dosages(np.full(n_samples, -9.0, dtype=np.float32))
-                            else:
-                                writer.append_alleles(np.full(n_samples * 2, -9, dtype=np.int32))
-                            continue
-
                         key = (row.source_shard, row.source_index)
                         prepared = prepared_sources[row.source_shard]
                         reader = readers.get(row.source_shard)
@@ -746,8 +723,6 @@ def main() -> int:
                     "sample-axis reconciliation caused >50%% added missingness for %s retained mapped variants.",
                     reconciliation_summary.variants_over_threshold,
                 )
-        if missing_count:
-            logger.warning("%s variants missing from source; filled with missing payload rows.", missing_count)
         ploidy_warning_parts: List[str] = []
         if diploid_het_in_haploid_count:
             ploidy_warning_parts.append(

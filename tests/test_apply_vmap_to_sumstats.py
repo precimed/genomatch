@@ -68,7 +68,7 @@ def test_apply_vmap_to_sumstats_appends_missing_variant_columns(tmp_path):
     assert out.read_text(encoding="utf-8") == "CHR\tBETA\tPOS\tSNP\tEA\tOA\n1\t0.5\t100\t1:100:A:G\tA\tG\n"
 
 
-def test_apply_vmap_to_sumstats_keeps_unmatched_target_rows_by_default(tmp_path):
+def test_apply_vmap_to_sumstats_rejects_missing_provenance_sentinel_rows(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     vmap = tmp_path / "map.vmap"
@@ -79,41 +79,8 @@ def test_apply_vmap_to_sumstats_keeps_unmatched_target_rows_by_default(tmp_path)
     write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
-    assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tEA\tOA\tBETA\n1\t100\tA\tG\t0.5\n1\t200\tC\tT\tn/a\n"
-
-
-def test_apply_vmap_to_sumstats_only_mapped_target_drops_unmatched_rows(tmp_path):
-    sumstats = tmp_path / "ss.tsv"
-    meta = tmp_path / "ss.yaml"
-    vmap = tmp_path / "map.vmap"
-    out = tmp_path / "out.tsv"
-    write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5", "1\t300\tG\tA\t1.5"])
-    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
-    write_lines(
-        vmap,
-        [
-            "1\t200\tt_missing\tC\tT\t.\t-1\tmissing",
-            "1\t300\tt3\tG\tA\t.\t1\tidentity",
-            "1\t100\tt1\tA\tG\t.\t0\tidentity",
-        ],
-    )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
-
-    result = run_py(
-        "apply_vmap_to_sumstats.py",
-        "--input",
-        sumstats,
-        "--sumstats-metadata",
-        meta,
-        "--vmap",
-        vmap,
-        "--output",
-        out,
-        "--only-mapped-target",
-    )
-    assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tEA\tOA\tBETA\n1\t300\tG\tA\t1.5\n1\t100\tA\tG\t0.5\n"
+    assert result.returncode != 0
+    assert "vmap row source_index out of range" in result.stderr
 
 
 def test_apply_vmap_to_sumstats_warns_and_writes_na_for_invalid_swapped_numeric_effects(tmp_path):
@@ -978,7 +945,7 @@ def test_apply_vmap_to_sumstats_clean_use_af_inference_derives_n(tmp_path):
     assert math.isclose(float(values["N"]), 38.6666666666667, rel_tol=1e-12)
 
 
-def test_apply_vmap_to_sumstats_clean_keeps_unmatched_rows_all_missing(tmp_path):
+def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     vmap = tmp_path / "map.vmap"
@@ -1003,7 +970,7 @@ def test_apply_vmap_to_sumstats_clean_keeps_unmatched_rows_all_missing(tmp_path)
             "stats_TotalN: 100",
         ],
     )
-    write_vmap_with_meta(vmap, ["1\t100\trs1\tA\tG\t.\t0\tidentity", "1\t200\trs2\tC\tT\t.\t-1\tmissing"])
+    write_vmap_with_meta(vmap, ["1\t100\trs1\tA\tG\t.\t0\tidentity"])
 
     result = run_py(
         "apply_vmap_to_sumstats.py",
@@ -1022,11 +989,10 @@ def test_apply_vmap_to_sumstats_clean_keeps_unmatched_rows_all_missing(tmp_path)
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tN\tBETA\n"
         "1\t100\t1:100:A:G\tA\tG\t100\t0.5\n"
-        "1\t200\t1:200:C:T\tC\tT\t\t\n"
     )
 
 
-def test_apply_vmap_to_sumstats_clean_swap_keeps_direction_and_drops_missing_p_under_only_mapped_target(tmp_path):
+def test_apply_vmap_to_sumstats_clean_swap_keeps_direction(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     vmap = tmp_path / "map.vmap"
@@ -1067,11 +1033,11 @@ def test_apply_vmap_to_sumstats_clean_swap_keeps_direction_and_drops_missing_p_u
         "--output",
         out,
         "--clean",
-        "--only-mapped-target",
     )
 
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE\tDirection\tEAF\n"
         "1\t100\t1:100:G:A\tG\tA\t0.05\t-1.95996398454005\t-0.5\t0.255106728462327\t+-\t0.8\n"
+        "1\t200\t1:200:T:C\tT\tC\t\t\t1.5\t\t--\t0.4\n"
     )

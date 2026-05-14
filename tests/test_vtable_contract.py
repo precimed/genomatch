@@ -50,6 +50,14 @@ def test_read_vmap_normalizes_alleles_to_uppercase(tmp_path):
     assert rows[0].a2 == "C"
 
 
+def test_read_vmap_rejects_missing_provenance_sentinel(tmp_path):
+    source = tmp_path / "sentinel.vmap"
+    source.write_text("1\t100\trs1\tA\tC\t.\t-1\tmissing\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source_index out of range"):
+        read_vmap(source)
+
+
 def test_metadata_variants_count_is_optional_but_validated_when_present():
     validate_vtable_metadata({"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     validate_vmap_metadata(

@@ -197,7 +197,7 @@ def test_apply_vmap_to_pfile_flip_behaves_like_identity_and_flip_swap_like_swap(
     assert read_pfile_alleles_and_phase(out_prefix, 2, 1) == ([1, 0, 1, 0], [1, 1])
 
 
-def test_apply_vmap_to_pfile_unmatched_row_emits_all_missing_output(tmp_path):
+def test_apply_vmap_to_pfile_rejects_missing_provenance_sentinel_rows(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
@@ -211,38 +211,8 @@ def test_apply_vmap_to_pfile_unmatched_row_emits_all_missing_output(tmp_path):
 
     result = run_py("apply_vmap_to_pfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
 
-    assert result.returncode == 0, result.stderr
-    assert read_pfile_genotypes(out_prefix, 2, 1) == [-9, -9]
-
-
-def test_apply_vmap_to_pfile_only_mapped_target_drops_unmatched_rows(tmp_path):
-    source_prefix = tmp_path / "source"
-    vmap = tmp_path / "map.vmap"
-    out_prefix = tmp_path / "aligned"
-    write_pfile(
-        source_prefix,
-        ["1\t100\trs1\tA\tG"],
-        ["S1", "S2"],
-        [{"channel": "hardcall", "alleles": [0, 0, 0, 1]}],
-    )
-    write_vmap(vmap, ["1\t100\tt1\tG\tA\t.\t0\tidentity", "1\t200\tmissing\tT\tC\t.\t-1\tmissing"])
-
-    result = run_py(
-        "apply_vmap_to_pfile.py",
-        "--source-prefix",
-        source_prefix,
-        "--vmap",
-        vmap,
-        "--output-prefix",
-        out_prefix,
-        "--only-mapped-target",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert read_output_pvar(out_prefix.with_suffix(".pvar")) == [
-        ["CHROM", "POS", "ID", "REF", "ALT"],
-        ["1", "100", "1:100:G:A", "A", "G"],
-    ]
+    assert result.returncode != 0
+    assert "vmap row source_index out of range" in result.stderr
 
 
 def test_apply_vmap_to_pfile_rejects_retained_non_biallelic_source_row(tmp_path):
@@ -413,7 +383,7 @@ def test_apply_vmap_to_pfile_reports_absent_dosages_without_rewriting(tmp_path):
     assert read_pfile_dosages(out_prefix, 1, 0) == [1.5]
 
 
-def test_apply_vmap_to_pfile_all_missing_row_is_coherent_for_available_channels(tmp_path):
+def test_apply_vmap_to_pfile_dosage_row_is_coherent_for_available_channels(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
@@ -423,16 +393,15 @@ def test_apply_vmap_to_pfile_all_missing_row_is_coherent_for_available_channels(
         ["S1", "S2"],
         [{"channel": "dosage", "dosages": [0.5, 1.0]}],
     )
-    write_vmap(vmap, ["1\t100\tt1\tG\tA\t.\t0\tidentity", "1\t200\tmissing\tT\tC\t.\t-1\tmissing"])
+    write_vmap(vmap, ["1\t100\tt1\tG\tA\t.\t0\tidentity"])
 
     result = run_py("apply_vmap_to_pfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
 
     assert result.returncode == 0, result.stderr
-    assert read_pfile_genotypes(out_prefix, 2, 1) == [-9, -9]
-    assert read_pfile_dosages(out_prefix, 2, 1) == [-9.0, -9.0]
+    assert read_pfile_dosages(out_prefix, 2, 0) == [0.5, 1.0]
 
 
-def test_apply_vmap_to_pfile_rejects_all_unmatched_target_rows(tmp_path):
+def test_apply_vmap_to_pfile_rejects_all_sentinel_target_rows(tmp_path):
     source_prefix = tmp_path / "source"
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
@@ -447,7 +416,7 @@ def test_apply_vmap_to_pfile_rejects_all_unmatched_target_rows(tmp_path):
     result = run_py("apply_vmap_to_pfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
 
     assert result.returncode != 0
-    assert "will not emit an all-missing PLINK 2 payload" in result.stderr
+    assert "vmap row source_index out of range" in result.stderr
 
 
 def test_apply_vmap_to_pfile_target_psam_reorders_and_fills_missing_for_inconsistent_shards(tmp_path):

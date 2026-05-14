@@ -131,11 +131,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fill-mode", choices=["column", "row"], default="column", help="Clean-mode fill behavior")
     parser.add_argument("--use-af-inference", action="store_true", help="Enable AF-based clean-mode derivation rules")
     parser.add_argument(
-        "--only-mapped-target",
-        action="store_true",
-        help="Drop target rows with source_index=-1 instead of writing unmatched target rows with missing payload values",
-    )
-    parser.add_argument(
         "--retain-snp-id",
         action="store_true",
         help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a1:a2 IDs",
@@ -221,46 +216,6 @@ def rewrite_or_synthesize_variant_value(raw: str, replacements: Dict[str, str]) 
     for idx, token in enumerate(tokens[1:], start=1):
         rebuilt += ("_" if idx == 1 else ":") + token
     return rebuilt
-
-
-def build_missing_payload_row(
-    output_width: int,
-    output_header: List[str],
-    vrow,
-    idx_chr: int,
-    idx_pos: Optional[int],
-    idx_id: Optional[int],
-    idx_a1: Optional[int],
-    idx_a2: Optional[int],
-    output_idx_pos: Optional[int],
-    output_idx_id: Optional[int],
-    output_idx_a1: Optional[int],
-    output_idx_a2: Optional[int],
-    retain_snp_id: bool,
-) -> List[str]:
-    cols = [NA_NUMERIC] * output_width
-    out_id = output_variant_id(vrow, retain_snp_id=retain_snp_id)
-    variant_rewrites: Dict[int, Dict[str, str]] = {}
-    variant_rewrites.setdefault(idx_chr, {})["CHR"] = vrow.chrom
-    if idx_pos is not None:
-        variant_rewrites.setdefault(idx_pos, {})["POS"] = vrow.pos
-    if idx_id is not None:
-        cols[idx_id] = out_id
-    if idx_a1 is not None:
-        variant_rewrites.setdefault(idx_a1, {})["EffectAllele"] = vrow.a1
-    if idx_a2 is not None:
-        variant_rewrites.setdefault(idx_a2, {})["OtherAllele"] = vrow.a2
-    for idx, replacements in variant_rewrites.items():
-        cols[idx] = rewrite_or_synthesize_variant_value(cols[idx], replacements)
-    if idx_pos is None and output_idx_pos is not None:
-        cols[output_idx_pos] = vrow.pos
-    if idx_id is None and output_idx_id is not None:
-        cols[output_idx_id] = out_id
-    if idx_a1 is None and output_idx_a1 is not None:
-        cols[output_idx_a1] = vrow.a1
-    if idx_a2 is None and output_idx_a2 is not None:
-        cols[output_idx_a2] = vrow.a2
-    return cols
 
 
 def maybe_negate_clean_series(series: pd.Series, *, column_name: str, warning_keys: Set[Tuple[str, str]]) -> pd.Series:
@@ -356,24 +311,16 @@ def clean_variant_column_names(preview_header: Sequence[str], metadata: Dict[str
     return _unique_names_in_header_order(preview_header, variant_indices)
 
 
-def filtered_vmap_frame(vmap_frame: pd.DataFrame, *, only_mapped_target: bool) -> pd.DataFrame:
-    if not only_mapped_target:
-        return vmap_frame.reset_index(drop=True)
-    return vmap_frame.loc[vmap_frame["source_index"].ne(-1)].reset_index(drop=True)
-
-
 def require_single_file_sumstats_provenance(vmap_frame: pd.DataFrame) -> pd.Series:
-    mapped_frame = vmap_frame.loc[vmap_frame["source_index"].ne(-1), ["source_shard", "source_index"]]
-    if mapped_frame.empty:
-        return mapped_frame["source_index"].astype("int64")
-    invalid_shard_mask = mapped_frame["source_shard"].ne(".")
+    provenance_frame = vmap_frame.loc[:, ["source_shard", "source_index"]]
+    invalid_shard_mask = provenance_frame["source_shard"].ne(".")
     if invalid_shard_mask.any():
-        unsupported = sorted(mapped_frame.loc[invalid_shard_mask, "source_shard"].astype(str).unique().tolist())
+        unsupported = sorted(provenance_frame.loc[invalid_shard_mask, "source_shard"].astype(str).unique().tolist())
         raise ValueError(
             "apply_vmap_to_sumstats.py supports single-file payload lookup only for source_shard='.'; "
             f"found {unsupported!r}"
         )
-    return mapped_frame["source_index"].astype("int64")
+    return provenance_frame["source_index"].astype("int64")
 
 
 def collect_single_file_source_indices(vmap_frame: pd.DataFrame) -> Set[int]:
@@ -441,34 +388,21 @@ def collect_clean_frame(
         return payload_header, pd.DataFrame(index=range(len(vmap_frame)))
 
     source_indices = vmap_frame["source_index"].to_numpy(dtype=np.int64, copy=False)
-    mapped_mask = source_indices != -1
     payload_frame = pd.DataFrame(index=range(len(vmap_frame)))
     identity_order = (
-        mapped_mask.all()
-        and len(vmap_frame) == len(sumstats_table.frame)
+        len(vmap_frame) == len(sumstats_table.frame)
         and np.array_equal(source_indices, np.arange(len(source_indices)))
     )
-    mapped_source_indices = source_indices[mapped_mask]
     for column in payload_header:
         if identity_order:
             payload_frame[column] = sumstats_table.frame[column].reset_index(drop=True)
-        elif mapped_mask.all():
+        else:
             payload_frame[column] = pd.Series(
                 sumstats_table.frame[column].iloc[source_indices].to_numpy(copy=False),
                 index=payload_frame.index,
                 dtype=object,
             )
-        else:
-            values = pd.Series([None] * len(vmap_frame), index=payload_frame.index, dtype=object)
-            values.loc[mapped_mask] = sumstats_table.frame[column].iloc[mapped_source_indices].to_numpy(copy=False)
-            payload_frame[column] = values
     return payload_header, payload_frame
-
-
-def clear_clean_unmatched_rows(payload_sumstats: pd.DataFrame, vmap_frame: pd.DataFrame) -> None:
-    unmatched_mask = vmap_frame["source_index"].eq(-1).to_numpy()
-    if unmatched_mask.any():
-        payload_sumstats.loc[unmatched_mask, :] = float("nan")
 
 
 def run_clean_apply(
@@ -489,7 +423,6 @@ def run_clean_apply(
         use_af_inference=args.use_af_inference,
         warn=lambda message: logger.warning("%s", message),
     )
-    clear_clean_unmatched_rows(payload_sumstats, vmap_frame)
     warning_keys: Set[Tuple[str, str]] = set()
     swap_mask = vmap_frame["allele_op"].isin({"swap", "flip_swap"}).to_numpy()
 
@@ -535,26 +468,13 @@ def run_clean_apply(
                 warning_keys=warning_keys,
             )
 
-    retained_mask = np.ones(len(vmap_frame), dtype=bool)
-    if args.only_mapped_target:
-        if "P" not in payload_sumstats.columns:
-            retained_mask[:] = False
-        else:
-            retained_mask &= ~payload_sumstats["P"].isna().to_numpy()
-        if not retained_mask.any():
-            raise ValueError("no retained target rows remain after applying --only-mapped-target")
-
     output_header = ["CHR", "POS", "SNP", "EffectAllele", "OtherAllele", *payload_sumstats.columns]
     chunk_size = 100_000
     with open_text(output_path, "wt") as handle:
         handle.write("\t".join(output_header) + "\n")
         for start in range(0, len(vmap_frame), chunk_size):
             stop = min(start + chunk_size, len(vmap_frame))
-            chunk_offsets = np.flatnonzero(retained_mask[start:stop])
-            if len(chunk_offsets) == 0:
-                continue
-            chunk_indices = chunk_offsets + start
-            vmap_chunk = vmap_frame.iloc[chunk_indices]
+            vmap_chunk = vmap_frame.iloc[start:stop]
             chunk_df = pd.DataFrame({
                 "CHR": vmap_chunk["chrom"].to_numpy(copy=False),
                 "POS": vmap_chunk["pos"].to_numpy(copy=False),
@@ -566,7 +486,7 @@ def run_clean_apply(
                 "OtherAllele": vmap_chunk["a2"].to_numpy(copy=False),
             })
             for col in payload_sumstats.columns:
-                chunk_df[col] = payload_sumstats[col].iloc[chunk_indices].to_numpy(copy=False)
+                chunk_df[col] = payload_sumstats[col].iloc[start:stop].to_numpy(copy=False)
             chunk_df.to_csv(
                 handle,
                 sep="\t",
@@ -636,24 +556,6 @@ def run_legacy_apply(
     with open_text(output_path, "wt") as handle:
         handle.write(join_line(output_header, preview_delimiter) + "\n")
         for vrow in vmap_frame.itertuples(index=False):
-            if vrow.source_index == -1:
-                cols = build_missing_payload_row(
-                    len(output_header),
-                    output_header,
-                    vrow,
-                    idx_chr,
-                    idx_pos,
-                    idx_id,
-                    idx_a1,
-                    idx_a2,
-                    output_idx_pos,
-                    output_idx_id,
-                    output_idx_a1,
-                    output_idx_a2,
-                    retain_snp_id,
-                )
-                handle.write(join_line(cols, preview_delimiter) + "\n")
-                continue
             cols = list(rows_by_provenance[(vrow.source_shard, vrow.source_index)])
             if len(cols) < len(output_header):
                 cols.extend([""] * (len(output_header) - len(cols)))
@@ -755,7 +657,7 @@ def main() -> int:
         require_contig_naming(dict(vmap_meta["target"]), label="variant map target"),
         label="variant map target",
     )
-    vmap_frame = filtered_vmap_frame(all_vmap_table.to_frame(copy=False), only_mapped_target=args.only_mapped_target)
+    vmap_frame = all_vmap_table.to_frame(copy=False).reset_index(drop=True)
     _preview_header_line, preview_header, preview_delimiter, _preview_header_line_number = read_sumstats_header(input_path)
     required_variant_columns: Dict[str, int]
 

@@ -237,7 +237,7 @@ def test_restrict_vmap_rejects_missing_provenance_source_rows(tmp_path):
     result = run_py("restrict_vmap.py", source, restriction, "--output", out)
 
     assert result.returncode != 0
-    assert "mapped-only .vmap" in result.stderr
+    assert "vmap row source_index out of range" in result.stderr
 
 
 def test_restrict_vmap_rejects_template_paths_and_sort_flag(tmp_path):
