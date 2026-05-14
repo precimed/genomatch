@@ -20,12 +20,12 @@ from .sumstats_metadata import (
 )
 from .sumstats_utils import (
     MISSING_VALUE_TOKENS,
-    SumstatsTable,
+    SUMSTATS_READ_CHUNK_ROWS,
     find_metadata_value,
+    iter_sumstats_table_chunks,
     load_metadata,
     open_text,
     read_sumstats_header,
-    read_sumstats_table,
     resolve_sumstats_input_path,
     split_line,
 )
@@ -39,6 +39,7 @@ from .vtable_utils import (
 
 
 VARIANT_OUTPUT_COLUMNS = ("CHR", "POS", "SNP", "EffectAllele", "OtherAllele")
+SUMSTATS_OUTPUT_WRITE_CHUNK_ROWS = 500_000
 logger = logging.getLogger(__name__)
 
 
@@ -90,18 +91,6 @@ def require_single_file_sumstats_provenance(vmap_frame: pd.DataFrame) -> pd.Seri
     return provenance_frame["source_index"].astype("int64")
 
 
-def validate_source_indices_in_range(source_indices: pd.Series, row_count: int) -> None:
-    if source_indices.empty:
-        return
-    invalid_mask = source_indices.lt(0) | source_indices.ge(row_count)
-    if invalid_mask.any():
-        first_missing = int(source_indices.loc[invalid_mask].iloc[0])
-        raise ValueError(
-            f"vmap source provenance out of range for summary statistics input: "
-            f"first missing source_shard='.', source_index={first_missing}"
-        )
-
-
 def validate_required_payload_row_widths(
     input_path: Path,
     *,
@@ -146,21 +135,65 @@ def normalize_missing_values(series: pd.Series, *, missing_value: Optional[str])
 
 
 def collect_payload_frame(
-    sumstats_table: SumstatsTable,
+    input_path: Path,
     vmap_frame: pd.DataFrame,
+    source_indices: pd.Series,
     retained_columns: Sequence[Tuple[str, int, str]],
     *,
+    header: Sequence[str],
     metadata: Dict[str, object],
+    chunk_rows: int = SUMSTATS_READ_CHUNK_ROWS,
 ) -> pd.DataFrame:
-    payload_frame = pd.DataFrame(index=range(len(vmap_frame)))
+    n_vmap_rows = len(vmap_frame)
+    payload_columns: Dict[str, np.ndarray] = {}
     if not retained_columns:
-        return payload_frame
-    source_indices = vmap_frame["source_index"].to_numpy(dtype=np.int64, copy=False)
+        return pd.DataFrame(index=range(n_vmap_rows))
+    for _key, _idx, output_name in retained_columns:
+        values = np.empty(n_vmap_rows, dtype=object)
+        values[:] = np.nan
+        payload_columns[output_name] = values
+
+    source_index_values = source_indices.to_numpy(dtype=np.int64, copy=False)
+    sorted_order = np.argsort(source_index_values, kind="stable")
+    sorted_source_indices = source_index_values[sorted_order]
+    filled_mask = np.zeros(n_vmap_rows, dtype=bool)
     missing_value = input_missing_value(metadata)
-    for _key, idx, output_name in retained_columns:
-        values = sumstats_table.frame.iloc[source_indices, idx].reset_index(drop=True)
-        payload_frame[output_name] = normalize_missing_values(values, missing_value=missing_value)
-    return payload_frame
+    usecols = list(dict.fromkeys(str(header[idx]) for _key, idx, _output_name in retained_columns))
+
+    for chunk in iter_sumstats_table_chunks(input_path, usecols=usecols, chunk_rows=chunk_rows):
+        chunk_source_indices = chunk.source_index.to_numpy(dtype=np.int64, copy=False)
+        if len(chunk_source_indices) == 0:
+            continue
+        left = np.searchsorted(sorted_source_indices, chunk_source_indices, side="left")
+        in_range = left < len(sorted_source_indices)
+        matched_mask = np.zeros(len(chunk_source_indices), dtype=bool)
+        matched_mask[in_range] = sorted_source_indices[left[in_range]] == chunk_source_indices[in_range]
+        if not matched_mask.any():
+            continue
+
+        matched_local_positions = np.flatnonzero(matched_mask)
+        matched_left = left[matched_mask]
+        matched_right = np.searchsorted(sorted_source_indices, chunk_source_indices[matched_mask], side="right")
+        repeat_counts = matched_right - matched_left
+        output_positions = np.concatenate(
+            [sorted_order[start:stop] for start, stop in zip(matched_left, matched_right)]
+        )
+        source_positions = np.repeat(matched_local_positions, repeat_counts)
+
+        for _key, idx, output_name in retained_columns:
+            input_column = str(header[idx])
+            normalized = normalize_missing_values(chunk.frame[input_column], missing_value=missing_value)
+            payload_columns[output_name][output_positions] = normalized.iloc[source_positions].to_numpy(copy=False)
+        filled_mask[output_positions] = True
+
+    if not filled_mask.all():
+        first_missing_pos = int(np.flatnonzero(~filled_mask)[0])
+        first_missing = int(source_index_values[first_missing_pos])
+        raise ValueError(
+            f"vmap source provenance out of range for summary statistics input: "
+            f"first missing source_shard='.', source_index={first_missing}"
+        )
+    return pd.DataFrame(payload_columns, index=range(n_vmap_rows), dtype=object)
 
 
 def output_variant_ids(vmap_frame: pd.DataFrame, *, retain_snp_id: bool) -> pd.Series:
@@ -177,17 +210,14 @@ def output_variant_ids(vmap_frame: pd.DataFrame, *, retain_snp_id: bool) -> pd.S
     ).reset_index(drop=True)
 
 
-def build_variant_output_frame(vmap_frame: pd.DataFrame, *, retain_snp_id: bool) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "CHR": vmap_frame["chrom"].to_numpy(copy=False),
-            "POS": vmap_frame["pos"].to_numpy(copy=False),
-            "SNP": output_variant_ids(vmap_frame, retain_snp_id=retain_snp_id),
-            "EffectAllele": vmap_frame["a1"].to_numpy(copy=False),
-            "OtherAllele": vmap_frame["a2"].to_numpy(copy=False),
-        },
-        index=range(len(vmap_frame)),
-    )
+def build_variant_output_columns(vmap_frame: pd.DataFrame, *, retain_snp_id: bool) -> List[Tuple[str, pd.Series]]:
+    return [
+        ("CHR", pd.Series(vmap_frame["chrom"].to_numpy(copy=False), index=range(len(vmap_frame)))),
+        ("POS", pd.Series(vmap_frame["pos"].to_numpy(copy=False), index=range(len(vmap_frame)))),
+        ("SNP", output_variant_ids(vmap_frame, retain_snp_id=retain_snp_id)),
+        ("EffectAllele", pd.Series(vmap_frame["a1"].to_numpy(copy=False), index=range(len(vmap_frame)))),
+        ("OtherAllele", pd.Series(vmap_frame["a2"].to_numpy(copy=False), index=range(len(vmap_frame)))),
+    ]
 
 
 def numeric_transform(
@@ -282,7 +312,7 @@ def apply_swap_effect_transforms(
             invalid_extra=lambda numeric: numeric == 0,
         )
 
-    for key in ("col_EAF", "col_CaseEAF", "col_ControlEAF"):
+    for key in ("col_EAF", "col_OAF", "col_CaseEAF", "col_CaseOAF", "col_ControlEAF", "col_ControlOAF"):
         column = column_by_key.get(key)
         if column in out.columns:
             out.loc[swap_mask, column] = numeric_transform(
@@ -296,16 +326,47 @@ def apply_swap_effect_transforms(
     return out
 
 
-def write_sumstats_output(output_path: Path, output_frame: pd.DataFrame) -> None:
+def format_output_value(value):
+    if isinstance(value, (float, np.floating)):
+        value_float = float(value)
+        if math.isfinite(value_float):
+            return format(value_float, ".15g")
+        return np.nan
+    return value
+
+
+def format_output_series_for_csv(series: pd.Series) -> pd.Series:
+    if series.dtype == object:
+        return series.map(format_output_value)
+    return series
+
+
+def write_sumstats_output(
+    output_path: Path,
+    output_columns: Sequence[Tuple[str, pd.Series]],
+    *,
+    chunk_rows: int = SUMSTATS_OUTPUT_WRITE_CHUNK_ROWS,
+) -> None:
+    if chunk_rows <= 0:
+        raise ValueError("output chunk_rows must be positive")
+    n_rows = len(output_columns[0][1]) if output_columns else 0
     with open_text(output_path, "wt") as handle:
-        output_frame.to_csv(
-            handle,
-            sep="\t",
-            header=True,
-            index=False,
-            na_rep="",
-            float_format=lambda x: format(x, ".15g") if math.isfinite(x) else "",
-        )
+        for start in range(0, n_rows, chunk_rows):
+            stop = min(start + chunk_rows, n_rows)
+            block = pd.DataFrame(
+                {
+                    name: format_output_series_for_csv(series.iloc[start:stop].reset_index(drop=True))
+                    for name, series in output_columns
+                }
+            )
+            block.to_csv(
+                handle,
+                sep="\t",
+                header=start == 0,
+                index=False,
+                na_rep="",
+                float_format=lambda x: format(x, ".15g") if math.isfinite(x) else "",
+            )
 
 
 def output_sidecar_path(output_path: Path) -> Path:
@@ -376,19 +437,23 @@ def run_sumstats_apply(
     projection_payload_mappings: Dict[str, str],
     vmap_frame: pd.DataFrame,
     vmap_meta: Dict[str, object],
-    sumstats_table: SumstatsTable,
+    input_path: Path,
+    input_header: Sequence[str],
     output_path: Path,
+    chunk_rows: int = SUMSTATS_READ_CHUNK_ROWS,
 ) -> int:
     if not retained_columns:
         raise ValueError("apply_vmap_to_sumstats.py requires at least one metadata-declared payload/stat column")
     source_indices = require_single_file_sumstats_provenance(vmap_frame)
-    validate_source_indices_in_range(source_indices, len(sumstats_table.frame))
 
     payload_frame = collect_payload_frame(
-        sumstats_table,
+        input_path,
         vmap_frame,
+        source_indices,
         retained_columns,
+        header=input_header,
         metadata=metadata,
+        chunk_rows=chunk_rows,
     )
     if args.clean:
         payload_sumstats, clean_metadata = harmonize_clean_sumstats_frame(
@@ -410,11 +475,12 @@ def run_sumstats_apply(
         payload_sumstats = apply_swap_effect_transforms(payload_frame, vmap_frame, projection_payload_mappings)
         payload_mappings = projection_payload_mappings
 
-    output_frame = pd.concat(
-        [build_variant_output_frame(vmap_frame, retain_snp_id=args.retain_snp_id), payload_sumstats.reset_index(drop=True)],
-        axis=1,
+    output_columns = build_variant_output_columns(vmap_frame, retain_snp_id=args.retain_snp_id)
+    output_columns.extend(
+        (column, payload_sumstats[column].reset_index(drop=True))
+        for column in payload_sumstats.columns
     )
-    write_sumstats_output(output_path, output_frame)
+    write_sumstats_output(output_path, output_columns)
     write_output_sidecar(
         output_path,
         vmap_meta=vmap_meta,
@@ -480,7 +546,6 @@ def main() -> int:
         header_line_number=preview_header_line_number,
         retained_columns=retained_columns,
     )
-    sumstats_table = read_sumstats_table(input_path)
     rc = run_sumstats_apply(
         args,
         metadata=metadata,
@@ -488,7 +553,8 @@ def main() -> int:
         projection_payload_mappings=projection_payload_mappings,
         vmap_frame=vmap_frame,
         vmap_meta=vmap_meta,
-        sumstats_table=sumstats_table,
+        input_path=input_path,
+        input_header=preview_header,
         output_path=output_path,
     )
     logger.info("apply_vmap_to_sumstats.py: wrote %s with %s retained target rows", output_path, len(vmap_frame))

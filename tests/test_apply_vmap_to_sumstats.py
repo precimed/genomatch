@@ -1,7 +1,12 @@
+import argparse
 import gzip
 import math
 
+import pandas as pd
 import yaml
+
+from genomatch.apply_vmap_sumstats import run_sumstats_apply
+from genomatch.sumstats_utils import iter_sumstats_table_chunks
 
 from utils import REPO_ROOT, read_tsv, run_py, write_json, write_lines
 
@@ -76,7 +81,7 @@ def test_apply_vmap_to_sumstats_target_order_and_swap_effects(tmp_path):
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\tOR\tEAF\n"
-        "1\t200\t1:200:T:C\tT\tC\t-1.0\t0.25\t0.7\n"
+        "1\t200\t1:200:T:C\tT\tC\t-1\t0.25\t0.7\n"
         "1\t100\t1:100:A:G\tA\tG\t0.5\t2.0\t0.1\n"
     )
     sidecar = read_yaml(out.with_name(out.name + ".meta.yaml"))
@@ -114,6 +119,69 @@ def test_apply_vmap_to_sumstats_projection_drops_unrecognized_input_columns(tmp_
 
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tA\tG\t0.5\n"
+
+
+def test_apply_vmap_to_sumstats_projection_applies_metadata_missing_value(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t-9"])
+    write_lines(
+        meta,
+        [
+            'missing_value: "-9"',
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_BETA: BETA",
+        ],
+    )
+    write_vmap_with_meta(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tA\tG\t\n"
+
+
+def test_apply_vmap_to_sumstats_projection_normalizes_common_missing_tokens(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR\tPOS\tEA\tOA\tBETA",
+            "1\t100\tA\tG\tNA",
+            "1\t200\tA\tG\tN/A",
+            "1\t300\tA\tG\tnull",
+            "1\t400\tA\tG\t.",
+        ],
+    )
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
+    write_vmap_with_meta(
+        vmap,
+        [
+            "1\t100\tt1\tA\tG\t.\t0\tidentity",
+            "1\t200\tt2\tA\tG\t.\t1\tidentity",
+            "1\t300\tt3\tA\tG\t.\t2\tidentity",
+            "1\t400\tt4\tA\tG\t.\t3\tidentity",
+        ],
+    )
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
+        "1\t100\t1:100:A:G\tA\tG\t\n"
+        "1\t200\t1:200:A:G\tA\tG\t\n"
+        "1\t300\t1:300:A:G\tA\tG\t\n"
+        "1\t400\t1:400:A:G\tA\tG\t\n"
+    )
 
 
 def test_apply_vmap_to_sumstats_projection_rejects_ambiguous_normalized_header_lookup(tmp_path):
@@ -254,6 +322,69 @@ def test_apply_vmap_to_sumstats_flip_swap_uses_swap_numeric_effects(tmp_path):
     assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\tOR\tEAF\n1\t100\t1:100:G:T\tG\tT\t-0.5\t0.5\t0.9\n"
 
 
+def test_apply_vmap_to_sumstats_swap_complements_other_allele_frequency_columns(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tOAF\tCaseOAF\tControlOAF", "1\t100\tA\tG\t0.2\t0.3\t0.4"])
+    write_lines(
+        meta,
+        [
+            "col_CHR: CHR",
+            "col_POS: POS",
+            "col_EffectAllele: EA",
+            "col_OtherAllele: OA",
+            "col_OAF: OAF",
+            "col_CaseOAF: CaseOAF",
+            "col_ControlOAF: ControlOAF",
+        ],
+    )
+    write_lines(vmap, ["1\t100\tt1\tG\tA\t.\t0\tswap"])
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tOAF\tCaseOAF\tControlOAF\n"
+        "1\t100\t1:100:G:A\tG\tA\t0.8\t0.7\t0.6\n"
+    )
+
+
+def test_apply_vmap_to_sumstats_formats_swapped_object_floats_with_float_format(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR\tPOS\tEA\tOA\tBETA",
+            "1\t100\tA\tG\t0.12345678901234567",
+            "1\t200\tC\tT\t0.12345678901234567",
+        ],
+    )
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
+    write_lines(
+        vmap,
+        [
+            "1\t100\tt1\tA\tG\t.\t0\tidentity",
+            "1\t200\tt2\tT\tC\t.\t1\tswap",
+        ],
+    )
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
+        "1\t100\t1:100:A:G\tA\tG\t0.12345678901234567\n"
+        "1\t200\t1:200:T:C\tT\tC\t-0.123456789012346\n"
+    )
+
+
 def test_apply_vmap_to_sumstats_rewrites_target_chr_pos_and_id_when_columns_exist(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
@@ -339,8 +470,8 @@ def test_apply_vmap_to_sumstats_swap_inverts_and_swaps_or_confidence_bounds(tmp_
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
-        f"CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tORL95\tORU95\n"
-        f"1\t100\t1:100:G:A\tG\tA\t{1.0 / 1.5}\t{1.0 / 1.2}\n"
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tORL95\tORU95\n"
+        "1\t100\t1:100:G:A\tG\tA\t0.666666666666667\t0.833333333333333\n"
     )
 
 
@@ -565,6 +696,105 @@ def test_apply_vmap_to_sumstats_source_index_ignores_comment_and_blank_lines(tmp
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t200\t1:200:C:T\tC\tT\t-1.0\n"
+
+
+def test_sumstats_chunk_iterator_preserves_source_index_across_chunks(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    sumstats.write_text(
+        "# pre-header comment\n"
+        "CHR\tPOS\tBETA\n"
+        "# skipped comment\n"
+        "1\t100\t0.5\n"
+        "\n"
+        "1\t200\t-1.0\n"
+        "1\t300\t2.0\n",
+        encoding="utf-8",
+    )
+
+    chunks = list(iter_sumstats_table_chunks(sumstats, chunk_rows=1))
+
+    assert [chunk.source_index.tolist() for chunk in chunks] == [[0], [1], [2]]
+    assert [chunk.frame["POS"].tolist() for chunk in chunks] == [["100"], ["200"], ["300"]]
+
+
+def test_run_sumstats_apply_finds_vmap_rows_after_first_chunk(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR\tPOS\tEA\tOA\tBETA",
+            "1\t100\tA\tG\t0.1",
+            "1\t200\tA\tG\t0.2",
+            "1\t300\tA\tG\t0.3",
+            "1\t400\tA\tG\t0.4",
+        ],
+    )
+    metadata = {
+        "col_CHR": "CHR",
+        "col_POS": "POS",
+        "col_EffectAllele": "EA",
+        "col_OtherAllele": "OA",
+        "col_BETA": "BETA",
+    }
+    vmap_frame = pd.DataFrame(
+        {
+            "chrom": ["1", "1"],
+            "pos": ["300", "400"],
+            "id": ["t3", "t4"],
+            "a1": ["A", "G"],
+            "a2": ["G", "A"],
+            "source_shard": [".", "."],
+            "source_index": [2, 3],
+            "allele_op": ["identity", "swap"],
+        }
+    )
+
+    result = run_sumstats_apply(
+        argparse.Namespace(clean=False, fill_mode="column", use_af_inference=False, retain_snp_id=False),
+        metadata=metadata,
+        retained_columns=[("col_BETA", 4, "BETA")],
+        projection_payload_mappings={"col_BETA": "BETA"},
+        vmap_frame=vmap_frame,
+        vmap_meta={"target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+        input_path=sumstats,
+        input_header=["CHR", "POS", "EA", "OA", "BETA"],
+        output_path=out,
+        chunk_rows=2,
+    )
+
+    assert result == 0
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
+        "1\t300\t1:300:A:G\tA\tG\t0.3\n"
+        "1\t400\t1:400:G:A\tG\tA\t-0.4\n"
+    )
+
+
+def test_apply_vmap_to_sumstats_reuses_one_source_row_for_multiple_vmap_rows(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5"])
+    write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
+    write_lines(
+        vmap,
+        [
+            "1\t100\tt1\tA\tG\t.\t0\tidentity",
+            "2\t250\tt2\tT\tC\t.\t0\tswap",
+        ],
+    )
+    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
+        "1\t100\t1:100:A:G\tA\tG\t0.5\n"
+        "2\t250\t2:250:T:C\tT\tC\t-0.5\n"
+    )
 
 
 def test_apply_vmap_to_sumstats_supports_hash_prefixed_chr_header(tmp_path):

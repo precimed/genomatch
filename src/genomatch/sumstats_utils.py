@@ -158,7 +158,8 @@ class EffectColumnMapping:
     frequency: List[Optional[int]]
 
 
-MISSING_VALUE_TOKENS: frozenset = frozenset({"", "nan", "none"})
+MISSING_VALUE_TOKENS: frozenset = frozenset({"", ".", "na", "n/a", "nan", "none", "null"})
+SUMSTATS_READ_CHUNK_ROWS = 5_000_000
 
 
 def is_missing_token_series(series: pd.Series) -> pd.Series:
@@ -317,8 +318,46 @@ def read_sumstats_table(path: Path, *, usecols: Optional[List[str]] = None) -> S
     Performs: PN(parse delimiter/header and tabular rows via pandas as string-safe payload values), PV(header presence and deterministic source_index assignment).
     Guarantees: table rows preserve raw data-row order with source_index=0..N-1 over rows only (excluding comments/blanks/header), while semantic required-column validation is deferred to importer/apply kernels.
     """
-    header_line, header, delimiter, header_line_number = read_sumstats_header(path)
+    chunks = list(iter_sumstats_table_chunks(path, usecols=usecols))
+    if not chunks:
+        header_line, header, delimiter, _header_line_number = read_sumstats_header(path)
+        frame = pd.DataFrame(columns=header if usecols is None else usecols, dtype=object)
+        source_index = pd.Series([], dtype="int64")
+        return SumstatsTable(
+            path=path,
+            header_line=header_line,
+            header=header,
+            delimiter=delimiter,
+            frame=frame,
+            source_index=source_index,
+        )
+    frame = pd.concat([chunk.frame for chunk in chunks], ignore_index=True)
+    source_index = pd.concat([chunk.source_index for chunk in chunks], ignore_index=True)
+    first = chunks[0]
+    return SumstatsTable(
+        path=path,
+        header_line=first.header_line,
+        header=first.header,
+        delimiter=first.delimiter,
+        frame=frame,
+        source_index=source_index,
+    )
 
+
+def iter_sumstats_table_chunks(
+    path: Path,
+    *,
+    usecols: Optional[List[str]] = None,
+    chunk_rows: int = SUMSTATS_READ_CHUNK_ROWS,
+) -> Iterator[SumstatsTable]:
+    """
+    Assumes: path points to a single-file sumstats payload with one header row (after optional comment/blank preamble).
+    Performs: PN(parse delimiter/header and tabular rows via pandas as string-safe payload values), PV(header presence and deterministic source_index assignment).
+    Guarantees: yields chunks that preserve raw data-row order with source_index=0..N-1 over rows only (excluding comments/blanks/header), while semantic required-column validation is deferred to importer/apply kernels.
+    """
+    if chunk_rows <= 0:
+        raise ValueError("sumstats chunk_rows must be positive")
+    header_line, header, delimiter, header_line_number = read_sumstats_header(path)
     main_read_csv_kwargs = build_sumstats_read_csv_kwargs(
         path,
         delimiter,
@@ -331,14 +370,18 @@ def read_sumstats_table(path: Path, *, usecols: Optional[List[str]] = None) -> S
     main_read_csv_kwargs["skiprows"] = header_line_number + 1
     if usecols is not None:
         main_read_csv_kwargs["usecols"] = usecols
-    frame = pd.read_csv(**main_read_csv_kwargs)
-
-    source_index = pd.Series(range(len(frame)), dtype="int64")
-    return SumstatsTable(
-        path=path,
-        header_line=header_line,
-        header=header,
-        delimiter=delimiter,
-        frame=frame,
-        source_index=source_index,
-    )
+    main_read_csv_kwargs["chunksize"] = chunk_rows
+    row_offset = 0
+    for frame in pd.read_csv(**main_read_csv_kwargs):
+        frame = frame.reset_index(drop=True)
+        chunk_len = len(frame)
+        source_index = pd.Series(range(row_offset, row_offset + chunk_len), dtype="int64")
+        row_offset += chunk_len
+        yield SumstatsTable(
+            path=path,
+            header_line=header_line,
+            header=header,
+            delimiter=delimiter,
+            frame=frame,
+            source_index=source_index,
+        )
