@@ -34,7 +34,6 @@ dependencies = [
 "import_vcf.py" = "genomatch.import_vcf:cli_main"
 "intersect_variants.py" = "genomatch.intersect_variants:cli_main"
 "liftover_build.py" = "genomatch.liftover_build:cli_main"
-"match_vmap_to_target.py" = "genomatch.match_vmap_to_target:cli_main"
 "normalize_contigs.py" = "genomatch.normalize_contigs:cli_main"
 "prepare_variants.py" = "genomatch.prepare_variants:cli_main"
 "prepare_variants_sharded.py" = "genomatch.prepare_variants_sharded:cli_main"

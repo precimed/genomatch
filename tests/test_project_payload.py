@@ -170,7 +170,6 @@ def test_project_payload_sumstats_uses_explicit_vmap_and_does_not_retain_restric
     )
 
     assert result.returncode == 0, result.stderr
-    assert "match_vmap_to_target.py" not in result.stderr
     assert "restrict_vmap.py" not in result.stderr
     assert "apply_vmap_to_sumstats.py" in result.stderr
     assert str(vmap) in result.stderr
@@ -373,7 +372,6 @@ def test_project_payload_bfile_uses_explicit_vmap_and_allows_sharded_output_pref
 
     assert result.returncode == 0, result.stderr
     assert "apply_vmap_to_bfile.py" in result.stderr
-    assert "match_vmap_to_target.py" not in result.stderr
     assert not (tmp_path / "aligned.all_targets.vmap").exists()
     assert (tmp_path / "aligned.1.bim").exists()
     assert (tmp_path / "aligned.2.bim").exists()

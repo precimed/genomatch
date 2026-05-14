@@ -33,20 +33,24 @@ For force delete outputs and re-run, use ``--force``.
 For intersection of two or more of prepared artifacts, use:
 
 ```bash
-intersect_variants.py --inputs \
-    prepared/<first>.vmap \
-    prepared/<second>.vmap \
+intersect_variants.py \
+  prepared/<first>.vmap \
+  prepared/<second>.vmap \
   --output shared/<shared-name>.vtable
 ```
 
 For projecting a payload into an existing shared target universe, use:
 
 ```bash
+restrict_vmap.py \
+  prepared/<source-name>.vmap \
+  shared/<shared-name>.vtable \
+  --output prepared/<source-name>.shared.vmap
+
 project_payload.py --input-format <bfile|pfile|sumstats|sumstats-clean> \
   --input <raw-input> \
   --sumstats-metadata <sumstats-metadata-if-needed> \
-  --source-vmap prepared/<source-name>.vmap \
-  --target shared/<shared-name>.vtable \
+  --vmap prepared/<source-name>.shared.vmap \
   --output <projected-output>
 ```
 
@@ -178,9 +182,9 @@ Shard-discovery notes:
 Use the prepared artifacts to define one shared `GRCh38` target universe:
 
 ```bash
-intersect_variants.py --inputs \
-    prepared/1000G_EUR_Phase3_plink.vmap \
-    prepared/ukb_genotype.vmap \
+intersect_variants.py \
+  prepared/1000G_EUR_Phase3_plink.vmap \
+  prepared/ukb_genotype.vmap \
   --output shared/grch38_shared.vtable
 ```
 
@@ -189,41 +193,57 @@ Then use `project_payload.py` for the payloads you want to rewrite into that sha
 For the UKB height summary-stat payload:
 
 ```bash
+restrict_vmap.py \
+  prepared/UKB_HEIGHT_2018_irnt.vmap \
+  shared/grch38_shared.vtable \
+  --output prepared/UKB_HEIGHT_2018_irnt.shared.vmap
+
 project_payload.py --input-format sumstats-clean \
   --input sumstats/50_irnt.gwas.imputed_v3.both_sexes.tsv.gz \
   --sumstats-metadata sumstats/UKB_HEIGHT_2018_irnt.variant_only.yaml \
-  --source-vmap prepared/UKB_HEIGHT_2018_irnt.vmap \
-  --target shared/grch38_shared.vtable \
+  --vmap prepared/UKB_HEIGHT_2018_irnt.shared.vmap \
   --output shared/UKB_HEIGHT_2018_irnt.tsv.gz
 ```
 
 For the GLGC HDL summary-stat payload:
 
 ```bash
+restrict_vmap.py \
+  prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.vmap \
+  shared/grch38_shared.vtable \
+  --output prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.shared.vmap
+
 project_payload.py --input-format sumstats-clean \
   --input sumstats/without_UKB_HDL_INV_EUR_HRC_1KGP3_others_ALL.meta.singlevar.results.indels.gz \
   --sumstats-metadata sumstats/GLGC_LIPIDS_2021_HDL_EUR_noUKB.yaml \
-  --source-vmap prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.vmap \
-  --target shared/grch38_shared.vtable \
+  --vmap prepared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.shared.vmap \
   --output shared/GLGC_LIPIDS_2021_HDL_EUR_noUKB.tsv.gz
 ```
 
 For the 1000G EUR Phase3 PLINK payload:
 
 ```bash
+restrict_vmap.py \
+  prepared/1000G_EUR_Phase3_plink.vmap \
+  shared/grch38_shared.vtable \
+  --output prepared/1000G_EUR_Phase3_plink.shared.vmap
+
 project_payload.py --input-format bfile \
   --input 1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim \
-  --source-vmap prepared/1000G_EUR_Phase3_plink.vmap \
-  --target shared/grch38_shared.vtable \
+  --vmap prepared/1000G_EUR_Phase3_plink.shared.vmap \
   --output shared/1000G_EUR_Phase3_plink/1000G.EUR.QC.@
 ```
 
 For the UKB genotypes PLINK payload (can be executed on a machine where full `.bed/.bim/.fam` inputs are present ):
 
 ```bash
+restrict_vmap.py \
+  prepared/ukb_genotype.vmap \
+  shared/grch38_shared.vtable \
+  --output prepared/ukb_genotype.shared.vmap
+
 project_payload.py --input-format bfile \
   --input ukb_genotype/ukb_snp_@_v2.bim \
-  --source-vmap prepared/ukb_genotype.vmap \
-  --target shared/grch38_shared.vtable \
+  --vmap prepared/ukb_genotype.shared.vmap \
   --output shared/ukb_genotype/ukb_snp_@_v2
 ```

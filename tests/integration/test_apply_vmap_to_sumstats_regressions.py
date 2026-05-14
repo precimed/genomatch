@@ -98,25 +98,6 @@ def case_chroms(raw_rows: List[List[str]], raw_header: List[str], expected_rows:
     return chroms
 
 
-def write_target_vtable(expected_header: List[str], expected_rows: List[List[str]], path: Path, *, genome_build: str) -> None:
-    idx_chr = column_index(expected_header, "CHR")
-    idx_pos = column_index(expected_header, "POS")
-    idx_id = column_index(expected_header, "RSID")
-    idx_a1 = column_index(expected_header, "EffectAllele")
-    idx_a2 = column_index(expected_header, "OtherAllele")
-    write_lines(
-        path,
-        [
-            "\t".join([row[idx_chr], row[idx_pos], row[idx_id], row[idx_a1], row[idx_a2]])
-            for row in expected_rows
-        ],
-    )
-    write_json(
-        path.with_name(path.name + ".meta.json"),
-        {"object_type": "variant_table", "genome_build": genome_build, "contig_naming": "ncbi"},
-    )
-
-
 def read_metadata(path: Path) -> Dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -245,8 +226,6 @@ def test_apply_vmap_to_sumstats_selected_regressions(tmp_path: Path, case_name: 
 
     source_vmap = tmp_path / f"{case_name}.source.vmap"
     bridge_vmap = tmp_path / f"{case_name}.bridge.vmap"
-    target_vtable = tmp_path / f"{case_name}.target.vtable"
-    final_vmap = tmp_path / f"{case_name}.final.vmap"
     output = tmp_path / f"{case_name}.output.tsv"
 
     result = run_py(
@@ -275,12 +254,9 @@ def test_apply_vmap_to_sumstats_selected_regressions(tmp_path: Path, case_name: 
         source_meta=source_meta,
         target_build=case["target_build"],
     )
-    write_target_vtable(expected_header, expected_rows, target_vtable, genome_build=case["target_build"])
-    result = run_py("match_vmap_to_target.py", "--source", bridge_vmap, "--target", target_vtable, "--output", final_vmap)
-    assert result.returncode == 0, result.stderr
-    assert sum(1 for row in read_tsv(final_vmap) if row[6] != "-1") == len(expected_rows)
+    assert sum(1 for row in read_tsv(bridge_vmap) if row[6] != "-1") == len(expected_rows)
 
-    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", final_vmap, "--output", output, "--retain-snp-id")
+    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", bridge_vmap, "--output", output, "--retain-snp-id")
     assert result.returncode == 0, result.stderr
 
     output_table = read_tsv(output)

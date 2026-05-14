@@ -33,9 +33,6 @@ def build_expected_output(entries, source_rows, target_rows):
     expected = [["chromosome", "position", "snp_id", "effect_allele", "other_allele", "beta", "odds_ratio", "effect_allele_frequency", "pvalue", "sample_size"]]
     for target in target_rows:
         rsid = target[2]
-        if rsid == "missing_rs":
-            expected.append(target + ["n/a", "n/a", "n/a", "n/a", "n/a"])
-            continue
         source = list(source_rows[index_by_rsid[rsid]])
         source[0] = target[0]
         source[1] = target[1]
@@ -51,7 +48,7 @@ def build_expected_output(entries, source_rows, target_rows):
     return expected
 
 
-def test_end_to_end_sumstats_liftover_match_apply_real(tmp_path: Path) -> None:
+def test_end_to_end_sumstats_liftover_restrict_apply_real(tmp_path: Path) -> None:
     entries = select_mapping_entries(max_rows=5)
     bcftools = resolve_bcftools_with_liftover()
     config = write_real_match_config(tmp_path, chroms={entry.chrom for entry in entries})
@@ -66,9 +63,9 @@ def test_end_to_end_sumstats_liftover_match_apply_real(tmp_path: Path) -> None:
     source_vmap = tmp_path / "source.vmap"
     normalized_vmap = tmp_path / "source.normalized.vmap"
     lifted = tmp_path / "lifted.vmap"
-    target_vtable = tmp_path / "target.vtable"
     final_vmap = tmp_path / "final.vmap"
     output = tmp_path / "output.tsv"
+    membership_vtable = tmp_path / "membership.vtable"
 
     source_rows = []
     for idx, entry in enumerate(entries):
@@ -107,30 +104,30 @@ def test_end_to_end_sumstats_liftover_match_apply_real(tmp_path: Path) -> None:
     result = run_py_with_env("liftover_build.py", env, "--input", normalized_vmap, "--output", lifted, "--target-build", "GRCh38")
     assert result.returncode == 0, result.stderr
 
-    target_rows = []
-    for idx, entry in enumerate(reversed(entries)):
-        if idx % 2 == 1:
-            target_rows.append([entry.chrom, entry.bp38, entry.rsid, entry.a2, entry.a1])
-        else:
-            target_rows.append([entry.chrom, entry.bp38, entry.rsid, entry.a1, entry.a2])
-    target_rows.append([entries[0].chrom, str(int(entries[-1].bp38) + 1000), "missing_rs", "A", "C"])
-    write_lines(target_vtable, ["\t".join(row) for row in target_rows])
+    lifted_rows = read_tsv(lifted)
+    expected_vmap = [row for idx, row in enumerate(lifted_rows) if idx % 2 == 0]
+    write_lines(membership_vtable, ["\t".join(row[:5]) for row in reversed(expected_vmap)])
     write_json(
-        target_vtable.with_name(target_vtable.name + ".meta.json"),
+        membership_vtable.with_name(membership_vtable.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"},
     )
-
-    result = run_py("match_vmap_to_target.py", "--source", lifted, "--target", target_vtable, "--output", final_vmap)
+    result = run_py("restrict_vmap.py", lifted, membership_vtable, "--output", final_vmap)
     assert result.returncode == 0, result.stderr
-    expected_vmap = []
-    source_index_by_rsid = {entry.rsid: idx for idx, entry in enumerate(entries)}
-    for idx, target in enumerate(target_rows[:-1]):
-        source_index = source_index_by_rsid[target[2]]
-        op = "swap" if idx % 2 == 1 else "identity"
-        expected_vmap.append(target + [".", str(source_index), op])
-    expected_vmap.append(target_rows[-1] + [".", "-1", "missing"])
     assert read_tsv(final_vmap) == expected_vmap
 
-    result = run_py("apply_vmap_to_sumstats.py", "--input", raw, "--sumstats-metadata", metadata, "--vmap", final_vmap, "--output", output, "--retain-snp-id")
+    result = run_py(
+        "project_payload.py",
+        "--input-format",
+        "sumstats",
+        "--input",
+        raw,
+        "--sumstats-metadata",
+        metadata,
+        "--vmap",
+        final_vmap,
+        "--output",
+        output,
+        "--retain-snp-id",
+    )
     assert result.returncode == 0, result.stderr
-    assert read_tsv(output) == build_expected_output(entries, source_rows, target_rows)
+    assert read_tsv(output) == build_expected_output(entries, source_rows, [row[:5] for row in expected_vmap])

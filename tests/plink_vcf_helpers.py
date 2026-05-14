@@ -6,6 +6,7 @@ import random
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from genomatch.vtable_utils import compose_allele_ops
 from utils import REPO_ROOT, read_bim, read_tsv, run_cmd, run_py, write_json, write_lines
 
 
@@ -395,16 +396,42 @@ def write_target_vtable(path: Path, rows: List[List[str]], *, genome_build: str,
 
 
 def build_vmap(source_vmap: Path, target_vtable: Path, output_path: Path) -> None:
-    result = run_py(
-        "match_vmap_to_target.py",
-        "--source",
-        source_vmap,
-        "--target",
-        target_vtable,
-        "--output",
-        output_path,
+    source_rows = read_tsv(source_vmap)
+    target_rows = read_tsv(target_vtable)
+    output_rows = []
+    used_source_indices: set[int] = set()
+    for target in target_rows:
+        matched = None
+        for source_idx, source in enumerate(source_rows):
+            if source_idx in used_source_indices:
+                continue
+            if source[0] != target[0] or source[1] != target[1]:
+                continue
+            if source[5] == "." and source[6] == "-1":
+                continue
+            if source[3] == target[3] and source[4] == target[4]:
+                matched = [*target, source[5], source[6], source[7]]
+                break
+            if source[3] == target[4] and source[4] == target[3]:
+                matched = [*target, source[5], source[6], compose_allele_ops(source[7], "swap")]
+                break
+        if matched is None:
+            output_rows.append([*target, ".", "-1", "missing"])
+            continue
+        used_source_indices.add(source_idx)
+        output_rows.append(matched)
+    write_lines(output_path, ["\t".join(row) for row in output_rows])
+    target_meta = read_variant_object_target_metadata(target_vtable)
+    write_json(
+        output_path.with_name(output_path.name + ".meta.json"),
+        {
+            "object_type": "variant_map",
+            "target": {
+                "genome_build": target_meta["genome_build"],
+                "contig_naming": target_meta["contig_naming"],
+            },
+        },
     )
-    assert_py_ok(result)
 
 
 def apply_vmap_to_bfile(source_prefix: Path, vmap_path: Path, output_prefix: Path, *, retain_snp_id: bool = False):

@@ -42,7 +42,7 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ### Changed
 - Projected payloads now write corrected output variant IDs as `chrom:pos:a1:a2` by default.
-- Reduced peak memory use in `intersect_variants.py` and `match_vmap_to_target.py`; the effect is largest when the first input to `intersect_variants.py` is small, or when the target table for `match_vmap_to_target.py` is small.
+- Reduced peak memory use in `intersect_variants.py`; the effect is largest when the first input is small.
 
 ## [v0.2.1] - 2026-04-24
 
@@ -61,7 +61,6 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 - Improved performance in high-volume paths, including packed BED remapping for `apply_vmap_to_bfile.py` and vectorized sumstats handling `import_sumstats.py` and `apply_vmap_to_sumstats.py`.
 
 ### Fixed
-- `match_vmap_to_target.py` now correctly keeps searching duplicate source candidates when an early allele match has missing provenance.
 - Fixed importer behavior for duplicate target identities (`chrom,pos,a1,a2`) by keeping first-seen rows and auditing dropped duplicates in QC output.
 
 ## [0.1.0] - 2026-03-23
