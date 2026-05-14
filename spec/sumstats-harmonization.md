@@ -149,6 +149,7 @@ Historical note: the following rules from cleansumstats will not be implemented:
 
 Re-order payload/stat columns according to `schemas/cleaned-sumstats.yaml`, excluding `CHR`, `POS`, `SNP`, `EffectAllele`, and `OtherAllele` which are outside this module.
 Return updated `sumstats` dataframe and updated `metadata`.
+Final file formatting, missing-value serialization, output variant columns, row retention, and `<output>.meta.yaml` sidecar emission are defined by [payload-application.md](payload-application.md).
 
 ## Rule definitions
 

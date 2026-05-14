@@ -376,6 +376,9 @@ def existing_wrapper_outputs(args: argparse.Namespace) -> list[Path]:
         output_path = Path(args.output)
         if output_path.exists():
             existing.append(output_path)
+        metadata_path = output_path.with_name(output_path.name + ".meta.yaml")
+        if metadata_path.exists():
+            existing.append(metadata_path)
         return existing
     if args.input_format == "bfile":
         return existing + existing_bfile_artifacts(Path(args.output), Path(args.vmap))
@@ -390,6 +393,9 @@ def delete_wrapper_outputs(args: argparse.Namespace) -> None:
         output_path = Path(args.output)
         if output_path.exists():
             output_path.unlink()
+        metadata_path = output_path.with_name(output_path.name + ".meta.yaml")
+        if metadata_path.exists():
+            metadata_path.unlink()
         return
     if args.input_format == "bfile":
         delete_bfile_outputs(Path(args.output), Path(args.vmap))

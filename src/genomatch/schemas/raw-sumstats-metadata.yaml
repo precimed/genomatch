@@ -74,7 +74,69 @@ properties:
       located in the same directory as the metadata file, be gzipped and have the
       file extension `.gz`.
     type: "string"
-    pattern: "^[a-zA-Z0-9][a-zA-Z0-9_.-]+\\.gz$"
+    pattern: "^[a-zA-Z0-9][a-zA-Z0-9_.-]+$"
+
+  delimiter:
+    title: "Sumstats field delimiter"
+    description: |
+      Field delimiter used by the described sumstats file. apply_vmap_to_sumstats.py
+      sidecars record the literal tab delimiter as "\t".
+    type: "string"
+
+  missing_value:
+    title: "Serialized missing value"
+    description: |
+      String used to serialize missing values in the described sumstats file.
+      apply_vmap_to_sumstats.py sidecars use the empty string.
+    type: "string"
+
+  genome_build:
+    title: "Genome build"
+    description: |
+      Genome build of the described sumstats variant coordinates. For
+      apply_vmap_to_sumstats.py sidecars, this is copied from the applied .vmap
+      target metadata.
+    type: "string"
+    enum:
+      - "GRCh37"
+      - "GRCh38"
+      - "T2T-CHM13v2.0"
+      - "unknown"
+
+  contig_naming:
+    title: "Contig naming convention"
+    description: |
+      Contig naming convention of the described sumstats variant coordinates. For
+      apply_vmap_to_sumstats.py sidecars, this is copied from the applied .vmap
+      target metadata.
+    type: "string"
+    enum:
+      - "ncbi"
+      - "ucsc"
+      - "plink"
+      - "plink_splitx"
+
+  clean:
+    title: "Clean harmonization applied"
+    description: |
+      Whether apply_vmap_to_sumstats.py emitted canonical cleaned summary statistics
+      rather than metadata-only projection output.
+    type: "boolean"
+
+  fill_mode:
+    title: "Clean-mode fill behavior"
+    description: |
+      Fill behavior used by apply_vmap_to_sumstats.py --clean.
+    type: "string"
+    enum:
+      - "column"
+      - "row"
+
+  use_af_inference:
+    title: "Clean-mode allele-frequency inference"
+    description: |
+      Whether apply_vmap_to_sumstats.py --clean used allele-frequency inference rules.
+    type: "boolean"
 
   path_readMe:
     title: "Sumstats documentation"

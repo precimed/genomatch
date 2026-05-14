@@ -302,15 +302,23 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py` writes output `SNP` as `chrom:pos:a1:a2` from the `.vmap` target row by default
 - `apply_vmap_to_sumstats.py --retain-snp-id` writes target-side `.vmap` `id` values as output `SNP`
 - `apply_vmap_to_sumstats.py` does not require source-side POS / SNP / effect-allele / other-allele payload columns
-- without `--clean`, `apply_vmap_to_sumstats.py` preserves the input delimiter in output
+- `apply_vmap_to_sumstats.py` writes tab-delimited output and empty missing fields in both projection and `--clean` modes
+- `apply_vmap_to_sumstats.py` writes `<output>.meta.yaml` describing delimiter, missing-value encoding, output variant columns, retained payload mappings, target metadata, and clean-mode options when applicable
+- `apply_vmap_to_sumstats.py` writes `<output>.meta.yaml` that validates against `src/genomatch/schemas/raw-sumstats-metadata.yaml`
+- `apply_vmap_to_sumstats.py` records retained output payload mappings in `<output>.meta.yaml` as top-level `col_*` keys rather than a nested custom mapping structure
 - `apply_vmap_to_sumstats.py` writes gzip-compressed output when `--output` ends with `.gz`
-- `apply_vmap_to_sumstats.py` supports joined source variant fields and joined in-place target-field rewrites
+- `apply_vmap_to_sumstats.py` non-clean projection mode resolves metadata-declared input columns when input header casing differs from the metadata value
+- `apply_vmap_to_sumstats.py` non-clean projection mode fails before row processing when two input headers match the same metadata-declared column after trimming whitespace and case-insensitive comparison
+- `apply_vmap_to_sumstats.py` non-clean projection mode drops unrecognized input columns that are not declared in metadata
+- `apply_vmap_to_sumstats.py` non-clean projection mode fails before row processing when retained metadata payload columns have duplicate trimmed output names
+- `apply_vmap_to_sumstats.py` non-clean projection mode fails before row processing when a retained metadata payload column would collide with canonical output variant columns `CHR`, `POS`, `SNP`, `EffectAllele`, or `OtherAllele`
+- `apply_vmap_to_sumstats.py` supports joined source variant fields as input metadata but emits explicit canonical output variant columns rather than joined target fields
+- `apply_vmap_to_sumstats.py` supports inputs where the only source-side variant fields are joined fields such as `CHR:POS_A1_A2`
 - `apply_vmap_to_sumstats.py` swaps odds-ratio confidence bounds when inverting a swapped interval
 - `apply_vmap_to_sumstats.py` applies swap-style numeric transforms for both `swap` and `flip_swap`
 - `apply_vmap_to_sumstats.py` rejects `@` template paths in both `--input` and `--output`
 - `apply_vmap_to_sumstats.py` fails clearly on payload rows with fewer columns than required by metadata
-- `apply_vmap_to_sumstats.py` warns and writes `n/a` when swapped numeric effect transforms cannot be applied because the payload value is non-numeric, non-finite, or non-invertible
-- without `--clean`, `apply_vmap_to_sumstats.py` preserves legacy missing-value formatting, including `n/a` for synthetic numeric missing values
+- `apply_vmap_to_sumstats.py` warns and writes a missing value when swapped numeric effect transforms cannot be applied because the payload value is non-numeric, non-finite, or non-invertible
 - swapped alleles negate signed effects
 - swapped alleles invert odds ratios
 - swapped alleles complement effect frequencies

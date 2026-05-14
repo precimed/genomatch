@@ -174,7 +174,7 @@ def test_project_payload_sumstats_uses_explicit_vmap_and_does_not_retain_restric
     assert "apply_vmap_to_sumstats.py" in result.stderr
     assert str(vmap) in result.stderr
     assert not (tmp_path / "aligned.tsv.vmap").exists()
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
     assert_wrote(result, output)
 
 
@@ -205,7 +205,7 @@ def test_project_payload_retain_snp_id_passes_through_to_apply(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "--retain-snp-id" in result.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\tretained_target_id\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\tretained_target_id\tG\tA\t0.5\n"
 
 
 def test_project_payload_sumstats_clean_dispatches_clean_apply(tmp_path):
@@ -291,7 +291,7 @@ def test_project_payload_sumstats_uses_metadata_path_sumstats_when_input_omitted
     assert result.returncode == 0, result.stderr
     apply_line = next(line for line in result.stderr.splitlines() if "apply_vmap_to_sumstats.py" in line)
     assert "--input" not in apply_line
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
 
 
 def test_project_payload_sumstats_clean_passes_fill_mode_and_af_inference(tmp_path):
@@ -631,7 +631,7 @@ def test_project_payload_fails_when_wrapper_managed_outputs_exist_without_force(
     write_lines(source, ["CHR\tPOS\tSNP\tEA\tOA\tBETA", "1\t1\trs1\tG\tA\t0.5"])
     write_sumstats_metadata(metadata)
     write_vmap(vmap, ["1\t1\trs1\tG\tA\t.\t0\tidentity"])
-    write_lines(output, ["stale"])
+    write_lines(output.with_name(output.name + ".meta.yaml"), ["stale"])
 
     result = run_py(
         "project_payload.py",
@@ -649,7 +649,7 @@ def test_project_payload_fails_when_wrapper_managed_outputs_exist_without_force(
 
     assert result.returncode != 0
     assert "planned output files already exist" in result.stderr
-    assert str(output) in result.stderr
+    assert str(output.with_name(output.name + ".meta.yaml")) in result.stderr
 
 
 def test_project_payload_force_deletes_wrapper_managed_outputs_first_and_reruns(tmp_path):
@@ -662,6 +662,7 @@ def test_project_payload_force_deletes_wrapper_managed_outputs_first_and_reruns(
     write_sumstats_metadata(metadata)
     write_vmap(vmap, ["1\t1\trs1\tG\tA\t.\t0\tidentity"])
     write_lines(output, ["stale"])
+    write_lines(output.with_name(output.name + ".meta.yaml"), ["stale"])
 
     result = run_py(
         "project_payload.py",
@@ -679,7 +680,8 @@ def test_project_payload_force_deletes_wrapper_managed_outputs_first_and_reruns(
     )
 
     assert result.returncode == 0, result.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEA\tOA\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert "stale" not in output.with_name(output.name + ".meta.yaml").read_text(encoding="utf-8")
 
 
 def test_project_payload_sharded_bfile_force_deletes_only_target_contig_outputs(tmp_path):

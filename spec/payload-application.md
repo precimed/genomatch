@@ -110,11 +110,18 @@ This subsection is implementation guidance only; any implementation that preserv
 - when `apply_vmap_to_sumstats.py --input` is omitted, resolve `path_sumStats` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - `path_sumStats` is filename-only (no `/`) and therefore resolves only within the metadata directory
 - `apply_vmap_to_sumstats.py` supports `--clean` to emit canonical cleaned summary statistics
-- `apply_vmap_to_sumstats.py` does not use source-side POS / SNP / effect-allele / other-allele columns in the input payload, even when defined by the metadata
-- joined source variant fields (`CHR:POS_A1_A2` or `CHR:POS`) described in the positional layout documented by `schemas/raw-sumstats-metadata.yaml` are also ignored in `apply_vmap_to_sumstats.py`; output variant columns are populated from target `.vmap` rows
-- source-side variant columns and joined variant fields are dropped from the output
+- without `--clean`, `apply_vmap_to_sumstats.py` is a metadata-aware projection mode: it retains only metadata-declared payload/stat columns, excluding source-side variant columns and joined variant fields, while still interpreting metadata-declared fields needed to produce a target-side projection and allele-orientation-safe effect values
+- projection mode does not derive new statistical fields from other statistical fields or from metadata constants; derivation and canonical cleaned-stat completion are exclusive to `--clean`
+- `apply_vmap_to_sumstats.py` does not reuse source-side POS / SNP / effect-allele / other-allele values in the input payload as output variant values, even when defined by the metadata
+- source-side variant columns and joined variant fields are input-only; they are not preserved, rewritten in place, or emitted in joined form
+- metadata-declared input columns must be resolved robustly, including harmless surrounding whitespace in input headers; ambiguous matches must fail rather than choosing an arbitrary column
+- a metadata-declared input column match is ambiguous when more than one input header matches the metadata value after trimming surrounding whitespace and applying case-insensitive comparison
+- in projection mode, metadata-declared retained payload columns are emitted under the metadata-declared column name after trimming surrounding whitespace
+- projection mode must fail cleanly before reading payload rows if two retained metadata-declared payload/stat columns produce the same output name after trimming surrounding whitespace
+- projection mode must fail cleanly before reading payload rows if any retained metadata-declared payload/stat column would be emitted as `CHR`, `POS`, `SNP`, `EffectAllele`, or `OtherAllele`
+- unrecognized input columns are not carried through projection or clean output
 - `apply_vmap_to_sumstats.py` preserves `.vmap` row order throughout its pipeline
-- `apply_vmap_to_sumstats.py` defines output variant columns from the `.vmap` target rows, not from source payload values; these columns are named and derived as follows:
+- `apply_vmap_to_sumstats.py` always emits explicit canonical output variant columns from the `.vmap` target rows, not from source payload values; these columns are named and derived as follows:
   - `CHR` from target `chrom`
   - `POS` from target `pos`
   - `SNP` from the shared output-ID rule above
@@ -134,16 +141,21 @@ This subsection is implementation guidance only; any implementation that preserv
   - swapped alleles complement effect frequencies (`EAF`, `CaseEAF`, `ControlEAF`)
   - **Implementation requirement:** Must be implemented vectorized using boolean masks and column assignment, not row-by-row loops. Create a mask for rows where `allele_op in {"swap", "flip_swap"}`, then apply operations to masked rows using vectorized assignment (e.g., `df.loc[mask, column] = ...`). Row-by-row looping with individual cell assignment is not permitted for performance reasons.
 - when swapped-allele numeric effect transforms cannot be applied because the payload value is non-numeric, non-finite, or non-invertible, `apply_vmap_to_sumstats.py` must emit a warning and set the field to missing
-- without `--clean`, `apply_vmap_to_sumstats.py` preserves the input file delimiter in output
-- without `--clean`, `apply_vmap_to_sumstats.py` preserves legacy payload-field formatting, including legacy missing-value encodings such as `n/a` for synthetic numeric missing values
-- with `--clean`, `apply_vmap_to_sumstats.py` writes tab-delimited output
-- with `--clean`, every missing value is emitted as an empty field
+- `apply_vmap_to_sumstats.py` writes tab-delimited output in both projection mode and `--clean` mode
+- every missing output value is emitted as an empty field in both projection mode and `--clean` mode
+- consumers must parse output as delimiter-separated text with an explicit tab separator; whitespace-splitting readers are unsupported because they cannot preserve empty fields
 - `apply_vmap_to_sumstats.py` writes compressed output when `--output` ends with `.gz`; otherwise it writes plain UTF-8 text
-- order of output columns is: `CHR`, `POS`, `SNP`, `EffectAllele`, `OtherAllele`, followed by payload columns
-- without `--clean`, the order of payload columns after dropping source-side variant columns and joined variant fields is the same as in the input file; with `--clean`, the order is as produced by 
-  the output of `spec/sumstats-harmonization.md`.
+- order of output columns in both projection mode and `--clean` mode is: `CHR`, `POS`, `SNP`, `EffectAllele`, `OtherAllele`, followed by payload columns
+- without `--clean`, payload columns include only metadata-declared retained payload/stat columns, excluding source-side variant columns and joined variant fields; their relative order is the same as in the input file
+- with `--clean`, payload columns are restricted to the canonical cleaned-stat columns produced by `spec/sumstats-harmonization.md`
+- `apply_vmap_to_sumstats.py` writes a YAML metadata sidecar at `<output>.meta.yaml` for both projection mode and `--clean` mode
+- `src/genomatch/schemas/raw-sumstats-metadata.yaml` is the normative schema contract for the output sidecar as well as input summary-stat metadata
+- the output sidecar records retained payload column mappings using the same top-level `col_*` keys as raw input metadata; for example, a retained projected beta column is recorded as `col_BETA: <emitted column name>`, not in a nested mapping structure
+- `path_sumStats` in the output sidecar is the filename-only basename of `--output`, consistent with the filename-only contract for input `path_sumStats`
+- the output sidecar records at least: output `path_sumStats`, `delimiter: "\t"`, `missing_value: ""`, target `genome_build` and `contig_naming` from the `.vmap`, canonical output variant column mappings (`col_CHR: CHR`, `col_POS: POS`, `col_SNP: SNP`, `col_EffectAllele: EffectAllele`, `col_OtherAllele: OtherAllele`), retained payload `col_*` mappings, and `clean`
+- in `--clean` mode, the sidecar also records `fill_mode` and `use_af_inference`
 
-**Implementation requirement:** In `--clean` mode, write output using vectorized DataFrame operations (e.g., pandas `to_csv()`), not row-by-row iteration. Output must be tab-delimited with missing values as empty fields.
+**Implementation requirement:** In both projection mode and `--clean` mode, write output using vectorized DataFrame operations (e.g., pandas `to_csv()`), not row-by-row iteration. Output must be tab-delimited with missing values as empty fields.
 
 ## `apply_vmap_to_bfile.py`
 

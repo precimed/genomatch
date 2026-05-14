@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import re
 from copy import deepcopy
 from typing import Callable, Dict, Sequence, Tuple
 
@@ -9,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from .sumstats_metadata import resolve_metadata_column_indices
 from .sumstats_utils import find_metadata_value
 
 
@@ -73,11 +73,6 @@ PAYLOAD_OUTPUT_ORDER = [
 ]
 
 FREQUENCY_COLUMNS = ("EAF", "CaseEAF", "ControlEAF", "OAF", "CaseOAF", "ControlOAF")
-NON_ALNUM = re.compile(r"[^A-Za-z0-9]")
-
-
-def normalize_header_token(value: str) -> str:
-    return NON_ALNUM.sub("", value).lower().strip()
 
 
 def is_missing_value(value: object) -> bool:
@@ -104,19 +99,9 @@ def resolve_clean_metadata_columns(
     keys = list(PAYLOAD_METADATA_TO_CANONICAL)
     if include_variant_columns:
         keys = [*VARIANT_METADATA_KEYS, *keys]
-    normalized_header = [normalize_header_token(str(column)) for column in header]
-    resolved: Dict[str, int] = {}
+    resolved = resolve_metadata_column_indices(header, metadata, keys)
     seen_canonical: Dict[str, str] = {}
-    for key in keys:
-        raw_value = find_metadata_value(metadata, key)
-        if raw_value is None:
-            continue
-        if not isinstance(raw_value, str):
-            raise ValueError(f"column mapping for {key} must be a string column name")
-        normalized_value = normalize_header_token(raw_value)
-        matches = [idx for idx, token in enumerate(normalized_header) if token == normalized_value]
-        if len(matches) != 1:
-            raise ValueError(f"column mapping for {key} could not be identified uniquely after header normalization")
+    for key in resolved:
         canonical = ALL_METADATA_TO_CANONICAL[key]
         existing = seen_canonical.get(canonical)
         if existing is not None and existing != key:
@@ -124,7 +109,6 @@ def resolve_clean_metadata_columns(
                 f"metadata-declared input columns collapse to the same canonical output name {canonical!r}"
             )
         seen_canonical[canonical] = key
-        resolved[key] = matches[0]
     return resolved
 
 
