@@ -175,6 +175,46 @@ jobs:
           name: python-dist
           path: dist/*
 
+  build-tutorial-fixtures:
+    name: Build Tutorial 1 Fixture Archive
+    needs:
+      - verify-version
+      - test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Build fixture archive
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          archive="dist/genomatch-tutorial-1-fixtures-${{ needs.verify-version.outputs.version }}.zip"
+          zip -r "$archive" examples/tutorial-1
+          test -s "$archive"
+
+      - name: Upload tutorial fixture artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: genomatch-tutorial-1-fixtures-${{ needs.verify-version.outputs.version }}
+          path: dist/genomatch-tutorial-1-fixtures-${{ needs.verify-version.outputs.version }}.zip
+          if-no-files-found: error
+
+      - name: Attach fixture archive to GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          archive="dist/genomatch-tutorial-1-fixtures-${{ needs.verify-version.outputs.version }}.zip"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$archive" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$archive" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
   build-container:
     name: Build Container Image
     needs:

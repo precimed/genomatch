@@ -6,6 +6,8 @@ The reference VCF defines the target variant universe. The study summary statist
 
 ## Inputs
 
+Release users can download `genomatch-tutorial-1-fixtures-<version>.zip` from the matching GitHub Release and unzip it in a working directory. The archive expands to `examples/tutorial-1/`, so the commands below work unchanged.
+
 ```text
 examples/tutorial-1/
   reference.grch38.vcf
