@@ -7,6 +7,10 @@ from real_liftover_helpers import resolve_bcftools_with_liftover, select_mapping
 from utils import read_tsv, run_py, run_py_with_env, write_json, write_lines
 
 
+def format_output_float(value: float) -> str:
+    return format(value, ".15g")
+
+
 def write_sumstats_metadata(path: Path) -> None:
     write_lines(
         path,
@@ -30,21 +34,17 @@ def write_sumstats_metadata(path: Path) -> None:
 
 def build_expected_output(entries, source_rows, target_rows):
     index_by_rsid = {entry.rsid: idx for idx, entry in enumerate(entries)}
-    expected = [["chromosome", "position", "snp_id", "effect_allele", "other_allele", "beta", "odds_ratio", "effect_allele_frequency", "pvalue", "sample_size"]]
+    expected = [["CHR", "POS", "SNP", "EffectAllele", "OtherAllele", "beta", "odds_ratio", "effect_allele_frequency", "pvalue", "sample_size"]]
     for target in target_rows:
         rsid = target[2]
         source = list(source_rows[index_by_rsid[rsid]])
-        source[0] = target[0]
-        source[1] = target[1]
-        source[2] = target[2]
         swap = (source[3], source[4]) != (target[3], target[4])
-        source[3] = target[3]
-        source[4] = target[4]
+        output_row = target[:5] + source[5:]
         if swap:
-            source[5] = str(-float(source[5]))
-            source[6] = str(1.0 / float(source[6]))
-            source[7] = str(1.0 - float(source[7]))
-        expected.append(source)
+            output_row[5] = format_output_float(-float(output_row[5]))
+            output_row[6] = format_output_float(1.0 / float(output_row[6]))
+            output_row[7] = format_output_float(1.0 - float(output_row[7]))
+        expected.append(output_row)
     return expected
 
 

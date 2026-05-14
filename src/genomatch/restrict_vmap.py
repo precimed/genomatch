@@ -117,10 +117,6 @@ def main() -> int:
     require_shared_target_metadata(infos)
     missing_counts = missing_count_paths(infos)
     if missing_counts:
-        logger.warning(
-            "restrict_vmap.py: variants_count missing from metadata for %s; using CLI input order",
-            ", ".join(str(path) for path in missing_counts),
-        )
         out_frame = restrict_declared_order(source_path, restriction_paths, infos)
     else:
         out_frame = restrict_count_order(source_path, restriction_paths, infos)

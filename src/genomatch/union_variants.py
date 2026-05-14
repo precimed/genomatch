@@ -10,7 +10,8 @@ import pandas as pd
 from ._cli_utils import run_cli
 from .exact_set_utils import (
     TargetObjectInfo,
-    exact_key_index,
+    assign_target_derived_ids,
+    drop_duplicate_target_identities,
     load_target_object_info,
     read_target_table,
     require_shared_target_metadata,
@@ -49,26 +50,6 @@ def print_accumulated(path: Path, row_count: int) -> None:
     logger.info("union_variants.py: after unioning %s, %s variants accumulated", path, row_count)
 
 
-def drop_duplicate_target_identities(frame: pd.DataFrame) -> pd.DataFrame:
-    duplicate_mask = exact_key_index(frame).duplicated(keep="first")
-    if not duplicate_mask.any():
-        return frame
-    return frame.loc[~duplicate_mask].reset_index(drop=True)
-
-
-def assign_target_derived_ids(frame: pd.DataFrame) -> pd.DataFrame:
-    frame["id"] = (
-        frame["chrom"].astype(str)
-        + ":"
-        + frame["pos"].astype(str)
-        + ":"
-        + frame["a1"].astype(str)
-        + ":"
-        + frame["a2"].astype(str)
-    )
-    return frame
-
-
 def missing_count_paths(infos: list[TargetObjectInfo]) -> list[Path]:
     return [info.path for info in infos if info.variants_count is None]
 
@@ -99,8 +80,11 @@ def main() -> int:
         declared_rank = {path: index for index, path in enumerate(input_paths)}
         ordered_infos = sorted(infos, key=lambda info: (info.variants_count, declared_rank[info.path]))
 
-    accumulated = pd.DataFrame(columns=["chrom", "pos", "id", "a1", "a2"], dtype="object")
-    for info in ordered_infos:
+    accumulated = read_target_table(ordered_infos[0].path).to_frame(copy=False)
+    validate_loaded_row_count(ordered_infos[0], len(accumulated))
+    print_loaded(ordered_infos[0].path, len(accumulated))
+    print_accumulated(ordered_infos[0].path, len(accumulated))
+    for info in ordered_infos[1:]:
         table = read_target_table(info.path)
         frame = table.to_frame(copy=False)
         validate_loaded_row_count(info, len(frame))

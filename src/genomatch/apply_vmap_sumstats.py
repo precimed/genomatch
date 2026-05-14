@@ -27,7 +27,6 @@ from .sumstats_utils import (
     open_text,
     read_sumstats_header,
     resolve_sumstats_input_path,
-    split_line,
 )
 from .vtable_utils import (
     load_metadata as load_variant_metadata,
@@ -89,29 +88,6 @@ def require_single_file_sumstats_provenance(vmap_frame: pd.DataFrame) -> pd.Seri
             f"found {unsupported!r}"
         )
     return provenance_frame["source_index"].astype("int64")
-
-
-def validate_required_payload_row_widths(
-    input_path: Path,
-    *,
-    delimiter: Optional[str],
-    header_line_number: int,
-    retained_columns: Sequence[Tuple[str, int, str]],
-) -> None:
-    if not retained_columns:
-        return
-    max_required_idx = max(idx for _key, idx, _output_name in retained_columns)
-    with open_text(input_path, "rt") as handle:
-        for line_number, line in enumerate(handle):
-            if line_number <= header_line_number:
-                continue
-            if not line.strip() or line.startswith("#"):
-                continue
-            if len(split_line(line, delimiter)) <= max_required_idx:
-                raise ValueError(
-                    "sumstats input row has fewer fields than required by metadata-declared payload columns: "
-                    f"{input_path}:{line_number + 1}"
-                )
 
 
 def input_missing_value(metadata: Dict[str, object]) -> Optional[str]:
@@ -534,18 +510,12 @@ def main() -> int:
         label="variant map target",
     )
     vmap_frame = all_vmap_table.to_frame(copy=False).reset_index(drop=True)
-    _preview_header_line, preview_header, preview_delimiter, preview_header_line_number = read_sumstats_header(input_path)
+    _preview_header_line, preview_header, _preview_delimiter, _preview_header_line_number = read_sumstats_header(input_path)
     # Resolve metadata-declared payload columns before reading rows so duplicate
     # mappings and output-name collisions fail at the metadata/header boundary.
     retained_columns, projection_payload_mappings = retained_payload_columns(preview_header, metadata)
     if not retained_columns:
         raise ValueError("apply_vmap_to_sumstats.py requires at least one metadata-declared payload/stat column")
-    validate_required_payload_row_widths(
-        input_path,
-        delimiter=preview_delimiter,
-        header_line_number=preview_header_line_number,
-        retained_columns=retained_columns,
-    )
     rc = run_sumstats_apply(
         args,
         metadata=metadata,

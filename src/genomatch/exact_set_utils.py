@@ -119,6 +119,27 @@ def exact_key_index(frame: pd.DataFrame) -> ExactVariantKeys:
     return pd.MultiIndex.from_frame(frame.loc[:, TARGET_KEY_COLUMNS])
 
 
+def drop_duplicate_target_identities(frame: pd.DataFrame) -> pd.DataFrame:
+    duplicate_mask = exact_key_index(frame).duplicated(keep="first")
+    if not duplicate_mask.any():
+        return frame.reset_index(drop=True)
+    return frame.loc[~duplicate_mask].reset_index(drop=True)
+
+
+def assign_target_derived_ids(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    out["id"] = (
+        out["chrom"].astype(str)
+        + ":"
+        + out["pos"].astype(str)
+        + ":"
+        + out["a1"].astype(str)
+        + ":"
+        + out["a2"].astype(str)
+    )
+    return out
+
+
 def empty_key_index() -> ExactVariantKeys:
     return pd.MultiIndex.from_tuples([], names=TARGET_KEY_COLUMNS)
 

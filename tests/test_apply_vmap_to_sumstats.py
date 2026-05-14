@@ -602,7 +602,7 @@ def test_apply_vmap_to_sumstats_rejects_template_output_path(tmp_path):
     assert "does not accept '@' paths" in result.stderr
 
 
-def test_apply_vmap_to_sumstats_fails_when_required_variant_columns_are_missing(tmp_path):
+def test_apply_vmap_to_sumstats_surfaces_pandas_parser_failure_for_ragged_payload_row(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     vmap = tmp_path / "map.vmap"
@@ -614,7 +614,7 @@ def test_apply_vmap_to_sumstats_fails_when_required_variant_columns_are_missing(
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
-    assert "fewer fields than required by metadata-declared payload columns" in result.stderr
+    assert "Too many columns specified" in result.stderr
 
 
 def test_apply_vmap_to_sumstats_roundtrip_preserves_provenance_with_comment_and_blank_lines(tmp_path):

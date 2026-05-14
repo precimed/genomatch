@@ -8,22 +8,34 @@ from pathlib import Path
 from ._cli_utils import run_cli
 from .exact_set_utils import (
     TargetObjectInfo,
+    assign_target_derived_ids,
+    drop_duplicate_target_identities,
     load_target_object_info,
     read_target_table,
     require_shared_target_metadata,
     restrict_frame_to_membership_chunks,
-    restrict_frame_to_membership_frame,
     validate_loaded_row_count,
     vtable_metadata_from_target_info,
 )
 from .tabular_rows import VariantRowsTable
-from .vtable_utils import metadata_with_variants_count, write_metadata, write_vtable_table
+from .vtable_utils import (
+    metadata_with_variants_count,
+    require_contig_naming,
+    sort_target_table_by_declared_coordinate,
+    write_metadata,
+    write_vtable_table,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Intersect 2+ .vtable/.vmap inputs on exact variant rows.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Intersect 2+ .vtable/.vmap inputs on exact variant rows, "
+            "write target-derived IDs, and sort the result into declared coordinate order."
+        )
+    )
     parser.add_argument("inputs", nargs="+", help="Input .vtable/.vmap files")
     parser.add_argument("--output", required=True, help="Output .vtable")
     return parser.parse_args()
@@ -69,13 +81,7 @@ def intersect_count_order(input_paths: list[Path], infos: list[TargetObjectInfo]
         print_loaded(info.path, row_count)
         print_remaining(info.path, len(candidate_frame))
 
-    if driver_info is infos[0]:
-        return candidate_frame
-
-    first_info = infos[0]
-    first_frame = read_target_table(input_paths[0]).to_frame(copy=False)
-    validate_loaded_row_count(first_info, len(first_frame))
-    return restrict_frame_to_membership_frame(first_frame, candidate_frame)
+    return candidate_frame
 
 
 def main() -> int:
@@ -102,7 +108,12 @@ def main() -> int:
     else:
         retained_frame = intersect_count_order(input_paths, infos)
 
-    write_vtable_table(output_path, VariantRowsTable.from_frame(retained_frame, copy=False))
+    contig_naming = require_contig_naming(infos[0].target_metadata, label="variant table")
+    retained_frame = drop_duplicate_target_identities(retained_frame)
+    retained_frame = sort_target_table_by_declared_coordinate(retained_frame, contig_naming, label="variant table")
+    retained_frame = assign_target_derived_ids(retained_frame)
+
+    write_vtable_table(output_path, VariantRowsTable.from_frame(retained_frame, copy=False), assume_validated=True)
     write_metadata(output_path, metadata_with_variants_count(vtable_metadata_from_target_info(infos[0]), len(retained_frame)))
     logger.info("intersect_variants.py: wrote %s with %s intersected rows", output_path, len(retained_frame))
     return 0

@@ -45,8 +45,7 @@ def test_restrict_vmap_preserves_source_order_ids_provenance_and_allele_op(tmp_p
         ["1", "100", "src1", "A", "G", ".", "0", "identity"],
         ["1", "200", "src2", "C", "T", ".", "1", "swap"],
     ]
-    assert "variants_count missing from metadata" in result.stderr
-    assert "using CLI input order" in result.stderr
+    assert "variants_count missing from metadata" not in result.stderr
 
 
 def test_restrict_vmap_uses_count_order_but_preserves_source_output_order(tmp_path):
