@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from copy import deepcopy
-from typing import Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Callable, Dict, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -367,9 +367,9 @@ def maybe_add_from_oaf(sumstats: pd.DataFrame, metadata: Dict[str, object], outp
     return sumstats
 
 
-def harmonize_clean_sumstats(
+def harmonize_clean_sumstats_frame(
     header: Sequence[str],
-    rows: Sequence[Sequence[object]],
+    frame: pd.DataFrame,
     metadata: Dict[str, object],
     *,
     fill_mode: str,
@@ -383,7 +383,7 @@ def harmonize_clean_sumstats(
     model = normalize_model(metadata_out, warn)
     resolved = resolve_clean_metadata_columns(header, metadata_out, include_variant_columns=False)
 
-    data: Dict[str, List[object]] = {}
+    sumstats = pd.DataFrame(index=frame.index)
     seen_canonical: Dict[str, str] = {}
     for key, idx in resolved.items():
         canonical = PAYLOAD_METADATA_TO_CANONICAL[key]
@@ -391,10 +391,9 @@ def harmonize_clean_sumstats(
         if existing_key is not None and existing_key != key:
             raise ValueError(f"metadata-declared input columns collapse to the same canonical output name {canonical!r}")
         seen_canonical[canonical] = key
-        data[canonical] = [normalize_cell_value(row[idx]) for row in rows]
+        sumstats[canonical] = frame.iloc[:, idx].map(normalize_cell_value)
         metadata_out[key] = canonical
 
-    sumstats = pd.DataFrame(data)
     for key in PAYLOAD_METADATA_TO_CANONICAL:
         if key not in resolved:
             metadata_out.pop(key, None)

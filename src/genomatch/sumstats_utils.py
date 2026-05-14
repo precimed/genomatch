@@ -175,6 +175,11 @@ class SumstatsTable:
     source_index: pd.Series
 
 
+def read_sumstats_header(path: Path) -> Tuple[str, List[str], Optional[str], int]:
+    with open_sumstats_data(path) as (_handle, header_line, header, delimiter, header_line_number):
+        return header_line, header, delimiter, header_line_number
+
+
 def build_sumstats_read_csv_kwargs(
     path: Path,
     delimiter: Optional[str],
@@ -306,14 +311,13 @@ def open_sumstats_data(path: Path) -> Iterator[Tuple[TextIO, str, List[str], Opt
     raise ValueError(f"sumstats file is missing a header line: {path}")
 
 
-def read_sumstats_table(path: Path) -> SumstatsTable:
+def read_sumstats_table(path: Path, *, usecols: Optional[List[str]] = None) -> SumstatsTable:
     """
     Assumes: path points to a single-file sumstats payload with one header row (after optional comment/blank preamble).
     Performs: PN(parse delimiter/header and tabular rows via pandas as string-safe payload values), PV(header presence and deterministic source_index assignment).
     Guarantees: table rows preserve raw data-row order with source_index=0..N-1 over rows only (excluding comments/blanks/header), while semantic required-column validation is deferred to importer/apply kernels.
     """
-    with open_sumstats_data(path) as (_handle, header_line, header, delimiter, header_line_number):
-        pass
+    header_line, header, delimiter, header_line_number = read_sumstats_header(path)
 
     main_read_csv_kwargs = build_sumstats_read_csv_kwargs(
         path,
@@ -325,6 +329,8 @@ def read_sumstats_table(path: Path) -> SumstatsTable:
     main_read_csv_kwargs["header"] = None
     main_read_csv_kwargs["names"] = header
     main_read_csv_kwargs["skiprows"] = header_line_number + 1
+    if usecols is not None:
+        main_read_csv_kwargs["usecols"] = usecols
     frame = pd.read_csv(**main_read_csv_kwargs)
 
     source_index = pd.Series(range(len(frame)), dtype="int64")
