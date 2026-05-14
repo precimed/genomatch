@@ -12,14 +12,14 @@ Current reference-aware tools use UCSC-style internal reference assets:
 
 These tools resolve UCSC-style internal FASTA assets from the user-provided file pointed to by `MATCH_CONFIG`. `liftover_build.py` also resolves directed UCSC chain-file edges from the same config.
 
-User inputs may still declare either UCSC or NCBI-style contig naming as per [spec/contigs-and-metadata.md](spec/contigs-and-metadata.md).
+User inputs may still declare either UCSC or NCBI-style contig naming as per [spec/contigs-and-metadata.md](../spec/contigs-and-metadata.md).
 
 Optional FASTA assets with NCBI-style contig naming may still be kept locally under `ref/ncbi/`, but they are not used by the current implementation.
 
 ## Config setup
 
 Reference assets are intentionally not tracked in git. Use
-[`config.example.yaml`](config.example.yaml) as the source of truth for the
+[`config.example.yaml`](../config.example.yaml) as the source of truth for the
 expected `config.yaml` shape and relative reference layout.
 
 Reference-aware tools do not accept CLI overrides for FASTA or chain assets.

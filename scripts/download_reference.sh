@@ -105,7 +105,7 @@ main() {
   download_file_if_missing "${CHAIN_38_TO_37}" "${CHAIN_38_TO_37_URL}"
 
   log "GRCh37/GRCh38 UCSC reference assets are installed under ${REF_DIR}"
-  log "T2T-CHM13v2.0 assets are optional; see DOWNLOADS.md for FASTA and chain download pointers."
+  log "T2T-CHM13v2.0 assets are optional; see docs/downloads.md for FASTA and chain download pointers."
 }
 
 main "$@"

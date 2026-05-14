@@ -15,8 +15,8 @@ This file is the technical contract for the `match/` toolkit after the provenanc
 The normative files for the `match/` contract are:
 
 - [README.md](README.md)
-- [INSTALL.md](INSTALL.md)
-- [DOWNLOADS.md](DOWNLOADS.md)
+- [install.md](docs/install.md)
+- [downloads.md](docs/downloads.md)
 - [DEVELOPMENT.md](DEVELOPMENT.md)
 - [TESTS.md](TESTS.md)
 - [SPEC.md](SPEC.md)
@@ -32,11 +32,11 @@ The normative files for the `match/` contract are:
 - [performance-contract.md](spec/performance-contract.md)
 - [workflow.md](spec/workflow.md)
 
-Within [README.md](README.md), the following sections are intentionally normative and may serve as source of truth:
+Within [README.md](README.md) and the user documentation in [docs/](docs/), the following sections are intentionally normative and may serve as source of truth:
 
-- the top-level object and metadata summary
-- `Canonical tools`
-- `Using .vmap vs .vtable as input across tools`
+- the top-level object and metadata summary in [concepts.md](docs/concepts.md)
+- the primitive/canonical tools summary in [primitives.md](docs/primitives.md)
+- `Using .vmap vs .vtable as input across tools` in [concepts.md](docs/concepts.md)
 
 ## Object model
 
@@ -88,13 +88,13 @@ Wrapper behavior for `prepare_variants.py`, `prepare_variants_sharded.py`, and `
 
 ## Reference model
 
-End-user software/runtime setup for the `match/` toolkit is defined in [INSTALL.md](INSTALL.md).
+End-user software/runtime setup for the `match/` toolkit is defined in [install.md](docs/install.md).
 
 Development/source-checkout workflows for the `match/` toolkit are documented in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-The reference/config model for the `match/` toolkit is defined in [DOWNLOADS.md](DOWNLOADS.md).
+The reference/config model for the `match/` toolkit is defined in [downloads.md](docs/downloads.md).
 
-`DOWNLOADS.md` is the source of truth for:
+`docs/downloads.md` is the source of truth for:
 
 - current UCSC-internal reference behavior
 - required reference assets

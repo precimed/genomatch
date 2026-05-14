@@ -1,6 +1,6 @@
 # Installation
 
-This document covers supported end-user installation paths. Development/source-checkout workflows are documented in [DEVELOPMENT.md](DEVELOPMENT.md). Reference assets, `config.yaml`, and `MATCH_CONFIG` are documented in [DOWNLOADS.md](DOWNLOADS.md).
+This document covers supported end-user installation paths. Development/source-checkout workflows are documented in [DEVELOPMENT.md](../DEVELOPMENT.md). Reference assets, `config.yaml`, and `MATCH_CONFIG` are documented in [downloads.md](downloads.md).
 
 Runtime dependency model:
 
@@ -46,7 +46,7 @@ conda activate genomatch
 python -m pip install --upgrade genomatch
 ```
 
-For reference-aware commands, also configure your reference tree and `MATCH_CONFIG` as described in [DOWNLOADS.md](DOWNLOADS.md).
+For reference-aware commands, also configure your reference tree and `MATCH_CONFIG` as described in [downloads.md](downloads.md).
 
 ## Option 2: prebuilt Singularity / Apptainer image from GHCR
 
@@ -72,4 +72,4 @@ This example assumes:
 - the reference tree includes `/path/to/ref/config.yaml`
 - that config uses paths relative to itself, such as `ucsc/...` and `chain/...`
 
-With that layout, the container finds `/ref/config.yaml` automatically and resolves the rest of the reference assets under `/ref/...`. If you use a different layout, set `MATCH_CONFIG` explicitly and make sure every path referenced from that config exists inside the container at the same path written in the file. See [DOWNLOADS.md](DOWNLOADS.md) for the required reference layout and config shape.
+With that layout, the container finds `/ref/config.yaml` automatically and resolves the rest of the reference assets under `/ref/...`. If you use a different layout, set `MATCH_CONFIG` explicitly and make sure every path referenced from that config exists inside the container at the same path written in the file. See [downloads.md](downloads.md) for the required reference layout and config shape.

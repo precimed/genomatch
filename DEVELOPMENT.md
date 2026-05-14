@@ -1,6 +1,6 @@
 # Development
 
-This document covers local development, test execution, and maintainer-facing packaging notes. End-user installation is documented in [INSTALL.md](INSTALL.md). Reference assets and `MATCH_CONFIG` setup are documented in [DOWNLOADS.md](DOWNLOADS.md).
+This document covers local development, test execution, and maintainer-facing packaging notes. End-user installation is documented in [install.md](docs/install.md). Reference assets and `MATCH_CONFIG` setup are documented in [downloads.md](docs/downloads.md).
 
 ## Table of contents
 

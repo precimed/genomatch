@@ -9,7 +9,7 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 ## [v0.3.2] - 2026-05-04
 
 ### Added
-- T2T-CHM13v2.0 is now supported as a declared genome build by `restrict_build_compatible.py` and `liftover_build.py`. See `DOWNLOADS.md` for the updated download requirements.
+- T2T-CHM13v2.0 is now supported as a declared genome build by `restrict_build_compatible.py` and `liftover_build.py`. See `docs/downloads.md` for the updated download requirements.
 
 ### Changed
 - The reference configuration format has changed. Users must update existing config files to match the new structure in `config.example.yaml`.

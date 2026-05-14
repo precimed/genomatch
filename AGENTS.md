@@ -2,14 +2,14 @@
 
 ## Source of truth
 
-Follow SPEC.md and all documents in spec/ folder, README.md (user-facing documentation), TESTS.md, INSTALL.md as the source of truth. Do not invent undocumented behavior. When docs and code disagree, align implementation to the spec unless explicitly instructed otherwise.
+Follow SPEC.md and all documents in spec/ folder, README.md and docs/ (user-facing documentation), TESTS.md, and docs/install.md as the source of truth. Do not invent undocumented behavior. When docs and code disagree, align implementation to the spec unless explicitly instructed otherwise.
 When making changes to source-of-truth files, avoid repeating the information in multiple documents.
 
-Within `README.md`, the following sections are intentionally normative and may serve as source of truth:
+Within `README.md` and `docs/`, the following sections are intentionally normative and may serve as source of truth:
 
-- the top-level object and metadata summary
-- `Canonical tools`
-- `Using .vmap vs .vtable as input across tools`
+- the top-level object and metadata summary in `docs/concepts.md`
+- the primitive/canonical tools summary in `docs/primitives.md`
+- `Using .vmap vs .vtable as input across tools` in `docs/concepts.md`
 
 ## Change discipline
 
@@ -32,7 +32,7 @@ Fail early on ambiguous genome build, contig naming, allele conventions, or meta
 
 ## Reproducibility and environment hygiene
 
-Do not hardcode local paths, usernames, or machine-specific assumptions. Do not assume internet access at runtime. Keep new scripts runnable from a clean checkout after following INSTALL.md.
+Do not hardcode local paths, usernames, or machine-specific assumptions. Do not assume internet access at runtime. Keep new scripts runnable from a clean checkout after following docs/install.md.
 
 ## Review checklist
 
