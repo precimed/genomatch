@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-05-14
+
 ### Added
 - Added expanded user documentation under `docs/`, including Tutorial 1, a worked reference-universe projection example with downloadable release fixtures; the top-level README is now a concise entry point.
 - `scripts/normalize_bed_contigs_ncbi.sh` for normalizing BED contig labels to canonical NCBI-style primary contigs and reporting dropped noncanonical rows.
