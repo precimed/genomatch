@@ -8,6 +8,7 @@ from pathlib import Path
 from ._cli_utils import run_cli
 from .apply_vmap_utils import build_needed_source_indices, filtered_vmap_rows
 from .contig_utils import supported_exact_contig_tokens
+from .exact_set_utils import read_mapped_vmap_table
 from .sample_axis_utils import (
     SAMPLE_ID_MODE_CHOICES,
     SAMPLE_ID_MODE_FID_IID,
@@ -20,14 +21,11 @@ from .vtable_utils import read_vmap
 from .workflow_wrapper_utils import (
     delete_bfile_outputs,
     delete_pfile_outputs,
-    delete_variant_object,
     existing_bfile_artifacts,
     existing_pfile_artifacts,
-    existing_variant_object_artifacts,
     run_command,
     sidecar_output_path,
     tool_command,
-    variant_object_path,
 )
 
 WRAPPER_NAME = "project_payload.py"
@@ -37,9 +35,9 @@ logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
+        allow_abbrev=False,
         description=(
-            "Project a raw payload into a prepared target by retaining the matched mapping as <prefix>.vmap "
-            "and then applying it back to the original payload."
+            "Project a raw payload through an explicit prepared mapped-only .vmap."
         )
     )
     parser.add_argument("--input", help="Raw payload input (optional for --input-format=sumstats or sumstats-clean)")
@@ -53,8 +51,7 @@ def parse_args() -> argparse.Namespace:
         "--sumstats-metadata",
         help="Summary-stat metadata YAML required for --input-format=sumstats or sumstats-clean",
     )
-    parser.add_argument("--source-vmap", help="Prepared source .vmap")
-    parser.add_argument("--target", required=True, help="Target .vtable or .vmap")
+    parser.add_argument("--vmap", required=True, help="Prepared mapped-only .vmap to apply")
     parser.add_argument(
         "--output",
         required=True,
@@ -70,12 +67,6 @@ def parse_args() -> argparse.Namespace:
         "--use-af-inference",
         action="store_true",
         help="Enable AF-based clean-sumstats derivation rules for --input-format=sumstats-clean",
-    )
-    parser.add_argument("--prefix", help="Optional prefix for the retained matched mapping; defaults to --output")
-    parser.add_argument(
-        "--full-target",
-        action="store_true",
-        help="Keep unmatched target rows in the apply step instead of the wrapper default mapped-only projection",
     )
     parser.add_argument(
         "--retain-snp-id",
@@ -103,20 +94,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Delete wrapper-managed outputs first, including the retained matched .vmap, then rerun cleanly",
+        help="Delete wrapper-managed outputs first, then rerun cleanly",
     )
     return parser.parse_args()
 
 
 def require_supported_args(args: argparse.Namespace) -> None:
-    if not str(args.target).endswith((".vtable", ".vmap")):
-        raise ValueError("--target must point to a .vtable or .vmap")
-    if args.source_vmap is not None and not str(args.source_vmap).endswith(".vmap"):
-        raise ValueError("--source-vmap must point to a .vmap")
-    if Path(args.target).suffix == ".vtable" and args.source_vmap is None:
-        raise ValueError("--source-vmap is required when --target points to a .vtable")
-    if args.prefix is not None and "@" in str(args.prefix):
-        raise ValueError("--prefix must not contain @")
+    if not str(args.vmap).endswith(".vmap"):
+        raise ValueError("--vmap must point to a .vmap")
+    read_mapped_vmap_table(Path(args.vmap))
     if args.input_format in {"sumstats", "sumstats-clean"}:
         if args.target_fam:
             raise ValueError("--target-fam is supported only for --input-format=bfile")
@@ -171,30 +157,12 @@ def pfile_source_prefix(input_path: str) -> str:
 
 
 def resolved_prefix(args: argparse.Namespace) -> Path:
-    if args.prefix is not None:
-        return Path(args.prefix)
     if args.input_format in {"bfile", "pfile"} and "@" in str(args.output):
         return Path(str(args.output).replace("@", AUTO_PREFIX_TOKEN))
     return Path(args.output)
 
 
-def use_target_vmap_directly(args: argparse.Namespace) -> bool:
-    return args.source_vmap is None and Path(args.target).suffix == ".vmap"
-
-
-def target_match_command(source_path: str, target_path: str, output_path: Path) -> list[str]:
-    return tool_command(
-        "match_vmap_to_target.py",
-        "--source",
-        source_path,
-        "--target",
-        target_path,
-        "--output",
-        str(output_path),
-    )
-
-
-def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
+def apply_command(args: argparse.Namespace) -> list[str]:
     if args.input_format in {"sumstats", "sumstats-clean"}:
         assert args.sumstats_metadata is not None
         cmd = tool_command(
@@ -202,7 +170,7 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             "--sumstats-metadata",
             args.sumstats_metadata,
             "--vmap",
-            str(matched_path),
+            args.vmap,
             "--output",
             args.output,
         )
@@ -219,7 +187,7 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             "--source-prefix",
             bfile_source_prefix(args.input),
             "--vmap",
-            str(matched_path),
+            args.vmap,
             "--output-prefix",
             args.output,
         )
@@ -235,7 +203,7 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             "--source-prefix",
             pfile_source_prefix(args.input),
             "--vmap",
-            str(matched_path),
+            args.vmap,
             "--output-prefix",
             args.output,
         )
@@ -244,8 +212,6 @@ def apply_command(args: argparse.Namespace, matched_path: Path) -> list[str]:
             cmd.extend(["--target-psam", args.target_psam])
         if args.sample_axis == "native":
             cmd.extend(["--sample-axis", "native"])
-    if not args.full_target:
-        cmd.append("--only-mapped-target")
     if args.retain_snp_id:
         cmd.append("--retain-snp-id")
     if args.skip_ploidy_check:
@@ -289,14 +255,14 @@ def discover_source_shards(source_prefix_arg: str, suffixes: tuple[str, ...]) ->
     return discovered
 
 
-def build_union_target_sample(args: argparse.Namespace, prefix: Path, vmap_path: Path, *, allow_overwrite: bool) -> Path | None:
+def build_union_target_sample(args: argparse.Namespace, prefix: Path, *, allow_overwrite: bool) -> Path | None:
     if args.sample_axis != "union":
         return None
     source_prefix = source_prefix_for_args(args)
     if "@" not in source_prefix:
         logger.info("%s: --sample-axis union is a no-op for non-sharded source input", WRAPPER_NAME)
         return None
-    vmap_rows = filtered_vmap_rows(read_vmap(vmap_path), only_mapped_target=not args.full_target)
+    vmap_rows = filtered_vmap_rows(read_vmap(Path(args.vmap)), only_mapped_target=True)
     referenced_shards = sorted(build_needed_source_indices(vmap_rows))
     if len(referenced_shards) <= 1:
         logger.info(
@@ -397,21 +363,19 @@ def build_union_target_sample(args: argparse.Namespace, prefix: Path, vmap_path:
     return out_path
 
 
-def existing_wrapper_outputs(args: argparse.Namespace, matched_path: Path, *, retain_matched_vmap: bool) -> list[Path]:
-    existing = existing_variant_object_artifacts(matched_path) if retain_matched_vmap else []
+def existing_wrapper_outputs(args: argparse.Namespace) -> list[Path]:
+    existing: list[Path] = []
     if args.input_format in {"sumstats", "sumstats-clean"}:
         output_path = Path(args.output)
         if output_path.exists():
             existing.append(output_path)
         return existing
     if args.input_format == "bfile":
-        return existing + existing_bfile_artifacts(Path(args.output), Path(args.target))
-    return existing + existing_pfile_artifacts(Path(args.output), Path(args.target))
+        return existing + existing_bfile_artifacts(Path(args.output), Path(args.vmap))
+    return existing + existing_pfile_artifacts(Path(args.output), Path(args.vmap))
 
 
-def delete_wrapper_outputs(args: argparse.Namespace, matched_path: Path, *, retain_matched_vmap: bool) -> None:
-    if retain_matched_vmap:
-        delete_variant_object(matched_path)
+def delete_wrapper_outputs(args: argparse.Namespace) -> None:
     synthesized_path = synthesized_target_sample_path(args, resolved_prefix(args))
     if synthesized_path is not None and synthesized_path.exists():
         synthesized_path.unlink()
@@ -421,9 +385,9 @@ def delete_wrapper_outputs(args: argparse.Namespace, matched_path: Path, *, reta
             output_path.unlink()
         return
     if args.input_format == "bfile":
-        delete_bfile_outputs(Path(args.output), Path(args.target))
+        delete_bfile_outputs(Path(args.output), Path(args.vmap))
         return
-    delete_pfile_outputs(Path(args.output), Path(args.target))
+    delete_pfile_outputs(Path(args.output), Path(args.vmap))
 
 
 def main() -> int:
@@ -431,13 +395,11 @@ def main() -> int:
     require_supported_args(args)
 
     prefix = resolved_prefix(args)
-    matched_path = variant_object_path(prefix)
-    retain_matched_vmap = not use_target_vmap_directly(args)
 
     if args.force:
-        delete_wrapper_outputs(args, matched_path, retain_matched_vmap=retain_matched_vmap)
+        delete_wrapper_outputs(args)
     else:
-        existing = existing_wrapper_outputs(args, matched_path, retain_matched_vmap=retain_matched_vmap)
+        existing = existing_wrapper_outputs(args)
         if existing:
             rendered = "\n".join(f"- {path}" for path in sorted(existing))
             raise ValueError(
@@ -446,33 +408,14 @@ def main() -> int:
             )
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    matched_created = False
-    if retain_matched_vmap:
-        matched_path.parent.mkdir(parents=True, exist_ok=True)
-        assert args.source_vmap is not None
-        run_command(target_match_command(args.source_vmap, args.target, matched_path))
-        apply_vmap_path = matched_path
-        matched_created = True
-    else:
-        logger.info(
-            "%s: --source-vmap omitted and --target is a .vmap; skipping match_vmap_to_target.py",
-            WRAPPER_NAME,
-        )
-        apply_vmap_path = Path(args.target)
-
-    try:
-        synthesized_path = build_union_target_sample(args, prefix, apply_vmap_path, allow_overwrite=args.force)
-    except Exception:
-        if matched_created and retain_matched_vmap:
-            delete_variant_object(matched_path)
-        raise
+    synthesized_path = build_union_target_sample(args, prefix, allow_overwrite=args.force)
     if synthesized_path is not None:
         if args.input_format == "bfile":
             args.target_fam = str(synthesized_path)
         else:
             args.target_psam = str(synthesized_path)
 
-    run_command(apply_command(args, apply_vmap_path))
+    run_command(apply_command(args))
 
     logger.info("%s: wrote %s", WRAPPER_NAME, args.output)
     return 0
