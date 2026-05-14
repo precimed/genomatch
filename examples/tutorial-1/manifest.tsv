@@ -1,0 +1,288 @@
+row_id	membership	chrom38	pos38	ref38	alt38	chrom37	pos37	ref37	alt37	reference_id	study_id	cohort_id	issue_tags	notes
+t1_21_000	reference+cohort	21	8527792	C	T	chr21	9416625	C	T	rsTUT100000	rsTUT100000	rsTUT100000	invalid_stat,duplicate_target	raw study row exists, but the intentional duplicate-target study example causes build-compatible preparation to drop it from effective study membership
+t1_21_001	reference+study+cohort	21	8538009	A	C	chr21	9426842	A	C	rsTUT100001	rsTUT100001	rsTUT100001	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_002	reference+study+cohort	21	8548226	T	C	chr21	9437059	T	C	rsTUT100002	rsTUT100002	rsTUT100002	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_003	reference+study+cohort	21	8558443	T	G	chr21	9447276	T	G	rsDUPLICATE	rsDUPLICATE	rsTUT100003	allele_swap,strand_flip,duplicate_rsid	generated from real local FASTA and UCSC chain liftover
+t1_21_004	reference+cohort	21	8568660	T	A	chr21	9457493	T	A	rsTUT100004	rsTUT100004	rsTUT100004	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_005	reference+cohort	21	8578877	C	G	chr21	9467710	C	G	rsTUT100005	rsTUT100005	rsTUT100005	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_006	reference+study+cohort	21	8589094	T	G	chr21	9477927	T	G	rsTUT100006	rsTUT100006	rsTUT100006	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_007	reference+cohort	21	8599311	A	C	chr21	9488144	A	C	rsTUT100007	rsTUT100007	rsTUT100007	allele_swap,strand_flip,duplicate_target	raw study row exists, but the intentional duplicate-target study example causes build-compatible preparation to drop it from effective study membership
+t1_21_008	reference+study+cohort	21	8609528	T	C	chr21	9498361	T	C	rsTUT100008	rsTUT100008	rsTUT100008	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_009	reference+study+cohort	21	8619745	G	T	chr21	9508578	G	T	rsTUT100009	rsTUT100009	rsTUT100009	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_010	reference+study+cohort	21	8629962	A	C	chr21	9518795	A	C	rsTUT100010	rsTUT100010	rsTUT100010	strand_flip,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_011	reference+study+cohort	21	8640179	A	G	chr21	9529012	A	G	.	rsTUT100011	.	allele_swap,strand_flip,placeholder_id	generated from real local FASTA and UCSC chain liftover
+t1_21_012	reference+study+cohort	21	8650396	T	G	chr21	9539229	T	G	rsTUT100012	rsTUT100012	rsTUT100012		generated from real local FASTA and UCSC chain liftover
+t1_21_013	reference+cohort	21	8660613	T	A	chr21	9549446	T	A	rsTUT100013	rsTUT100013	rsTUT100013	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_014	reference+study+cohort	21	8670830	A	G	chr21	9559663	A	G	rsTUT100014	rsTUT100014	rsTUT100014	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_015	reference+study+cohort	21	8681047	T	G	chr21	9569880	T	G	rsTUT100015	rsTUT100015	rsTUT100015	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_016	reference+cohort	21	8691264	T	A	chr21	9580097	T	A	rsTUT100016	rsTUT100016	rsTUT100016	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_017	reference+cohort	21	8701481	C	G	chr21	9590314	C	G	rsTUT100017	rsTUT100017	rsTUT100017	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_018	reference+study+cohort	21	8762783	G	T	chr21	9651616	G	T	rsTUT100018	rsTUT100018	rsTUT100018	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_019	reference+study+cohort	21	8773000	G	A	chr21	9661833	G	A	rsTUT100019	rsTUT100019	rsTUT100019	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_020	reference+cohort	21	8783217	C	G	chr21	9672050	C	G	rsTUT100020	rsTUT100020	rsTUT100020	strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_021	reference+cohort	21	8793434	C	G	chr21	9682267	C	G	rsTUT100021	rsTUT100021	rsTUT100021	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_022	reference+study+cohort	21	8803651	G	A	chr21	9692484	G	A	rsTUT100022	rsTUT100022	rsTUT100022	strand_flip,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_023	reference+cohort	21	8813868	C	G	chr21	9702701	C	G	rsTUT100023	rsTUT100023	rsTUT100023	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_024	reference	21	8824085	A	T	chr21	9712918	A	T	rsTUT100024	rsTUT100024	rsTUT100024	strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_025	reference+study	21	8834302	A	C	chr21	9723135	A	C	rsTUT100025	rsTUT100025	rsTUT100025	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_026	reference+study	21	8844519	A	G	chr21	9733352	A	G	rsTUT100026	rsTUT100026	rsTUT100026	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_027	reference+study	21	8854736	T	G	chr21	9743569	T	G	rsTUT100027	rsTUT100027	rsTUT100027	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_028	reference+study	21	8864953	A	C	chr21	9753786	A	C	rsTUT100028	rsTUT100028	rsTUT100028		generated from real local FASTA and UCSC chain liftover
+t1_21_029	reference+cohort	21	8875170	G	GA	chr21	9764003	G	C	rsTUT100029	rsTUT100029	rsTUT100029	strand_ambiguous,strand_flip,indel	generated from real local FASTA and UCSC chain liftover
+t1_21_030	reference+cohort	21	8885387	A	AC	chr21	9774220	A	T	rsTUT100030	rsTUT100030	rsTUT100030	strand_ambiguous,indel	generated from real local FASTA and UCSC chain liftover
+t1_21_031	reference+cohort	21	8987557	C	CA	chr21	9826390	C	A	rsTUT100031	rsTUT100031	rsTUT100031	allele_swap,indel	generated from real local FASTA and UCSC chain liftover
+t1_21_032	reference+cohort	21	8997774	T	TA	chr21	9836607	T	C	rsTUT100032	rsTUT100032	rsTUT100032	strand_flip,indel	generated from real local FASTA and UCSC chain liftover
+t1_21_033	reference+cohort	21	9007991	G	T	chr21	9846824	G	T	rsTUT100033	rsTUT100033	rsTUT100033		generated from real local FASTA and UCSC chain liftover
+t1_21_034	reference	21	9018208	A	C	chr21	9857041	A	C	rsTUT100034	rsTUT100034	rsTUT100034	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_035	reference	21	9028425	A	G	chr21	9867258	A	G	rsTUT100035	rsTUT100035	rsTUT100035	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_036	reference	21	9038642	A	T	chr21	9877475	A	T	rsTUT100036	rsTUT100036	rsTUT100036	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_037	reference	21	9048859	A	C	chr21	9887692	A	C	rsTUT100037	rsTUT100037	rsTUT100037	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_038	reference	21	9059076	C	G	chr21	9897909	C	G	rsTUT100038	rsTUT100038	rsTUT100038	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_039	reference	21	9069293	G	T	chr21	9908126	G	T	rsTUT100039	rsTUT100039	rsTUT100039	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_040	reference	21	9079510	A	C	chr21	9918343	A	C	rsTUT100040	rsTUT100040	rsTUT100040	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_041	reference	21	9089727	G	C	chr21	9928560	G	C	rsTUT100041	rsTUT100041	rsTUT100041	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_042	reference	21	9099944	T	G	chr21	9938777	T	G	rsTUT100042	rsTUT100042	rsTUT100042	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_043	reference	21	9110161	C	A	chr21	9948994	C	A	rsTUT100043	rsTUT100043	rsTUT100043	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_044	reference	21	9120378	G	C	chr21	9959211	G	C	rsTUT100044	rsTUT100044	rsTUT100044	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_045	reference	21	9130595	G	T	chr21	9969428	G	T	rsTUT100045	rsTUT100045	rsTUT100045	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_046	reference	21	9140812	T	A	chr21	9979645	T	A	rsTUT100046	rsTUT100046	rsTUT100046	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_047	reference	21	9151029	A	G	chr21	9989862	A	G	rsTUT100047	rsTUT100047	rsTUT100047	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_048	reference	21	9161246	T	G	chr21	10000079	T	G	rsTUT100048	rsTUT100048	rsTUT100048	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_049	reference	21	9171463	A	C	chr21	10010296	A	C	rsTUT100049	rsTUT100049	rsTUT100049	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_050	reference	21	9181680	T	C	chr21	10020513	T	C	rsTUT100050	rsTUT100050	rsTUT100050	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_051	reference	21	9191897	T	G	chr21	10030730	T	G	rsTUT100051	rsTUT100051	rsTUT100051	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_052	reference	21	9253199	T	A	chr21	10092032	T	A	rsTUT100052	rsTUT100052	rsTUT100052	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_053	reference	21	9263416	C	G	chr21	10102249	C	G	rsTUT100053	rsTUT100053	rsTUT100053	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_054	reference	21	9273633	T	G	chr21	10112466	T	G	rsTUT100054	rsTUT100054	rsTUT100054	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_21_055	cohort	21	9283850	G	C	chr21	10122683	G	C	rsTUT100055	rsTUT100055	rsTUT100055	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_056	study+cohort	21	9294067	T	C	chr21	10132900	T	C	rsTUT100056	rsTUT100056	rsTUT100056	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_057	study+cohort	21	9304284	C	T	chr21	10143117	C	T	rsTUT100057	rsTUT100057	rsTUT100057	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_058	study+cohort	21	9314501	A	C	chr21	10153334	A	C	rsTUT100058	rsTUT100058	rsTUT100058	strand_flip,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_059	study	21	9324718	A	G	chr21	10163551	A	G	rsTUT100059	rsTUT100059	rsTUT100059	study_only,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_060		21	9334935	A	T	chr21	10173768	A	T	rsTUT100060	rsTUT100060	rsTUT100060	study_only,strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_061	study	21	9345152	G	A	chr21	10183985	G	A	rsTUT100061	rsTUT100061	rsTUT100061	study_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_062		21	9355369	G	C	chr21	10194202	G	C	rsTUT100062	rsTUT100062	rsTUT100062	study_only,strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_063		21	9365586	A	T	chr21	10204419	A	T	rsTUT100063	rsTUT100063	rsTUT100063	study_only,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_064		21	9375803	T	A	chr21	10214636	T	A	rsTUT100064	rsTUT100064	rsTUT100064	study_only,strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_21_065	study	21	9896870	T	C	chr21	10374904	T	C	rsTUT100065	rsTUT100065	rsTUT100065	study_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_066	study	21	9907087	C	T	chr21	10385124	C	T	rsTUT100066	rsTUT100066	rsTUT100066	study_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_067	study	21	9917304	A	C	chr21	10395332	A	C	rsTUT100067	rsTUT100067	rsTUT100067	study_only,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_068	cohort	21	9927521	C	G	chr21	10405549	C	G	rsTUT100068	rsTUT100068	rsTUT100068	cohort_only,strand_ambiguous,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_069	cohort	21	9937738	C	T	chr21	10415766	C	T	rsTUT100069	rsTUT100069	rsTUT100069	cohort_only	generated from real local FASTA and UCSC chain liftover
+t1_21_070	cohort	21	9947955	G	C	chr21	10425983	G	C	rsTUT100070	rsTUT100070	rsTUT100070	cohort_only,strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_071	cohort	21	9958172	A	G	chr21	10436200	A	G	rsTUT100071	rsTUT100071	rsTUT100071	cohort_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_072	cohort	21	9968389	T	G	chr21	10446417	T	G	rsTUT100072	rsTUT100072	rsTUT100072	cohort_only	generated from real local FASTA and UCSC chain liftover
+t1_21_073	cohort	21	9978606	T	A	chr21	10456634	T	A	rsTUT100073	rsTUT100073	rsTUT100073	cohort_only,strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_21_074	cohort	21	9988823	T	C	chr21	10466851	T	C	rsTUT100074	rsTUT100074	rsTUT100074	cohort_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_21_075	cohort	21	9999040	A	T	chr21	10477068	A	T	rsTUT100075	rsTUT100075	rsTUT100075	cohort_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_21_076	cohort	21	10009257	T	A	chr21	10487285	T	A	rsTUT100076	rsTUT100076	rsTUT100076	cohort_only,strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_077	reference+study+cohort	22	15418976	G	T	chr22	16558987	C	A	rsTUT100077	rsTUT100077	rsTUT100077	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_078	reference+study+cohort	22	15449657	G	T	chr22	16528306	C	A	rsTUT100078	rsTUT100078	rsTUT100078	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_079	reference+cohort	22	15592835	C	G	chr22	16385128	G	C	rsTUT100079	rsTUT100079	rsTUT100079	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_080	reference+study+cohort	22	15603062	C	T	chr22	16374901	G	A	rsTUT100080	rsTUT100080	rsTUT100080	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_081	reference+study+cohort	22	16370087	G	A	chr22	16850749	G	A	rsTUT100081	rsTUT100081	rsTUT100081	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_082	reference+cohort	22	16380314	C	G	chr22	16860976	C	G	rsTUT100082	rsTUT100082	rsTUT100082	strand_ambiguous,strand_flip,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_083	reference+study+cohort	22	16390541	T	G	chr22	16871267	T	G	rsTUT100083	rsTUT100083	rsTUT100083	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_084	reference+study+cohort	22	16400768	A	C	chr22	16881496	A	C	rsTUT100084	rsTUT100084	rsTUT100084		generated from real local FASTA and UCSC chain liftover
+t1_22_085	reference+study+cohort	22	16410995	T	C	chr22	16891721	T	C	rsTUT100085	rsTUT100085	rsTUT100085	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_086	reference+study+cohort	22	16421222	T	G	chr22	16901948	T	G	rsTUT100086	rsTUT100086	rsTUT100086	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_087	reference+cohort	22	16431449	T	A	chr22	16912191	T	A	rsTUT100087	rsTUT100087	rsTUT100087	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_088	reference+study+cohort	22	16441676	A	G	chr22	16922417	A	G	rsTUT100088	rsTUT100088	rsTUT100088	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_089	reference+cohort	22	16451903	A	T	chr22	16932643	A	T	rsTUT100089	rsTUT100089	rsTUT100089	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_090	reference+study+cohort	22	16462130	A	C	chr22	16942872	A	C	rsTUT100090	rsTUT100090	rsTUT100090	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_091	reference+cohort	22	16472357	C	G	chr22	16953098	C	G	rsTUT100091	rsTUT100091	rsTUT100091	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_092	reference+study+cohort	22	16482584	G	T	chr22	16963330	G	T	rsTUT100092	rsTUT100092	rsTUT100092	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_093	reference+study+cohort	22	16492811	A	C	chr22	16973701	A	C	rsTUT100093	rsTUT100093	rsTUT100093	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_094	reference+cohort	22	16503038	G	C	chr22	16983928	G	C	rsTUT100094	rsTUT100094	rsTUT100094	strand_ambiguous,strand_flip,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_095	reference+study+cohort	22	16513265	G	T	chr22	16994155	G	T	rsTUT100095	rsTUT100095	rsTUT100095	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_096	reference+study+cohort	22	16523492	C	A	chr22	17004382	C	A	rsTUT100096	rsTUT100096	rsTUT100096		generated from real local FASTA and UCSC chain liftover
+t1_22_097	reference+study+cohort	22	16533719	T	C	chr22	17014609	T	C	rsDUPLICATE	rsDUPLICATE	rsTUT100097	allele_swap,duplicate_rsid	generated from real local FASTA and UCSC chain liftover
+t1_22_098	reference+study+cohort	22	16543946	G	T	chr22	17024836	G	T	rsTUT100098	rsTUT100098	rsTUT100098	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_099	reference+study+cohort	22	16554173	A	C	chr22	17035063	A	C	rsTUT100099	rsTUT100099	rsTUT100099	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_100	reference+cohort	22	16564400	C	G	chr22	17045290	C	G	rsTUT100100	rsTUT100100	rsTUT100100	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_101	reference+cohort	22	16574627	A	T	chr22	17055517	A	T	rsTUT100101	rsTUT100101	rsTUT100101	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_102	reference+cohort	22	16584854	T	A	chr22	17065744	T	A	rsTUT100102	rsTUT100102	rsTUT100102	strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_103	reference+cohort	22	16595081	C	G	chr22	17075971	C	G	rsTUT100103	rsTUT100103	rsTUT100103	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_104	reference+cohort	22	16605308	A	T	chr22	17086198	A	T	rsTUT100104	rsTUT100104	rsTUT100104	strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_105	reference+cohort	22	16615535	T	A	chr22	17096425	T	A	rsTUT100105	rsTUT100105	rsTUT100105	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_106	reference+study+cohort	22	16625762	A	G	chr22	17106652	A	G	rsTUT100106	rsTUT100106	rsTUT100106	strand_flip,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_107	reference+cohort	22	16635989	A	T	chr22	17116879	A	T	rsTUT100107	rsTUT100107	rsTUT100107	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_108	reference+study	22	16646216	G	A	chr22	17127106	G	A	rsTUT100108	rsTUT100108	rsTUT100108		generated from real local FASTA and UCSC chain liftover
+t1_22_109	reference+study	22	16656443	A	G	chr22	17137333	A	G	rsTUT100109	rsTUT100109	rsTUT100109	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_110	reference	22	16666670	A	T	chr22	17147560	A	T	rsTUT100110	rsTUT100110	rsTUT100110	strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_111	reference	22	16676897	A	T	chr22	17157787	A	T	rsTUT100111	rsTUT100111	rsTUT100111	strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_112	reference	22	16687124	C	G	chr22	17168014	C	G	rsTUT100112	rsTUT100112	rsTUT100112	strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_113	reference	22	16697351	A	T	chr22	17178241	A	T	rsTUT100113	rsTUT100113	rsTUT100113	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_114	reference+study	22	16707578	G	A	chr22	17188468	G	A	rsTUT100114	rsTUT100114	rsTUT100114	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_115	reference+cohort	22	16717805	C	G	chr22	17198695	C	G	rsTUT100115	rsTUT100115	rsTUT100115	strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_116	reference+cohort	22	16728032	A	T	chr22	17208922	A	T	rsTUT100116	rsTUT100116	rsTUT100116	strand_ambiguous,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_117	reference+cohort	22	16738259	T	A	chr22	17219149	T	A	rsTUT100117	rsTUT100117	rsTUT100117	strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_118	reference+cohort	22	16748486	A	G	chr22	17229376	A	G	rsTUT100118	rsTUT100118	rsTUT100118	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_119	reference+cohort	22	16758713	T	G	chr22	17239603	T	G	rsTUT100119	rsTUT100119	rsTUT100119	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_120	reference+cohort	22	16768940	C	A	chr22	17249830	C	A	rsTUT100120	rsTUT100120	rsTUT100120		generated from real local FASTA and UCSC chain liftover
+t1_22_121	reference+cohort	22	16779167	A	G	chr22	17260057	A	G	rsTUT100121	rsTUT100121	rsTUT100121	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_122	reference+cohort	22	16789394	A	T	chr22	17270284	A	T	rsTUT100122	rsTUT100122	rsTUT100122	strand_ambiguous,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_123	reference	22	16799621	C	A	chr22	17280511	C	A	rsTUT100123	rsTUT100123	rsTUT100123	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_124	reference	22	16809848	T	C	chr22	17290738	T	C	rsTUT100124	rsTUT100124	rsTUT100124	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_125	reference	22	16820075	C	T	chr22	17300965	C	T	rsTUT100125	rsTUT100125	rsTUT100125	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_126	reference	22	16830302	T	A	chr22	17311192	T	A	rsTUT100126	rsTUT100126	rsTUT100126	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_127	reference	22	16840529	T	C	chr22	17321419	T	C	rsTUT100127	rsTUT100127	rsTUT100127	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_128	reference	22	16850756	A	T	chr22	17331646	A	T	rsTUT100128	rsTUT100128	rsTUT100128	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_129	reference	22	16860983	C	A	chr22	17341873	C	A	rsTUT100129	rsTUT100129	rsTUT100129	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_130	reference	22	16871210	A	G	chr22	17352100	A	G	rsTUT100130	rsTUT100130	rsTUT100130	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_131	reference	22	16881437	A	T	chr22	17362327	A	T	rsTUT100131	rsTUT100131	rsTUT100131	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_132	reference	22	16891664	T	A	chr22	17372554	T	A	rsTUT100132	rsTUT100132	rsTUT100132	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_133	reference	22	16901891	C	G	chr22	17382781	C	G	rsTUT100133	rsTUT100133	rsTUT100133	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_134	reference	22	16912118	G	T	chr22	17393008	G	T	rsTUT100134	rsTUT100134	rsTUT100134	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_135	reference	22	16922345	A	C	chr22	17403235	A	C	rsTUT100135	rsTUT100135	rsTUT100135	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_136	reference	22	16932572	G	C	chr22	17413462	G	C	rsTUT100136	rsTUT100136	rsTUT100136	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_137	reference	22	16942799	A	T	chr22	17423689	A	T	rsTUT100137	rsTUT100137	rsTUT100137	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_138	reference	22	16953026	G	A	chr22	17433916	G	A	rsTUT100138	rsTUT100138	rsTUT100138	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_139	reference	22	16963253	G	C	chr22	17444143	G	C	rsTUT100139	rsTUT100139	rsTUT100139	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_140	reference	22	16973480	C	T	chr22	17454370	C	T	rsTUT100140	rsTUT100140	rsTUT100140	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_141	reference	22	16983707	A	C	chr22	17464597	A	C	rsTUT100141	rsTUT100141	rsTUT100141	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_142	reference	22	16993934	C	G	chr22	17474824	C	G	rsTUT100142	rsTUT100142	rsTUT100142	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_143	reference	22	17004161	T	G	chr22	17485051	T	G	rsTUT100143	rsTUT100143	rsTUT100143	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_144	reference	22	17014388	A	C	chr22	17495278	A	C	rsTUT100144	rsTUT100144	rsTUT100144	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_145	reference	22	17024615	C	G	chr22	17505505	C	G	rsTUT100145	rsTUT100145	rsTUT100145	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_146	reference	22	17034842	C	T	chr22	17515732	C	T	rsTUT100146	rsTUT100146	rsTUT100146	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_147	reference	22	17045069	A	C	chr22	17525959	A	C	rsTUT100147	rsTUT100147	rsTUT100147	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_148	reference	22	17055296	C	G	chr22	17536186	C	G	rsTUT100148	rsTUT100148	rsTUT100148	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_149	reference	22	17065523	C	T	chr22	17546413	C	T	rsTUT100149	rsTUT100149	rsTUT100149	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_150	reference	22	17075750	A	C	chr22	17556640	A	C	rsTUT100150	rsTUT100150	rsTUT100150	reference_only	generated from real local FASTA and UCSC chain liftover
+t1_22_151	reference	22	17085977	C	G	chr22	17566867	C	G	rsTUT100151	rsTUT100151	rsTUT100151	reference_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_152	study+cohort	22	17096204	T	G	chr22	17577094	T	G	rsTUT100152	rsTUT100152	rsTUT100152	strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_153	cohort	22	17106431	T	A	chr22	17587321	T	A	rsTUT100153	rsTUT100153	rsTUT100153	strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_154	cohort	22	17116658	C	G	chr22	17597548	C	G	rsTUT100154	rsTUT100154	rsTUT100154	strand_ambiguous,strand_flip,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_155	study+cohort	22	17126885	C	T	chr22	17607775	C	T	rsTUT100155	rsTUT100155	rsTUT100155	allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_156	study+cohort	22	17137112	G	A	chr22	17618002	G	A	rsTUT100156	rsTUT100156	rsTUT100156		generated from real local FASTA and UCSC chain liftover
+t1_22_157	study+cohort	22	17147339	A	G	chr22	17628229	A	G	rsTUT100157	rsTUT100157	rsTUT100157	allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_158	study	22	17157566	C	T	chr22	17638456	C	T	rsTUT100158	rsTUT100158	rsTUT100158	study_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_159	study	22	17167793	A	C	chr22	17648683	A	C	rsTUT100159	rsTUT100159	rsTUT100159	study_only,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_160	study	22	17178020	T	C	chr22	17658910	T	C	rsTUT100160	rsTUT100160	rsTUT100160	study_only	generated from real local FASTA and UCSC chain liftover
+t1_22_161	study	22	17188247	C	T	chr22	17669137	C	T	rsTUT100161	rsTUT100161	rsTUT100161	study_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_162		22	17198474	T	A	chr22	17679364	T	A	rsTUT100162	rsTUT100162	rsTUT100162	study_only,strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_163		22	17208701	G	C	chr22	17689591	G	C	rsTUT100163	rsTUT100163	rsTUT100163	study_only,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_164		22	17218928	A	T	chr22	17699818	A	T	rsTUT100164	rsTUT100164	rsTUT100164	study_only,strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_165	study	22	17229155	G	A	chr22	17710045	G	A	rsTUT100165	rsTUT100165	rsTUT100165	study_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_166		22	17239382	G	C	chr22	17720272	G	C	rsTUT100166	rsTUT100166	rsTUT100166	study_only,strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_167	study	22	17249609	T	G	chr22	17730499	T	G	rsTUT100167	rsTUT100167	rsTUT100167	study_only,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_168		22	17259836	T	A	chr22	17740726	T	A	rsTUT100168	rsTUT100168	rsTUT100168	study_only,strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_22_169	study	22	17270063	T	C	chr22	17750953	T	C	rsTUT100169	rsTUT100169	rsTUT100169	study_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_170	cohort	22	17280290	C	T	chr22	17761180	C	T	rsTUT100170	rsTUT100170	rsTUT100170	cohort_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_171	cohort	22	17290517	G	A	chr22	17771407	G	A	rsTUT100171	rsTUT100171	rsTUT100171	cohort_only	generated from real local FASTA and UCSC chain liftover
+t1_22_172	cohort	22	17300744	C	G	chr22	17781634	C	G	rsTUT100172	rsTUT100172	rsTUT100172	cohort_only,strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_173	cohort	22	17310971	C	T	chr22	17791861	C	T	rsTUT100173	rsTUT100173	rsTUT100173	cohort_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_174	cohort	22	17321198	T	A	chr22	17802088	T	A	rsTUT100174	rsTUT100174	rsTUT100174	cohort_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_175	cohort	22	17331425	T	C	chr22	17812315	T	C	rsTUT100175	rsTUT100175	rsTUT100175	cohort_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_176	cohort	22	17341652	T	G	chr22	17822542	T	G	rsTUT100176	rsTUT100176	rsTUT100176	cohort_only,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_177	cohort	22	17351879	T	A	chr22	17832769	T	A	rsTUT100177	rsTUT100177	rsTUT100177	cohort_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_22_178	cohort	22	17362106	A	G	chr22	17842996	A	G	rsTUT100178	rsTUT100178	rsTUT100178	cohort_only,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_22_179	cohort	22	17372333	A	T	chr22	17852274	A	T	rsTUT100179	rsTUT100179	rsTUT100179	cohort_only,strand_ambiguous,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_22_180	cohort	22	17382560	T	A	chr22	17862502	T	A	rsTUT100180	rsTUT100180	rsTUT100180	cohort_only,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_181	reference+cohort	X	232137	T	A	chrX	148804	T	A	rsTUT100181	rsTUT100181	rsTUT100181	x_par,strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_182	reference+study+cohort	X	240056	A	G	chrX	156723	A	G	rsTUT100182	rsTUT100182	rsTUT100182	x_par,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_183	reference+cohort	X	247975	A	T	chrX	164642	A	T	rsTUT100183	rsTUT100183	rsTUT100183	x_par,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_184	reference+study+cohort	X	255894	A	C	chrX	172561	A	C	rsTUT100184	rsTUT100184	rsTUT100184	x_par,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_185	reference+cohort	X	263813	G	C	chrX	180480	G	C	rsTUT100185	rsTUT100185	rsTUT100185	x_par,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_186	reference+study+cohort	X	271732	C	T	chrX	188399	C	T	rsTUT100186	rsTUT100186	rsTUT100186	x_par,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_187	reference+study+cohort	X	279651	G	A	chrX	196318	G	A	rsTUT100187	rsTUT100187	rsTUT100187	x_par,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_188	reference+study+cohort	X	287570	T	C	chrX	204237	T	C	rsTUT100188	rsTUT100188	rsTUT100188	x_par,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_189	reference+study+cohort	X	295489	C	T	chrX	212156	C	T	rsTUT100189	rsTUT100189	rsTUT100189	x_par,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_190	reference+cohort	X	303408	T	A	chrX	220075	T	A	rsTUT100190	rsTUT100190	rsTUT100190	x_par,strand_ambiguous,strand_flip,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_191	reference+study+cohort	X	311327	A	G	chrX	227994	A	G	rsTUT100191	rsTUT100191	rsTUT100191	x_par,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_192	reference+study+cohort	X	327165	C	A	chrX	287900	C	A	rsTUT100192	rsTUT100192	rsTUT100192	x_par	generated from real local FASTA and UCSC chain liftover
+t1_X_193	reference+study+cohort	X	335084	T	C	chrX	295819	T	C	rsTUT100193	rsTUT100193	rsTUT100193	x_par,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_194	reference+study+cohort	X	343003	G	T	chrX	303738	G	T	rsTUT100194	rsTUT100194	rsTUT100194	x_par,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_195	reference+study+cohort	X	350922	C	A	chrX	311657	C	A	rsTUT100195	rsTUT100195	rsTUT100195	x_par,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_196	reference+study+cohort	X	358841	T	C	chrX	319576	T	C	rsTUT100196	rsTUT100196	rsTUT100196	x_par,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_197	reference+study+cohort	X	366760	G	T	chrX	327495	G	T	rsTUT100197	rsTUT100197	rsTUT100197	x_par,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_198	reference+study+cohort	X	374679	C	A	chrX	335414	C	A	rsTUT100198	rsTUT100198	rsTUT100198	x_par,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_199	reference+study+cohort	X	382598	A	G	chrX	343333	A	G	rsTUT100199	rsTUT100199	rsTUT100199	x_par,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_200	reference+study+cohort	X	5000000	T	G	chrX	4918041	T	G	rsTUT100200	rsTUT100200	rsTUT100200	x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_201	reference+study+cohort	X	5010037	G	A	chrX	4928078	G	A	rsTUT100201	rsTUT100201	rsTUT100201	x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_202	reference+cohort	X	5020074	G	C	chrX	4938115	G	C	rsTUT100202	rsTUT100202	rsTUT100202	x_nonpar,strand_ambiguous,strand_flip,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_203	reference+study+cohort	X	5030111	T	G	chrX	4948152	T	G	rsTUT100203	rsTUT100203	rsTUT100203	x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_204	reference+cohort	X	5040148	T	A	chrX	4958189	T	A	rsTUT100204	rsTUT100204	rsTUT100204	x_nonpar,strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_205	reference+study+cohort	X	5050185	T	C	chrX	4968226	T	C	rsTUT100205	rsTUT100205	rsTUT100205	x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_206	reference+cohort	X	5060222	A	T	chrX	4978263	A	T	rsTUT100206	rsTUT100206	rsTUT100206	x_nonpar,strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_207	reference+study+cohort	X	5070259	C	A	chrX	4988300	C	A	rsTUT100207	rsTUT100207	rsTUT100207	x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_208	reference+cohort	X	5080296	T	A	chrX	4998337	T	A	rsTUT100208	rsTUT100208	rsTUT100208	x_nonpar,strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_209	reference+cohort	X	5090333	A	T	chrX	5008374	A	T	rsTUT100209	rsTUT100209	rsTUT100209	x_nonpar,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_210	reference+study	X	5100370	A	C	chrX	5018411	A	C	rsTUT100210	rsTUT100210	rsTUT100210	x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_211	reference+study	X	5110407	T	C	chrX	5028448	T	C	rsTUT100211	rsTUT100211	rsTUT100211	x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_212	reference+study	X	5120444	C	T	chrX	5038485	C	T	rsTUT100212	rsTUT100212	rsTUT100212	x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_213	reference+study	X	5130481	C	A	chrX	5048522	C	A	rsTUT100213	rsTUT100213	rsTUT100213	x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_214	reference+study	X	5140518	T	C	chrX	5058559	T	C	rsTUT100214	rsTUT100214	rsTUT100214	x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_215	reference+study	X	5150555	G	T	chrX	5068596	G	T	rsTUT100215	rsTUT100215	rsTUT100215	x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_216	reference+cohort	X	5160592	C	A	chrX	5078633	C	A	rsTUT100216	rsTUT100216	rsTUT100216	x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_217	reference+cohort	X	5170629	A	G	chrX	5088670	A	G	rsTUT100217	rsTUT100217	rsTUT100217	x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_218	reference+cohort	X	5180666	T	G	chrX	5098707	T	G	rsTUT100218	rsTUT100218	rsTUT100218	x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_219	reference+cohort	X	5190703	G	A	chrX	5108744	G	A	rsTUT100219	rsTUT100219	rsTUT100219	x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_220	reference+cohort	X	5200740	T	C	chrX	5118781	T	C	rsTUT100220	rsTUT100220	rsTUT100220	x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_221	reference+cohort	X	5210777	G	T	chrX	5128818	G	T	rsTUT100221	rsTUT100221	rsTUT100221	x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_222	reference+cohort	X	5220814	A	C	chrX	5138855	A	C	rsTUT100222	rsTUT100222	rsTUT100222	x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_223	reference	X	5230851	G	C	chrX	5148892	G	C	rsTUT100223	rsTUT100223	rsTUT100223	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_224	reference	X	5240888	A	T	chrX	5158929	A	T	rsTUT100224	rsTUT100224	rsTUT100224	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_225	reference	X	5250925	T	A	chrX	5168966	T	A	rsTUT100225	rsTUT100225	rsTUT100225	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_226	reference	X	5260962	G	C	chrX	5179003	G	C	rsTUT100226	rsTUT100226	rsTUT100226	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_227	reference	X	5270999	A	T	chrX	5189040	A	T	rsTUT100227	rsTUT100227	rsTUT100227	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_228	reference	X	5281036	G	A	chrX	5199077	G	A	rsTUT100228	rsTUT100228	rsTUT100228	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_229	reference	X	5291073	G	C	chrX	5209114	G	C	rsTUT100229	rsTUT100229	rsTUT100229	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_230	reference	X	5301110	T	G	chrX	5219151	T	G	rsTUT100230	rsTUT100230	rsTUT100230	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_231	reference	X	5311147	T	A	chrX	5229188	T	A	rsTUT100231	rsTUT100231	rsTUT100231	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_232	reference	X	5321184	G	C	chrX	5239225	G	C	rsTUT100232	rsTUT100232	rsTUT100232	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_233	reference	X	5331221	T	G	chrX	5249262	T	G	rsTUT100233	rsTUT100233	rsTUT100233	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_234	reference	X	5341258	G	A	chrX	5259299	G	A	rsTUT100234	rsTUT100234	rsTUT100234	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_235	reference	X	5351295	T	C	chrX	5269336	T	C	rsTUT100235	rsTUT100235	rsTUT100235	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_236	reference	X	5361332	T	G	chrX	5279373	T	G	rsTUT100236	rsTUT100236	rsTUT100236	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_237	reference	X	5371369	G	A	chrX	5289410	G	A	rsTUT100237	rsTUT100237	rsTUT100237	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_238	reference	X	5381406	G	C	chrX	5299447	G	C	rsTUT100238	rsTUT100238	rsTUT100238	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_239	reference	X	5391443	C	T	chrX	5309484	C	T	rsTUT100239	rsTUT100239	rsTUT100239	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_240	reference	X	5401480	T	A	chrX	5319521	T	A	rsTUT100240	rsTUT100240	rsTUT100240	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_241	reference	X	5411517	A	G	chrX	5329558	A	G	rsTUT100241	rsTUT100241	rsTUT100241	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_242	reference	X	5421554	G	C	chrX	5339595	G	C	rsTUT100242	rsTUT100242	rsTUT100242	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_243	reference	X	5431591	G	A	chrX	5349632	G	A	rsTUT100243	rsTUT100243	rsTUT100243	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_244	reference	X	5441628	T	C	chrX	5359669	T	C	rsTUT100244	rsTUT100244	rsTUT100244	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_245	reference	X	5451665	T	G	chrX	5369706	T	G	rsTUT100245	rsTUT100245	rsTUT100245	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_246	reference	X	5461702	C	A	chrX	5379743	C	A	rsTUT100246	rsTUT100246	rsTUT100246	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_247	reference	X	5471739	T	C	chrX	5389780	T	C	rsTUT100247	rsTUT100247	rsTUT100247	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_248	reference	X	5481776	A	T	chrX	5399817	A	T	rsTUT100248	rsTUT100248	rsTUT100248	reference_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_249	reference	X	5491813	A	C	chrX	5409854	A	C	rsTUT100249	rsTUT100249	rsTUT100249	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_250	reference	X	5501850	A	G	chrX	5419891	A	G	rsTUT100250	rsTUT100250	rsTUT100250	reference_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_251	study+cohort	X	5511887	G	T	chrX	5429928	G	T	rsTUT100251	rsTUT100251	rsTUT100251	x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_252	study+cohort	X	5521924	A	C	chrX	5439965	A	C	rsTUT100252	rsTUT100252	rsTUT100252	x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_253	cohort	X	5531961	C	G	chrX	5450002	C	G	rsTUT100253	rsTUT100253	rsTUT100253	x_nonpar,strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_254	study+cohort	X	5541998	G	T	chrX	5460039	G	T	rsTUT100254	rsTUT100254	rsTUT100254	x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_255	study+cohort	X	5552035	G	A	chrX	5470076	G	A	rsTUT100255	rsTUT100255	rsTUT100255	x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_256	cohort	X	5562072	G	C	chrX	5480113	G	C	rsTUT100256	rsTUT100256	rsTUT100256	x_nonpar,strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_257	study	X	5572109	C	T	chrX	5490150	C	T	rsTUT100257	rsTUT100257	rsTUT100257	study_only,x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_258	study	X	5582146	G	A	chrX	5500187	G	A	rsTUT100258	rsTUT100258	rsTUT100258	study_only,x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_259		X	5592183	G	C	chrX	5510224	G	C	rsTUT100259	rsTUT100259	rsTUT100259	study_only,x_nonpar,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_260		X	5602220	A	T	chrX	5520261	A	T	rsTUT100260	rsTUT100260	rsTUT100260	study_only,x_nonpar,strand_ambiguous	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_261		X	5612257	T	A	chrX	5530298	T	A	rsTUT100261	rsTUT100261	rsTUT100261	study_only,x_nonpar,strand_ambiguous,allele_swap	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_262		X	5622294	C	G	chrX	5540335	C	G	rsTUT100262	rsTUT100262	rsTUT100262	study_only,x_nonpar,strand_ambiguous,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_263	study	X	5632331	T	G	chrX	5550372	T	G	rsTUT100263	rsTUT100263	rsTUT100263	study_only,x_nonpar,allele_swap,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_264	study	X	5642368	G	A	chrX	5560409	G	A	rsTUT100264	rsTUT100264	rsTUT100264	study_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_265	study	X	5652405	A	G	chrX	5570446	A	G	rsTUT100265	rsTUT100265	rsTUT100265	study_only,x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_266	study	X	5662442	G	T	chrX	5580483	G	T	rsTUT100266	rsTUT100266	rsTUT100266	study_only,x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_267		X	5672479	T	A	chrX	5590520	T	A	rsTUT100267	rsTUT100267	rsTUT100267	study_only,x_nonpar,strand_ambiguous,allele_swap,strand_flip	raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded from effective study membership
+t1_X_268	cohort	X	5682516	A	G	chrX	5600557	A	G	rsTUT100268	rsTUT100268	rsTUT100268	cohort_only,x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_269	cohort	X	5692553	T	G	chrX	5610594	T	G	rsTUT100269	rsTUT100269	rsTUT100269	cohort_only,x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_270	cohort	X	5702590	A	C	chrX	5620631	A	C	rsTUT100270	rsTUT100270	rsTUT100270	cohort_only,x_nonpar	generated from real local FASTA and UCSC chain liftover
+t1_X_271	cohort	X	5712627	A	G	chrX	5630668	A	G	rsTUT100271	rsTUT100271	rsTUT100271	cohort_only,x_nonpar,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_272	cohort	X	5722664	C	T	chrX	5640705	C	T	rsTUT100272	rsTUT100272	rsTUT100272	cohort_only,x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_273	cohort	X	5732701	T	A	chrX	5650742	T	A	rsTUT100273	rsTUT100273	rsTUT100273	cohort_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_274	cohort	X	5742738	C	G	chrX	5660779	C	G	rsTUT100274	rsTUT100274	rsTUT100274	cohort_only,x_nonpar,strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_X_275	cohort	X	5752775	G	T	chrX	5670816	G	T	rsTUT100275	rsTUT100275	rsTUT100275	cohort_only,x_nonpar,strand_flip	generated from real local FASTA and UCSC chain liftover
+t1_X_276	cohort	X	5762812	T	A	chrX	5680853	T	A	rsTUT100276	rsTUT100276	rsTUT100276	cohort_only,x_nonpar,strand_ambiguous	generated from real local FASTA and UCSC chain liftover
+t1_X_277	cohort	X	5772849	G	C	chrX	5690890	G	C	rsTUT100277	rsTUT100277	rsTUT100277	cohort_only,x_nonpar,strand_ambiguous,allele_swap	generated from real local FASTA and UCSC chain liftover
+t1_multiallelic_drop	reference												multiallelic	VCF importer reports multiallelic
+t1_invalid_allele_drop	study/reference												invalid_allele	importers report non_actg_allele
+t1_long_allele_drop	study/reference												long_allele	importers report allele_too_long
+t1_liftover_collision_partner	study												liftover_collision,duplicate_target	reverse allele row collapses during preparation
+t1_lowercase_alleles	study												lowercase_allele,duplicate_target	lowercase study alleles are accepted before duplicate-target QC
+t1_duplicate_bim_key	cohort												duplicate_target	duplicate BIM target identity is reported during cohort preparation
+fixture_unsorted_inputs	reference/study/cohort												unsorted	raw input rows are shuffled deterministically before writing
+fixture_mixed_study_contigs	study												mixed_contig_label	study chromosome column intentionally mixes chr-prefixed and plain labels
+fixture_missing_genotypes	cohort												missing_genotype	deterministic PLINK BED rows include missing genotype calls

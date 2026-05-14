@@ -1,4 +1,4 @@
-# Workflows
+# Workflow
 
 Most users should use the workflow-level tools:
 
@@ -9,9 +9,24 @@ Most users should use the workflow-level tools:
 - `restrict_vmap.py`
 - `project_payload.py`
 
-For a worked example, start with [tutorial.md](tutorial.md). Use the tables below as a quick wrapper reference. The detailed tool and wrapper contracts remain in the spec.
+For a worked example, start with [tutorial-1.md](tutorial-1.md). Use the tables below as a quick wrapper reference. The detailed tool and wrapper contracts remain in the spec.
 
-## Workflows vs primitives
+## Minimum mental model
+
+- `prepare_variants.py` turns each raw input into one prepared `.vmap`.
+- A `.vmap` is the prepared variant table plus the source provenance needed to project the same original payload later. It does not contain the payload itself.
+- `intersect_variants.py` and `union_variants.py` combine prepared variant sets and emit a `.vtable`.
+- A `.vtable` is only a shared membership table. It has no source-payload provenance, so it cannot be projected directly.
+- Use `restrict_vmap.py` to combine one payload-specific `.vmap` with a membership `.vtable` or another `.vmap`, producing a restricted `.vmap` for that payload.
+- `project_payload.py` rewrites the original payload through its own restricted `.vmap`.
+- Variant matching uses prepared `chr:bp:a1:a2` target rows, not variant IDs.
+- Choose the target genome build and contig naming up front; reference-aware preparation needs `MATCH_CONFIG`.
+- `@` in input and output paths denotes sharded genotype or VCF paths.
+- Summary-statistics inputs require metadata YAML; `sumstats-clean` projection writes harmonized canonical summary statistics.
+
+For deeper object-model details, see [primitives.md](primitives.md#object-model-reference).
+
+## Workflow vs primitives
 
 You can use this toolkit at two levels:
 

@@ -8,13 +8,12 @@ The common workflow rewrites `chr` / `bp` / `a1` / `a2` / `snp` fields in BFILE,
 
 1. Install the runtime using one of the supported paths in [docs/install.md](docs/install.md).
 2. Download the reference FASTA/chain assets and configure `config.yaml` as described in [docs/downloads.md](docs/downloads.md).
-3. Run through the worked example in [docs/tutorial.md](docs/tutorial.md).
+3. Run through the worked example in [docs/tutorial-1.md](docs/tutorial-1.md).
 
 ## Documentation
 
-- [Concepts](docs/concepts.md): `.vmap`, `.vtable`, payloads, source-row mapping, object metadata, and allele ordering.
-- [Workflows](docs/workflows.md): the common prepare, combine, restrict, and project workflow.
-- [Primitive tools](docs/primitives.md): lower-level import, normalization, liftover, mapping, and direct payload-application tools.
+- [Workflow](docs/workflow.md): the common prepare, combine, restrict, and project workflow.
+- [Primitive tools and object model reference](docs/primitives.md): lower-level tools plus `.vmap`, `.vtable`, payloads, source-row mapping, object metadata, and allele ordering.
 
 ## Specifications
 

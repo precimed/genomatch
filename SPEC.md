@@ -34,9 +34,9 @@ The normative files for the `match/` contract are:
 
 Within [README.md](README.md) and the user documentation in [docs/](docs/), the following sections are intentionally normative and may serve as source of truth:
 
-- the top-level object and metadata summary in [concepts.md](docs/concepts.md)
+- the top-level object and metadata summary in [primitives.md](docs/primitives.md#core-objects-and-metadata)
 - the primitive/canonical tools summary in [primitives.md](docs/primitives.md)
-- `Using .vmap vs .vtable as input across tools` in [concepts.md](docs/concepts.md)
+- `Using .vmap vs .vtable as input across tools` in [primitives.md](docs/primitives.md#using-vmap-vs-vtable-as-input-across-tools)
 
 ## Object model
 
