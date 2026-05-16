@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-05-16
+
+### Added
+- Added summary-statistics documentation covering metadata, SNP-only imports, projection, and clean mode.
+- Added `--id-lookup` for SNP-only summary-statistics preparation. It can fill missing chromosome and position values by matching summary-statistic IDs against a compatible `.vmap` or `.vtable`, then continue through the normal preparation workflow.
+
+### Fixed
+- Fixed summary-statistics parsing for files whose header contains tabs but whose data rows use whitespace-separated trailing fields, such as ILAE-style summary-statistics tables.
+
 ## [v0.4.0] - 2026-05-14
 
 ### Added
