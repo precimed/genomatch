@@ -78,8 +78,7 @@ The migrated suite must keep coverage for:
 - `import_sumstats.py --id-lookup` is valid only when summary-stat metadata defines `SNP`, `EffectAllele`, and `OtherAllele`, and does not define `CHR` or `POS`
 - `import_sumstats.py --id-lookup` fills imported target-side `chrom` and `pos` from matched `.vtable` or `.vmap` target-side `id` rows while keeping imported `a1/a2` from raw `EffectAllele` / `OtherAllele`
 - `import_sumstats.py --id-lookup` inherits imported `genome_build` and `contig_naming` from the lookup object's target-side metadata
-- `import_sumstats.py --id-lookup` accepts `.vmap` lookup objects while ignoring source provenance and warning that only target-side `chrom` / `pos` / `id` are used
-- `import_sumstats.py --id-vtable` remains a backward-compatible alias for `--id-lookup`
+- `import_sumstats.py --id-lookup` accepts `.vmap` lookup objects while ignoring source provenance
 - `import_sumstats.py --id-lookup` ignores lookup-table rows whose `id` is missing, empty, or `.`, and emits a warning
 - `import_sumstats.py --id-lookup` drops source rows whose `SNP` is missing, empty, or `.` with QC reason `invalid_id`
 - `import_sumstats.py --id-lookup` drops unmatched source rows with QC reason `id_not_found`
@@ -415,7 +414,7 @@ The migrated suite must keep coverage for:
 - `prepare_variants.py` accepts optional `--prefix`, defaulting it to `--output`
 - `prepare_variants.py` requires one final `--output`
 - `prepare_variants.py` dispatches to the appropriate `import_*` tool for the selected input format
-- `prepare_variants.py` accepts optional `--id-lookup` only for `--input-format=sumstats`, passes it through to `import_sumstats.py`, and accepts `--id-vtable` as a backward-compatible alias
+- `prepare_variants.py` accepts optional `--id-lookup` only for `--input-format=sumstats` and passes it through to `import_sumstats.py`
 - `prepare_variants.py` accepts optional `--max-allele-length` (default `150`) and passes it through unchanged to the selected importer
 - `prepare_variants.py` defaults `--dst-build` to `GRCh38`
 - `prepare_variants.py` defaults `--dst-contig-naming` to `ncbi`

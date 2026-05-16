@@ -71,7 +71,7 @@ prepare_variants.py \
 
 `prepare_variants.py --input-format sumstats` supports these summary-statistics controls:
 
-- `--id-lookup` enables the SNP-only coordinate lookup mode described above. `--id-vtable` is accepted as a backward-compatible alias.
+- `--id-lookup` enables the SNP-only coordinate lookup mode described above.
 - `--max-allele-length` is passed to the importer and drops rows whose effect or other allele exceeds the configured length. The default is `150`.
 - `--chr2use` / `--contigs` restrict the final prepared `.vmap` to selected contigs.
 
@@ -122,7 +122,7 @@ In this mode, raw `SNP` values are matched against target-side lookup IDs. Impor
 
 Rows with missing IDs, IDs absent from the lookup, or IDs that match multiple lookup rows are dropped and recorded in `<output>.imported.vmap.qc.tsv` during preparation. The QC reasons are `invalid_id`, `id_not_found`, and `ambiguous_id_match`.
 
-`--id-lookup` is only a preparation-time coordinate-enrichment step. Downstream matching still uses exact prepared `chr:bp:a1:a2` rows and ignores variant IDs. It is independent of `--retain-snp-id`: `--retain-snp-id` is only a projection-time option for `project_payload.py` that decides whether the output `SNP` column uses target-side `.vmap` IDs or generated `chrom:pos:a1:a2` IDs. It does not affect whether prepared `.vmap` files retain raw IDs for later use as `--id-lookup` objects. `--id-vtable` remains available as an alias for existing scripts, but new commands should use `--id-lookup`.
+`--id-lookup` is only a preparation-time coordinate-enrichment step. Downstream matching still uses exact prepared `chr:bp:a1:a2` rows and ignores variant IDs. It is independent of `--retain-snp-id`: `--retain-snp-id` is only a projection-time option for `project_payload.py` that decides whether the output `SNP` column uses target-side `.vmap` IDs or generated `chrom:pos:a1:a2` IDs. It does not affect whether prepared `.vmap` files retain raw IDs for later use as `--id-lookup` objects.
 
 ## Project Summary Statistics
 

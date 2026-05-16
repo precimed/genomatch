@@ -730,31 +730,6 @@ def test_import_sumstats_id_lookup_vtable_enriches_coordinates_and_inherits_meta
     assert meta_payload["target"]["contig_naming"] == "ucsc"
 
 
-def test_import_sumstats_id_vtable_alias_still_enriches_coordinates(tmp_path):
-    sumstats = tmp_path / "ss.tsv"
-    meta = tmp_path / "ss.yaml"
-    id_vtable = tmp_path / "lookup.vtable"
-    out = tmp_path / "ss.vmap"
-    write_lines(sumstats, ["SNP\tEA\tOA\tBETA", "rs1\tA\tG\t0.2"])
-    write_lines(meta, ["col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
-    write_vtable_with_meta(id_vtable, ["1\t100\trs1\tC\tT"], genome_build="GRCh37", contig_naming="ncbi")
-
-    result = run_py(
-        "import_sumstats.py",
-        "--input",
-        sumstats,
-        "--sumstats-metadata",
-        meta,
-        "--id-vtable",
-        id_vtable,
-        "--output",
-        out,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
-
-
 def test_import_sumstats_id_lookup_accepts_vmap_and_ignores_provenance(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
@@ -784,7 +759,6 @@ def test_import_sumstats_id_lookup_accepts_vmap_and_ignores_provenance(tmp_path)
     )
 
     assert result.returncode == 0, result.stderr
-    assert "using target-side chrom/pos/id only and ignoring source provenance" in result.stderr
     assert read_tsv(out) == [["chr1", "100", "rs1", "A", "G", ".", "0", "identity"]]
     meta_payload = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta_payload["target"]["genome_build"] == "GRCh38"

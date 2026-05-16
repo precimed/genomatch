@@ -119,7 +119,6 @@ The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`
 
 - `import_sumstats.py` normally imports target-side variant rows from summary-stat columns described by the metadata contract.
 - `import_sumstats.py` may accept optional `--id-lookup <path>` as a fallback mode for recovering missing target-side `chrom` / `pos` information from an auxiliary `.vtable` or `.vmap`.
-- `--id-vtable` is a backward-compatible alias for `--id-lookup`; new docs and examples should prefer `--id-lookup`.
 - `--id-lookup` is allowed only for `import_sumstats.py`; it is not a general matching mode for the toolkit.
 - `--id-lookup` must name a `.vtable` or `.vmap` whose target-side `id` column is used as a lookup key.
 - when `--id-lookup` names a `.vmap`, only target-side `chrom`, `pos`, and `id` are used; `source_shard`, `source_index`, `allele_op`, and source-side metadata are ignored, even if source-side and target-side metadata differ, because lookup enrichment is only recovering target coordinates for raw summary-stat IDs, not applying the lookup object's provenance

@@ -46,13 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output .vmap file")
     parser.add_argument("--sumstats-metadata", required=True, help="Cleansumstats-style metadata YAML")
     parser.add_argument("--genome-build", default="unknown", help="Genome build for metadata")
-    id_lookup_group = parser.add_mutually_exclusive_group()
-    id_lookup_group.add_argument("--id-lookup", help="Optional .vtable or .vmap for ID-based coordinate enrichment")
-    id_lookup_group.add_argument(
-        "--id-vtable",
-        dest="id_lookup",
-        help="Backward-compatible alias for --id-lookup",
-    )
+    parser.add_argument("--id-lookup", help="Optional .vtable or .vmap for ID-based coordinate enrichment")
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="Comma-separated chromosome list or ranges")
     parser.add_argument("--max-allele-length", type=int, default=150, help="Maximum allele length; rows exceeding this are dropped (default: 150)")
     return parser.parse_args()
@@ -63,9 +57,6 @@ def load_id_lookup_object(path: Path) -> tuple[Dict[str, VariantRow], Set[str], 
         raise ValueError("--id-lookup must point to a .vtable or .vmap")
     info = load_target_object_info(path)
     if info.object_type == "variant_map":
-        logger.warning(
-            "--id-lookup received a .vmap; using target-side chrom/pos/id only and ignoring source provenance"
-        )
         vmap_frame = read_vmap_table(path, check_duplicates=False).to_frame(copy=False)
         rows = [
             VariantRow(chrom, pos, row_id, a1, a2)

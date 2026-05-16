@@ -46,15 +46,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", help="Raw importer input (optional for --input-format=sumstats)")
     parser.add_argument("--input-format", required=True, choices=sorted(IMPORTER_BY_FORMAT), help="Importer selection")
     parser.add_argument("--sumstats-metadata", help="Summary-stat metadata YAML required for --input-format=sumstats")
-    id_lookup_group = parser.add_mutually_exclusive_group()
-    id_lookup_group.add_argument(
+    parser.add_argument(
         "--id-lookup",
         help="Optional .vtable or .vmap for --input-format=sumstats ID-based coordinate enrichment",
-    )
-    id_lookup_group.add_argument(
-        "--id-vtable",
-        dest="id_lookup",
-        help="Backward-compatible alias for --id-lookup",
     )
     parser.add_argument("--shards", help="Optional comma-separated explicit shard tokens for @ genotype inputs")
     parser.add_argument("--output", required=True, help="Output stem; the final prepared artifact is <output>.vmap")

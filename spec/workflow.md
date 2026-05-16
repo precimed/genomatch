@@ -33,11 +33,10 @@ In that workflow:
 - for `--input-format sumstats`, `--input` may be omitted; when omitted, resolve the raw sumstats path from `path_sumStats` in `--sumstats-metadata` as `<directory of --sumstats-metadata>/<path_sumStats>`
 - require `--sumstats-metadata` for `--input-format sumstats` and reject it for other importer formats
 - accept optional `--id-lookup` only for `--input-format sumstats` and pass it through to `import_sumstats.py`
-- accept `--id-vtable` as a backward-compatible alias for `--id-lookup`
 - accept optional `--max-allele-length` (positive integer), defaulting to `150`, and pass it through unchanged to the selected `import_*` tool
 - accept optional `--shards` only for `bim`, `pvar`, and `vcf` inputs whose `--input` contains `@`; pass it through unchanged to the selected `import_*` tool
 - reject `--shards` for `sumstats` inputs and for non-sharded raw inputs
-- when summary-stat metadata omits `CHR` / `POS`, require `--id-lookup` or its backward-compatible alias `--id-vtable`
+- when summary-stat metadata omits `CHR` / `POS`, require `--id-lookup`
 - accept optional `--prefix`, defaulting it to `--output`
 - require final `--output`
 - treat `--output` as an output stem, not as a full filename
