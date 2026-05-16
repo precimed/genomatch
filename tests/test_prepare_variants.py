@@ -570,20 +570,20 @@ def test_prepare_variants_sumstats_requires_metadata_and_rejects_otherwise(tmp_p
     assert rejected.returncode != 0
     assert "--sumstats-metadata is supported only for --input-format=sumstats" in rejected.stderr
 
-    rejected_id_vtable = run_py_with_env(
+    rejected_id_lookup = run_py_with_env(
         "prepare_variants.py",
         env,
         "--input",
         tmp_path / "source.bim",
         "--input-format",
         "bim",
-        "--id-vtable",
+        "--id-lookup",
         tmp_path / "lookup.vtable",
         "--output",
         tmp_path / "prepared_bim_id",
     )
-    assert rejected_id_vtable.returncode != 0
-    assert "--id-vtable is supported only for --input-format=sumstats" in rejected_id_vtable.stderr
+    assert rejected_id_lookup.returncode != 0
+    assert "--id-lookup is supported only for --input-format=sumstats" in rejected_id_lookup.stderr
 
 
 def test_prepare_variants_sumstats_uses_metadata_path_sumstats_when_input_omitted(tmp_path):
@@ -630,7 +630,7 @@ def test_prepare_variants_sumstats_uses_metadata_path_sumstats_when_input_omitte
     assert read_tsv(tmp_path / "prepared.vmap") == [["1", "1", "rs1", "A", "T", ".", "0", "identity"]]
 
 
-def test_prepare_variants_sumstats_passes_id_vtable_through_to_importer(tmp_path):
+def test_prepare_variants_sumstats_passes_id_lookup_through_to_importer(tmp_path):
     env = base_env(
         tmp_path,
         grch37_sequences={"chr1": "TTTTTT", "chr2": "TTTTTT", "chrX": "TTTTTT"},
@@ -657,7 +657,7 @@ def test_prepare_variants_sumstats_passes_id_vtable_through_to_importer(tmp_path
         "sumstats",
         "--sumstats-metadata",
         metadata,
-        "--id-vtable",
+        "--id-lookup",
         id_vtable,
         "--output",
         output,
@@ -667,7 +667,7 @@ def test_prepare_variants_sumstats_passes_id_vtable_through_to_importer(tmp_path
 
     assert result.returncode == 0, result.stderr
     import_line = next(line for line in result.stderr.splitlines() if "import_sumstats.py" in line)
-    assert "--id-vtable" in import_line
+    assert "--id-lookup" in import_line
     assert str(id_vtable) in import_line
     restrict_line = next(line for line in result.stderr.splitlines() if "restrict_build_compatible.py" in line)
     assert "--sort" in restrict_line

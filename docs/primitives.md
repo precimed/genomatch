@@ -1,6 +1,6 @@
 # Primitives
 
-The primitive tools provide explicit control over import, normalization, liftover, intersection, and payload application. Most users should start with [workflow.md](workflow.md).
+The primitive tools provide explicit control over import, normalization, liftover, intersection, and payload application. Most users should start with [workflow.md](workflow.md). For summary-statistics metadata, SNP-only imports, and clean projection examples, see [sumstats.md](sumstats.md).
 
 ## Object model reference
 
@@ -60,7 +60,7 @@ Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` 
 | Import | `import_bim.py` | raw `.bim` | `.vmap` | Creates provenance; supports raw-input `@` discovery and `--chr2use` / `--contigs` |
 | Import | `import_pvar.py` | raw `.pvar` | `.vmap` | Creates provenance; supports raw-input `@` discovery and `--chr2use` / `--contigs` |
 | Import | `import_vcf.py` | raw `.vcf` / `.vcf.gz` | `.vmap` | Creates provenance; supports raw-input `@` discovery and `--chr2use` / `--contigs` |
-| Import | `import_sumstats.py` | raw summary statistics plus metadata YAML | `.vmap` | Creates provenance; supports `--chr2use` / `--contigs` and optional `--id-vtable`; single-file only |
+| Import | `import_sumstats.py` | raw summary statistics plus metadata YAML | `.vmap` | Creates provenance; supports `--chr2use` / `--contigs` and optional `--id-lookup`; single-file only |
 | Normalize / metadata | `guess_build.py` | `.vmap` or `.vtable` | same as input | Metadata-only update; on `.vmap`, updates target-side metadata only; build evidence uses a default random downsample of up to `10,000` rows (`--sample-rows`, use `0` for all rows) |
 | Normalize / metadata | `normalize_contigs.py` | `.vmap` or `.vtable` | same as input | Repairs or standardizes target contigs; target naming is selected with `--to` |
 | Normalize / metadata | `restrict_contigs.py` | `.vmap` or `.vtable` | same as input | Target-side contig filter via `--chr2use` / `--contigs` |

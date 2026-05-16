@@ -13,6 +13,7 @@ The common workflow rewrites `chr` / `bp` / `a1` / `a2` / `snp` fields in BFILE,
 ## Documentation
 
 - [Workflow](docs/workflow.md): the common prepare, combine, restrict, and project workflow.
+- [Summary statistics](docs/sumstats.md): metadata, SNP-only imports with `--id-lookup`, projection, and clean projection.
 - [Primitive tools and object model reference](docs/primitives.md): lower-level tools plus `.vmap`, `.vtable`, payloads, source-row mapping, object metadata, and allele ordering.
 
 ## Specifications

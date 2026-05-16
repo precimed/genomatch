@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Set
 import pandas as pd
 
 from ._cli_utils import run_cli
+from .exact_set_utils import load_target_object_info
 from .importer_utils import (
     finalize_imported_vmap_vectorized,
     is_canonical_allele_token,
@@ -29,11 +30,10 @@ from .sumstats_utils import (
     VariantColumnMapping,
 )
 from .vtable_utils import (
-    load_metadata as load_variant_metadata,
     normalize_allele_token,
     open_text,
     parse_chr2use,
-    validate_vtable_metadata,
+    read_vmap_table,
     VariantRow,
 )
 
@@ -46,57 +46,77 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output .vmap file")
     parser.add_argument("--sumstats-metadata", required=True, help="Cleansumstats-style metadata YAML")
     parser.add_argument("--genome-build", default="unknown", help="Genome build for metadata")
-    parser.add_argument("--id-vtable", help="Optional .vtable for ID-based coordinate enrichment")
+    id_lookup_group = parser.add_mutually_exclusive_group()
+    id_lookup_group.add_argument("--id-lookup", help="Optional .vtable or .vmap for ID-based coordinate enrichment")
+    id_lookup_group.add_argument(
+        "--id-vtable",
+        dest="id_lookup",
+        help="Backward-compatible alias for --id-lookup",
+    )
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="Comma-separated chromosome list or ranges")
     parser.add_argument("--max-allele-length", type=int, default=150, help="Maximum allele length; rows exceeding this are dropped (default: 150)")
     return parser.parse_args()
 
 
-def load_id_lookup_vtable(path: Path) -> tuple[Dict[str, VariantRow], Set[str], Dict[str, object]]:
-    if path.suffix != ".vtable":
-        raise ValueError("--id-vtable must point to a .vtable")
-    metadata = load_variant_metadata(path)
-    validate_vtable_metadata(metadata)
+def load_id_lookup_object(path: Path) -> tuple[Dict[str, VariantRow], Set[str], Dict[str, object]]:
+    if not (path.name.endswith(".vtable") or path.name.endswith(".vmap")):
+        raise ValueError("--id-lookup must point to a .vtable or .vmap")
+    info = load_target_object_info(path)
+    if info.object_type == "variant_map":
+        logger.warning(
+            "--id-lookup received a .vmap; using target-side chrom/pos/id only and ignoring source provenance"
+        )
+        vmap_frame = read_vmap_table(path, check_duplicates=False).to_frame(copy=False)
+        rows = [
+            VariantRow(chrom, pos, row_id, a1, a2)
+            for chrom, pos, row_id, a1, a2 in vmap_frame.loc[:, ["chrom", "pos", "id", "a1", "a2"]].itertuples(
+                index=False,
+                name=None,
+            )
+        ]
+    else:
+        rows = []
+        with open_text(path, "rt") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) != 5:
+                    raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
+                chrom, pos, row_id, a1, a2 = parts
+                a1 = normalize_allele_token(a1)
+                a2 = normalize_allele_token(a2)
+                if not chrom or not is_valid_import_position(pos):
+                    raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
+                if not is_canonical_allele_token(a1) or not is_canonical_allele_token(a2):
+                    raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
+                rows.append(VariantRow(chrom, pos, row_id, a1, a2))
     unique_matches: Dict[str, VariantRow] = {}
     ambiguous_ids: Set[str] = set()
     ignored_ids = 0
-    with open_text(path, "rt") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) != 5:
-                raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
-            chrom, pos, row_id, a1, a2 = parts
-            a1 = normalize_allele_token(a1)
-            a2 = normalize_allele_token(a2)
-            if not chrom or not is_valid_import_position(pos):
-                raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
-            if not is_canonical_allele_token(a1) or not is_canonical_allele_token(a2):
-                raise ValueError(f"invalid vtable row in {path}: {line.strip()}")
-            lookup_id = row_id.strip()
-            if not lookup_id or lookup_id == ".":
-                ignored_ids += 1
-                continue
-            row = VariantRow(chrom, pos, row_id, a1, a2)
-            if lookup_id in ambiguous_ids:
-                continue
-            if lookup_id in unique_matches:
-                unique_matches.pop(lookup_id, None)
-                ambiguous_ids.add(lookup_id)
-                continue
-            unique_matches[lookup_id] = row
+    for row in rows:
+        lookup_id = row.id.strip()
+        if not lookup_id or lookup_id == ".":
+            ignored_ids += 1
+            continue
+        if lookup_id in ambiguous_ids:
+            continue
+        if lookup_id in unique_matches:
+            unique_matches.pop(lookup_id, None)
+            ambiguous_ids.add(lookup_id)
+            continue
+        unique_matches[lookup_id] = row
     if ignored_ids:
-        logger.warning("ignored %s --id-vtable rows whose id is missing, empty, or '.'", ignored_ids)
+        logger.warning("ignored %s --id-lookup rows whose id is missing, empty, or '.'", ignored_ids)
     return unique_matches, ambiguous_ids, {
-        "genome_build": metadata["genome_build"],
-        "contig_naming": metadata.get("contig_naming"),
+        "genome_build": info.target_metadata["genome_build"],
+        "contig_naming": info.target_metadata.get("contig_naming"),
     }
 
 
 def resolve_id_enrichment_columns(header: List[str], metadata: Dict[str, object]) -> tuple[int, int, int]:
     if find_metadata_value(metadata, "col_CHR") is not None or find_metadata_value(metadata, "col_POS") is not None:
-        raise ValueError("--id-vtable requires metadata to omit col_CHR and col_POS")
+        raise ValueError("--id-lookup requires metadata to omit col_CHR and col_POS")
     snp_idx = resolve_column(header, find_metadata_value(metadata, "col_SNP"), "col_SNP", required=True)
     effect_idx = resolve_column(
         header,
@@ -293,8 +313,8 @@ def main() -> int:
     logger.info("import_sumstats.py: importing sumstats -> %s", output_path)
     if args.input:
         reject_template_argument(args.input, label="import_sumstats.py --input")
-    if args.id_vtable:
-        reject_template_argument(args.id_vtable, label="import_sumstats.py --id-vtable")
+    if args.id_lookup:
+        reject_template_argument(args.id_lookup, label="import_sumstats.py --id-lookup")
     if not meta_path.exists():
         raise ValueError(f"metadata file not found: {meta_path}")
     metadata: Dict[str, object] = load_metadata(meta_path)
@@ -307,16 +327,16 @@ def main() -> int:
     reject_template_argument(str(input_path), label="import_sumstats.py --input")
     if not input_path.exists():
         raise ValueError(f"sumstats file not found: {input_path}")
-    id_vtable_path: Optional[Path] = Path(args.id_vtable) if args.id_vtable else None
-    if id_vtable_path is not None and not id_vtable_path.exists():
-        raise ValueError(f"id-vtable not found: {id_vtable_path}")
+    id_lookup_path: Optional[Path] = Path(args.id_lookup) if args.id_lookup else None
+    if id_lookup_path is not None and not id_lookup_path.exists():
+        raise ValueError(f"id lookup not found: {id_lookup_path}")
     id_lookup_rows: Dict[str, VariantRow] = {}
     ambiguous_lookup_ids: Set[str] = set()
     inherited_target_meta: Optional[Dict[str, object]] = None
-    if id_vtable_path is not None:
-        id_lookup_rows, ambiguous_lookup_ids, inherited_target_meta = load_id_lookup_vtable(id_vtable_path)
+    if id_lookup_path is not None:
+        id_lookup_rows, ambiguous_lookup_ids, inherited_target_meta = load_id_lookup_object(id_lookup_path)
     _header_line, header, _delimiter, _header_line_number = read_sumstats_header(input_path)
-    if id_vtable_path is None:
+    if id_lookup_path is None:
         variant_columns = resolve_variant_columns(header, metadata, require_pos=True)
     else:
         snp_idx, effect_idx, other_idx = resolve_id_enrichment_columns(header, metadata)
@@ -326,7 +346,7 @@ def main() -> int:
     for sumstats_chunk in iter_sumstats_table_chunks(input_path):
         frame = sumstats_chunk.frame
         source_index_series = sumstats_chunk.source_index
-        if id_vtable_path is None:
+        if id_lookup_path is None:
             rows_chunk, qc_chunk = import_sumstats_variant_chunk(
                 frame,
                 source_index_series,

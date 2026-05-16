@@ -22,6 +22,25 @@ def write_vtable_with_meta(path, lines, *, genome_build="GRCh37", contig_naming=
     )
 
 
+def write_vmap_with_meta(path, lines, *, genome_build="GRCh37", contig_naming="ucsc"):
+    write_lines(path, lines)
+    path.with_name(path.name + ".meta.json").write_text(
+        json.dumps(
+            {
+                "object_type": "variant_map",
+                "target": {
+                    "genome_build": genome_build,
+                    **({"contig_naming": contig_naming} if contig_naming is not None else {}),
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_import_bim_writes_vmap_and_single_file_provenance(tmp_path):
     source = tmp_path / "input.bim"
     out = tmp_path / "out.vmap"
@@ -681,7 +700,7 @@ def test_import_sumstats_deduplicates_target_identity_first_wins_and_audits_drop
     ]
 
 
-def test_import_sumstats_id_vtable_enriches_coordinates_and_inherits_metadata(tmp_path):
+def test_import_sumstats_id_lookup_vtable_enriches_coordinates_and_inherits_metadata(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     id_vtable = tmp_path / "lookup.vtable"
@@ -696,7 +715,7 @@ def test_import_sumstats_id_vtable_enriches_coordinates_and_inherits_metadata(tm
         sumstats,
         "--sumstats-metadata",
         meta,
-        "--id-vtable",
+        "--id-lookup",
         id_vtable,
         "--output",
         out,
@@ -711,7 +730,68 @@ def test_import_sumstats_id_vtable_enriches_coordinates_and_inherits_metadata(tm
     assert meta_payload["target"]["contig_naming"] == "ucsc"
 
 
-def test_import_sumstats_id_vtable_ignores_invalid_lookup_ids_and_audits_invalid_unmatched_and_ambiguous_source_ids(tmp_path):
+def test_import_sumstats_id_vtable_alias_still_enriches_coordinates(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    id_vtable = tmp_path / "lookup.vtable"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["SNP\tEA\tOA\tBETA", "rs1\tA\tG\t0.2"])
+    write_lines(meta, ["col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+    write_vtable_with_meta(id_vtable, ["1\t100\trs1\tC\tT"], genome_build="GRCh37", contig_naming="ncbi")
+
+    result = run_py(
+        "import_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--id-vtable",
+        id_vtable,
+        "--output",
+        out,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+
+
+def test_import_sumstats_id_lookup_accepts_vmap_and_ignores_provenance(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    id_vmap = tmp_path / "lookup.vmap"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["SNP\tEA\tOA\tBETA", "rs1\tA\tG\t0.2"])
+    write_lines(meta, ["col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+    write_vmap_with_meta(
+        id_vmap,
+        ["chr1\t100\trs1\tC\tT\tother_source\t42\tswap"],
+        genome_build="GRCh38",
+        contig_naming="ucsc",
+    )
+
+    result = run_py(
+        "import_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--id-lookup",
+        id_vmap,
+        "--output",
+        out,
+        "--genome-build",
+        "GRCh37",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "using target-side chrom/pos/id only and ignoring source provenance" in result.stderr
+    assert read_tsv(out) == [["chr1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+    meta_payload = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
+    assert meta_payload["target"]["genome_build"] == "GRCh38"
+    assert meta_payload["target"]["contig_naming"] == "ucsc"
+
+
+def test_import_sumstats_id_lookup_ignores_invalid_lookup_ids_and_audits_invalid_unmatched_and_ambiguous_source_ids(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     id_vtable = tmp_path / "lookup.vtable"
@@ -746,14 +826,14 @@ def test_import_sumstats_id_vtable_ignores_invalid_lookup_ids_and_audits_invalid
         sumstats,
         "--sumstats-metadata",
         meta,
-        "--id-vtable",
+        "--id-lookup",
         id_vtable,
         "--output",
         out,
     )
 
     assert result.returncode == 0, result.stderr
-    assert "ignored 2 --id-vtable rows" in result.stderr
+    assert "ignored 2 --id-lookup rows" in result.stderr
     assert read_tsv(out) == [["1", "14", "rs_ok", "A", "G", ".", "3", "identity"]]
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
         ["source_shard", "source_index", "reason"],
@@ -763,7 +843,7 @@ def test_import_sumstats_id_vtable_ignores_invalid_lookup_ids_and_audits_invalid
     ]
 
 
-def test_import_sumstats_id_vtable_requires_metadata_to_omit_chr_and_pos(tmp_path):
+def test_import_sumstats_id_lookup_requires_metadata_to_omit_chr_and_pos(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     id_vtable = tmp_path / "lookup.vtable"
@@ -787,14 +867,14 @@ def test_import_sumstats_id_vtable_requires_metadata_to_omit_chr_and_pos(tmp_pat
         sumstats,
         "--sumstats-metadata",
         meta,
-        "--id-vtable",
+        "--id-lookup",
         id_vtable,
         "--output",
         out,
     )
 
     assert result.returncode != 0
-    assert "--id-vtable requires metadata to omit col_CHR and col_POS" in result.stderr
+    assert "--id-lookup requires metadata to omit col_CHR and col_POS" in result.stderr
 
 
 def test_import_bim_drops_alleles_exceeding_max_length(tmp_path):

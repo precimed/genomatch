@@ -46,7 +46,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", help="Raw importer input (optional for --input-format=sumstats)")
     parser.add_argument("--input-format", required=True, choices=sorted(IMPORTER_BY_FORMAT), help="Importer selection")
     parser.add_argument("--sumstats-metadata", help="Summary-stat metadata YAML required for --input-format=sumstats")
-    parser.add_argument("--id-vtable", help="Optional .vtable for --input-format=sumstats ID-based coordinate enrichment")
+    id_lookup_group = parser.add_mutually_exclusive_group()
+    id_lookup_group.add_argument(
+        "--id-lookup",
+        help="Optional .vtable or .vmap for --input-format=sumstats ID-based coordinate enrichment",
+    )
+    id_lookup_group.add_argument(
+        "--id-vtable",
+        dest="id_lookup",
+        help="Backward-compatible alias for --id-lookup",
+    )
     parser.add_argument("--shards", help="Optional comma-separated explicit shard tokens for @ genotype inputs")
     parser.add_argument("--output", required=True, help="Output stem; the final prepared artifact is <output>.vmap")
     parser.add_argument(
@@ -101,16 +110,16 @@ def importer_command(args: argparse.Namespace, output_path: Path) -> list[str]:
         if args.input:
             cmd.extend(["--input", args.input])
         cmd.extend(["--sumstats-metadata", args.sumstats_metadata])
-        if args.id_vtable:
-            cmd.extend(["--id-vtable", args.id_vtable])
+        if args.id_lookup:
+            cmd.extend(["--id-lookup", args.id_lookup])
     else:
         if not args.input:
             raise ValueError(f"--input is required for --input-format={args.input_format}")
         cmd.extend(["--input", args.input])
         if args.sumstats_metadata:
             raise ValueError("--sumstats-metadata is supported only for --input-format=sumstats")
-        if args.id_vtable:
-            raise ValueError("--id-vtable is supported only for --input-format=sumstats")
+        if args.id_lookup:
+            raise ValueError("--id-lookup is supported only for --input-format=sumstats")
         if args.shards:
             if "@" not in args.input:
                 raise ValueError("--shards requires --input to contain '@'")

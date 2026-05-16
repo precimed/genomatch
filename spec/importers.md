@@ -118,17 +118,19 @@ The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`
 ### `import_sumstats.py`: optional ID-based coordinate enrichment
 
 - `import_sumstats.py` normally imports target-side variant rows from summary-stat columns described by the metadata contract.
-- `import_sumstats.py` may accept optional `--id-vtable <path>` as a fallback mode for recovering missing target-side `chrom` / `pos` information from an auxiliary `.vtable`.
-- `--id-vtable` is allowed only for `import_sumstats.py`; it is not a general matching mode for the toolkit.
-- `--id-vtable` must name a `.vtable` whose `id` column is used as a lookup key.
-- `--id-vtable` mode is valid only when the summary-stat metadata defines `SNP`, `EffectAllele`, and `OtherAllele`, and does not define `CHR` or `POS`
-- in `--id-vtable` mode, `import_sumstats.py` must look up each raw summary-stat `SNP` value against `.vtable.id`
-- in `--id-vtable` mode, imported target-side `chrom` and `pos` come from the matched `.vtable` row rather than from the raw summary-stat payload
-- in `--id-vtable` mode, imported metadata `genome_build` and `contig_naming` are inherited from the matched `.vtable` object metadata rather than inferred from the raw summary-stat payload
-- `a1` and `a2` still come from the raw summary-stat payload as `EffectAllele` and `OtherAllele`; `--id-vtable` does not change import-time allele ordering
-- rows of `--id-vtable` whose `id` is missing, empty, or `.` are ignored by the lookup table and must emit a warning
+- `import_sumstats.py` may accept optional `--id-lookup <path>` as a fallback mode for recovering missing target-side `chrom` / `pos` information from an auxiliary `.vtable` or `.vmap`.
+- `--id-vtable` is a backward-compatible alias for `--id-lookup`; new docs and examples should prefer `--id-lookup`.
+- `--id-lookup` is allowed only for `import_sumstats.py`; it is not a general matching mode for the toolkit.
+- `--id-lookup` must name a `.vtable` or `.vmap` whose target-side `id` column is used as a lookup key.
+- when `--id-lookup` names a `.vmap`, only target-side `chrom`, `pos`, and `id` are used; `source_shard`, `source_index`, `allele_op`, and source-side metadata are ignored, even if source-side and target-side metadata differ, because lookup enrichment is only recovering target coordinates for raw summary-stat IDs, not applying the lookup object's provenance
+- `--id-lookup` mode is valid only when the summary-stat metadata defines `SNP`, `EffectAllele`, and `OtherAllele`, and does not define `CHR` or `POS`
+- in `--id-lookup` mode, `import_sumstats.py` must look up each raw summary-stat `SNP` value against the lookup object's target-side `id`
+- in `--id-lookup` mode, imported target-side `chrom` and `pos` come from the matched lookup object row rather than from the raw summary-stat payload
+- in `--id-lookup` mode, imported metadata `genome_build` and `contig_naming` are inherited from the lookup object's target-side metadata rather than inferred from the raw summary-stat payload; this inherited metadata takes precedence over the `--genome-build` CLI value
+- `a1` and `a2` still come from the raw summary-stat payload as `EffectAllele` and `OtherAllele`; `--id-lookup` does not change import-time allele ordering
+- rows of `--id-lookup` whose `id` is missing, empty, or `.` are ignored by the lookup table and must emit a warning
 - if a raw summary-stat `SNP` value is missing, empty, or `.`, the source row must be dropped with auditable import QC reason `invalid_id`
-- if a raw summary-stat `SNP` value has no match in the filtered `.vtable.id` lookup set, the source row must be dropped with auditable import QC reason `id_not_found`
-- if a raw summary-stat `SNP` value matches multiple rows in the filtered `.vtable.id` lookup set, the source row must be dropped with auditable import QC reason `ambiguous_id_match`
-- if `--id-vtable` is not supplied and the importer can not determine target-side `chrom` and `pos` from the raw summary-stat input, the importer must fail clearly
-- `--id-vtable` is an import-time coordinate-enrichment step only; downstream exact set semantics remain `chr:bp:a1:a2`, ignoring `id`
+- if a raw summary-stat `SNP` value has no match in the filtered target-side lookup `id` set, the source row must be dropped with auditable import QC reason `id_not_found`
+- if a raw summary-stat `SNP` value matches multiple rows in the filtered target-side lookup `id` set, the source row must be dropped with auditable import QC reason `ambiguous_id_match`
+- if `--id-lookup` is not supplied and the importer can not determine target-side `chrom` and `pos` from the raw summary-stat input, the importer must fail clearly
+- `--id-lookup` is an import-time coordinate-enrichment step only; downstream exact set semantics remain `chr:bp:a1:a2`, ignoring `id`

@@ -9,7 +9,7 @@ Most users should use the workflow-level tools:
 - [`restrict_vmap.py`](#restrict-vmap) filters one payload-specific `.vmap` to a membership set.
 - [`project_payload.py`](#project-payloads) rewrites an original payload through an explicit mapped-only `.vmap`.
 
-For a worked example, start with [tutorial-1.md](tutorial-1.md). Use the tables below as a quick wrapper reference. The detailed tool and wrapper contracts remain in the spec.
+For a worked example, start with [tutorial-1.md](tutorial-1.md). For summary-statistics metadata, SNP-only imports, and clean projection details, see [sumstats.md](sumstats.md). Use the tables below as a quick wrapper reference. The detailed tool and wrapper contracts remain in the spec.
 
 ## Minimum mental model
 
@@ -22,7 +22,7 @@ For a worked example, start with [tutorial-1.md](tutorial-1.md). Use the tables 
 - Variant matching uses prepared `chr:bp:a1:a2` target rows, not variant IDs.
 - Choose the target genome build and contig naming up front; reference-aware preparation needs `MATCH_CONFIG`.
 - `@` in input and output paths denotes sharded genotype or VCF paths.
-- Summary-statistics inputs require metadata YAML; `sumstats-clean` projection writes harmonized canonical summary statistics.
+- Summary-statistics inputs require metadata YAML; `sumstats-clean` projection writes harmonized canonical summary statistics. See [sumstats.md](sumstats.md) for the practical summary-statistics paths.
 
 For deeper object-model details, see [primitives.md](primitives.md#object-model-reference).
 
@@ -34,7 +34,7 @@ Illustrative stage flow:
 
 | Stage | Description | Retained output |
 | --- | --- | --- |
-| Import | Always runs `import_<format>.py`; passes importer controls such as `--max-allele-length`, `--shards`, and sumstats-only `--id-vtable` when supplied | `<prefix>.imported.vmap` |
+| Import | Always runs `import_<format>.py`; passes importer controls such as `--max-allele-length`, `--shards`, and sumstats-only `--id-lookup` when supplied | `<prefix>.imported.vmap` |
 | Contig normalization | Runs `normalize_contigs.py --to <dst-contig-naming>` when the current object omits `contig_naming` or differs from `--dst-contig-naming`; final `plink_splitx` can be deferred until build is known | `<prefix>.normalized.vmap` |
 | Build resolution | Runs `guess_build.py` in place, unless `--resume` can skip because build is already resolved | current retained `.vmap` |
 | Same-build reference filtering | Always runs before any optional liftover; invokes `restrict_build_compatible.py`, passing `--allow-strand-flips` unless disabled, `--norm-indels` unless disabled, and `--sort --drop-duplicates` when current build already matches `--dst-build` | `<prefix>.build_compatible.vmap` |
@@ -48,7 +48,7 @@ Illustrative stage flow:
 | --- | --- |
 | `--input-format` | Required importer format: `bim`, `pvar`, `vcf`, or `sumstats`. See [spec/importers.md](../spec/importers.md) |
 | `--input`, `--output` | Required raw input payload and output stem. Genotype payload inputs may be sharded via `@`; see [spec/shard-discovery.md](../spec/shard-discovery.md). The final prepared output is always a single `<output>.vmap` |
-| `--sumstats-metadata`, `--id-vtable` | Sumstats-only controls: `--sumstats-metadata` is required for `--input-format sumstats` and follows the raw metadata schema at [schemas/raw-sumstats-metadata.yaml](../src/genomatch/schemas/raw-sumstats-metadata.yaml), which is the same specification used by [BioPsyk/cleansumstats](https://github.com/BioPsyk/cleansumstats). `--id-vtable` optionally fills missing `chr`/`pos` by matching on variant ID, and becomes required when those fields are absent from the summary-stat metadata |
+| `--sumstats-metadata`, `--id-lookup` | Sumstats-only controls: `--sumstats-metadata` is required for `--input-format sumstats` and follows the raw metadata schema at [schemas/raw-sumstats-metadata.yaml](../src/genomatch/schemas/raw-sumstats-metadata.yaml), which is the same specification used by [BioPsyk/cleansumstats](https://github.com/BioPsyk/cleansumstats). `--id-lookup` optionally fills missing `chr`/`pos` by matching on variant ID against a `.vtable` or `.vmap` target side, and becomes required when those fields are absent from the summary-stat metadata. `--id-vtable` is a backward-compatible alias. See [sumstats.md](sumstats.md#prepare-snp-only-files-with-id-lookup) |
 | `--dst-contig-naming` | Target contig naming; defaults to `ncbi`. Supported values are `ncbi`, `ucsc`, `plink`, and `plink_splitx`; `plink_splitx` follows PLINK `--split-x` style X/XY_PAR labeling. See [spec/contigs-and-metadata.md](../spec/contigs-and-metadata.md) |
 | `--dst-build` | Target genome build (`GRCh37`, `GRCh38`, or `T2T-CHM13v2.0`); defaults to `GRCh38`. If the input build differs, liftover rewrites both coordinates and alleles via `bcftools +liftover`, then emits canonical target rows with `a2=reference`. See [spec/variant-transforms.md](../spec/variant-transforms.md) |
 | `--[no-]allow-strand-flips` | Control strand-flip allowance during same-build reference-aware restriction; enabled by default |
@@ -94,6 +94,6 @@ Membership inputs can be either `.vtable` or `.vmap` files. When a `.vmap` is us
 | `--input`, `--output` | Required raw payload to project and rewritten payload destination. Genotype payload `--input` may be sharded via `@`; for `bfile` / `pfile`, `--output` is a PLINK output prefix and may also be sharded via `@` |
 | `--vmap` | Required mapped-only `.vmap` to apply; it defines output variant rows, row order, IDs, source provenance, and `allele_op` |
 | `--retain-snp-id` | Optional payload projection control. By default, `project_payload.py` writes corrected output IDs as `chrom:pos:a1:a2` from `.vmap` target rows; `--retain-snp-id` writes target-side `.vmap` IDs instead |
-| `--sumstats-metadata`, `--fill-mode`, `--use-af-inference` | Summary-stat controls: `--sumstats-metadata` is required for `sumstats` and `sumstats-clean`, and `--fill-mode` / `--use-af-inference` apply to `sumstats-clean`. See [spec/sumstats-harmonization.md](../spec/sumstats-harmonization.md) |
+| `--sumstats-metadata`, `--fill-mode`, `--use-af-inference` | Summary-stat controls: `--sumstats-metadata` is required for `sumstats` and `sumstats-clean`, and `--fill-mode` / `--use-af-inference` apply to `sumstats-clean`. See [sumstats.md](sumstats.md#clean-projection) and [spec/sumstats-harmonization.md](../spec/sumstats-harmonization.md) |
 | `--target-fam` / `--target-psam` / `--sample-axis {union,native}` / `--sample-id-mode {fid_iid,iid}` / `--skip-ploidy-check` | Optional genotype payload subject-axis controls for explicit target sample files, wrapper-synthesized union targets, native per-output-shard sample axes, subject keying, and ploidy-validation skipping. See [Sample-axis reconciliation for genotype payloads](../spec/payload-application.md#sample-axis-reconciliation-for-genotype-payloads) |
 | `--force` | Delete wrapper-managed outputs first, then rerun cleanly |
