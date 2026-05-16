@@ -313,6 +313,7 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py` non-clean projection mode fails before row processing when a retained metadata payload column would collide with canonical output variant columns `CHR`, `POS`, `SNP`, `EffectAllele`, or `OtherAllele`
 - `apply_vmap_to_sumstats.py` supports joined source variant fields as input metadata but emits explicit canonical output variant columns rather than joined target fields
 - `apply_vmap_to_sumstats.py` supports inputs where the only source-side variant fields are joined fields such as `CHR:POS_A1_A2`
+- `apply_vmap_to_sumstats.py` accepts tab-containing headers with whitespace-delimited data rows when the field count is unambiguous
 - `apply_vmap_to_sumstats.py` swaps odds-ratio confidence bounds when inverting a swapped interval
 - `apply_vmap_to_sumstats.py` applies swap-style numeric transforms for both `swap` and `flip_swap`
 - `apply_vmap_to_sumstats.py` rejects `@` template paths in both `--input` and `--output`

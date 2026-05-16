@@ -617,6 +617,91 @@ def test_apply_vmap_to_sumstats_surfaces_pandas_parser_failure_for_ragged_payloa
     assert "Too many columns specified" in result.stderr
 
 
+def test_apply_vmap_to_sumstats_accepts_tab_header_with_whitespace_data_row(tmp_path):
+    sumstats = tmp_path / "ss.tbl"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR \t BP \t MarkerName \t Allele1 \t Allele2 \t Freq1 \t FreqSE \t Effective_N \t Z-score \t P-value \t Direction \t Beta \t SE",
+            "1\t100\trs1\tA\tG\t0.4\t0.1\t10\t2.0\t0.05\t++? 0.2 0.1",
+        ],
+    )
+    write_lines(
+        meta,
+        [
+            "stats_Model: logistic",
+            "col_CHR: CHR",
+            "col_POS: BP",
+            "col_SNP: MarkerName",
+            "col_EffectAllele: Allele1",
+            "col_OtherAllele: Allele2",
+            "col_EAF: Freq1",
+            "col_N: Effective_N",
+            "col_Z: Z-score",
+            "col_P: P-value",
+            "col_Direction: Direction",
+            "col_BETA: Beta",
+            "col_SE: SE",
+        ],
+    )
+    write_vmap_with_meta(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
+
+    result = run_py(
+        "apply_vmap_to_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--vmap",
+        vmap,
+        "--output",
+        out,
+        "--clean",
+        "--fill-mode",
+        "column",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert out.read_text(encoding="utf-8") == (
+        "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tN\tBETA\tSE\tDirection\tEAF\n"
+        "1\t100\t1:100:A:G\tA\tG\t0.05\t2\t10\t0.2\t0.1\t++?\t0.4\n"
+    )
+
+
+def test_apply_vmap_to_sumstats_keeps_tab_parser_when_whitespace_sample_is_inconsistent(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    vmap = tmp_path / "map.vmap"
+    out = tmp_path / "out.tsv"
+    write_lines(
+        sumstats,
+        [
+            "CHR \t BP \t MarkerName \t Allele1 \t Allele2 \t Freq1 \t FreqSE \t Effective_N \t Z-score \t P-value \t Direction \t Beta \t SE",
+            "1\t100\trs1\tA\tG\t0.4\t0.1\t10\t2.0\t0.05\t++? 0.2 0.1",
+            "1\t200\trs2\tC\tT\t0.3\t0.1\t10\t3.0\t0.01\t+-? 0.3",
+        ],
+    )
+    write_lines(
+        meta,
+        [
+            "col_CHR: CHR",
+            "col_POS: BP",
+            "col_EffectAllele: Allele1",
+            "col_OtherAllele: Allele2",
+            "col_BETA: Beta",
+        ],
+    )
+    write_vmap_with_meta(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
+
+    result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
+
+    assert result.returncode != 0
+    assert "Too many columns specified" in result.stderr
+
+
 def test_apply_vmap_to_sumstats_roundtrip_preserves_provenance_with_comment_and_blank_lines(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"

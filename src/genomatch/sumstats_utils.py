@@ -29,6 +29,24 @@ def join_line(columns: List[str], delimiter: Optional[str]) -> str:
     return (delimiter or " ").join(columns)
 
 
+def refine_delimiter_from_data_row(
+    header_line: str,
+    header: List[str],
+    delimiter: Optional[str],
+    data_lines: List[str],
+) -> Tuple[List[str], Optional[str]]:
+    if delimiter != "\t" or not data_lines:
+        return header, delimiter
+    tab_field_counts = [len(split_line(data_line, delimiter)) for data_line in data_lines]
+    if all(count == len(header) for count in tab_field_counts):
+        return header, delimiter
+    whitespace_header = split_line(header_line, None)
+    whitespace_field_counts = [len(split_line(data_line, None)) for data_line in data_lines]
+    if len(whitespace_header) == len(header) and all(count == len(header) for count in whitespace_field_counts):
+        return whitespace_header, None
+    return header, delimiter
+
+
 def load_metadata(path: Path) -> Dict[str, object]:
     try:
         import yaml  # type: ignore
@@ -160,6 +178,7 @@ class EffectColumnMapping:
 
 MISSING_VALUE_TOKENS: frozenset = frozenset({"", ".", "na", "n/a", "nan", "none", "null"})
 SUMSTATS_READ_CHUNK_ROWS = 5_000_000
+SUMSTATS_DELIMITER_SAMPLE_ROWS = 10
 
 
 def is_missing_token_series(series: pd.Series) -> pd.Series:
@@ -307,6 +326,19 @@ def open_sumstats_data(path: Path) -> Iterator[Tuple[TextIO, str, List[str], Opt
             header = split_line(header_line, delimiter)
             if header_line.startswith("#") and len(header) <= 1:
                 continue
+            data_lines: List[str] = []
+            for data_line in handle:
+                if not data_line.strip() or data_line.startswith("#"):
+                    continue
+                data_lines.append(data_line.rstrip("\n"))
+                if len(data_lines) >= SUMSTATS_DELIMITER_SAMPLE_ROWS:
+                    break
+            header, delimiter = refine_delimiter_from_data_row(
+                header_line,
+                header,
+                delimiter,
+                data_lines,
+            )
             yield handle, header_line, header, delimiter, line_number
             return
     raise ValueError(f"sumstats file is missing a header line: {path}")

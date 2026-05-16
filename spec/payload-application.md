@@ -115,6 +115,7 @@ This subsection is implementation guidance only; any implementation that preserv
 - `apply_vmap_to_sumstats.py` does not reuse source-side POS / SNP / effect-allele / other-allele values in the input payload as output variant values, even when defined by the metadata
 - source-side variant columns and joined variant fields are input-only; they are not preserved, rewritten in place, or emitted in joined form
 - metadata-declared input columns must be resolved robustly, including harmless surrounding whitespace in input headers; ambiguous matches must fail rather than choosing an arbitrary column
+- if a tab-containing summary-stat header and sampled data rows have the same field count only under whitespace splitting, the input reader may treat the file as whitespace-delimited; this does not change the tab-delimited output contract
 - a metadata-declared input column match is ambiguous when more than one input header matches the metadata value after trimming surrounding whitespace and applying case-insensitive comparison
 - in projection mode, metadata-declared retained payload columns are emitted under the metadata-declared column name after trimming surrounding whitespace
 - projection mode must fail cleanly before reading payload rows if two retained metadata-declared payload/stat columns produce the same output name after trimming surrounding whitespace
