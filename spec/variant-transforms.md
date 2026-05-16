@@ -56,7 +56,7 @@ Expected ploidy for coordinate-changing transforms is defined in [ploidy-model.m
 - `liftover_build.py` may drop liftover results that land on unsupported non-primary target contigs with auditable QC
 - `liftover_build.py` must compare expected source and lifted target `(male_ploidy, female_ploidy)` pairs using the shared ploidy model and must drop rows with auditable QC status `ploidy_class_changed` when that pair changes
 - `liftover_build.py` may drop liftover results that collapse to duplicate target `chrom:pos:a1:a2` rows with auditable QC
-- `liftover_build.py` writes QC rows for mapped and unmapped source variants using original `(source_shard, source_index)` provenance
+- `liftover_build.py` writes QC rows only for non-retained source variants using original `(source_shard, source_index)` provenance; successfully lifted rows are represented by the output object and are not written to QC
 - for `.vtable` input, where original provenance is absent, `liftover_build.py` writes QC rows using synthetic shard-local provenance `(".", row_index)`
 - `liftover_build.py` emits declared coordinate order after liftover, using the shared declared-coordinate ordering rule
 - `liftover_build.py` emits the same type as the input; it preserves original source provenance when the input is `.vmap`

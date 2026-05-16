@@ -547,8 +547,9 @@ def main() -> int:
     prepared["qc_status"] = prepared["status"].astype(str)
     ready_mask = prepared["qc_status"] == "ready"
     prepared.loc[ready_mask, "qc_status"] = prepared.loc[ready_mask, "row_id"].map(parse_status_by_row_id).fillna("unmapped")
+    qc_frame = prepared.loc[prepared["qc_status"] != "lifted", ["source_shard", "source_index", "id", "qc_status"]]
     qc_rows = list(
-        prepared.loc[:, ["source_shard", "source_index", "id", "qc_status"]]
+        qc_frame
         .assign(source_index=lambda df: df["source_index"].astype(int))
         .itertuples(index=False, name=None)
     )
@@ -567,7 +568,11 @@ def main() -> int:
         )
         write_vtable_table(output_path, variant_table, assume_validated=True)
     write_metadata(output_path, metadata_with_variants_count(out_meta, len(raw_rows_table)))
-    write_vmap_status_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_rows)
+    qc_path = output_path.with_name(output_path.name + ".qc.tsv")
+    if qc_rows:
+        write_vmap_status_qc(qc_path, qc_rows)
+    elif qc_path.exists():
+        qc_path.unlink()
     logger.info(
         "liftover_build.py: wrote %s with %s output rows and %s QC rows",
         output_path,

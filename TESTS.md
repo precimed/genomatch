@@ -164,7 +164,7 @@ The migrated suite must keep coverage for:
 - `liftover_build.py` must drop rows with QC status `ploidy_class_changed` when lifted `chrom` or `pos` changes the expected `(male_ploidy, female_ploidy)` pair under the shared ploidy model
 - for `ploidy_class_changed`, the comparison is against the final candidate row that would otherwise be emitted, immediately before final output/QC accounting
 - `liftover_build.py` may drop lifted rows that collapse to duplicate target `chrom:pos:a1:a2` rows with auditable QC
-- `liftover_build.py` writes QC rows for mapped and unmapped source variants using original `(source_shard, source_index)` provenance
+- `liftover_build.py` writes QC rows only for non-retained source variants using original `(source_shard, source_index)` provenance; successfully lifted rows are represented by the output object and are not written to QC
 - `liftover_build.py` emits the same type as the input and preserves original source provenance only when the input is `.vmap`
 - `liftover_build.py` accepts UCSC-named input without changing declared output naming
 - `liftover_build.py` fails clearly on missing chain config, missing bcftools, missing FASTA indexes, and wrong-strand input that was not repaired before liftover

@@ -171,8 +171,6 @@ def test_liftover_build_vtable_emits_vtable_and_qc(tmp_path):
     assert out.with_name(out.name + ".bcftools_output.vcf").exists()
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
         ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs2", "lifted"],
-        [".", "1", "rs1", "lifted"],
         [".", "2", "rs4", "unmapped"],
     ]
 
@@ -415,7 +413,7 @@ def test_liftover_build_resume_reuses_retained_bcftools_output(tmp_path):
 
     out.unlink()
     out.with_name(out.name + ".meta.json").unlink()
-    out.with_name(out.name + ".qc.tsv").unlink()
+    out.with_name(out.name + ".qc.tsv").unlink(missing_ok=True)
     write_failing_bcftools(fake_bcftools)
 
     second = run_py_with_env(
@@ -480,11 +478,7 @@ def test_liftover_build_vmap_preserves_original_provenance(tmp_path):
         ["1", "4", "t2", "T", "A", "shardA", "9", "swap"],
         ["1", "6", "t1", "G", "A", "shardA", "8", "swap"],
     ]
-    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        ["shardA", "8", "t1", "lifted"],
-        ["shardA", "9", "t2", "lifted"],
-    ]
+    assert not out.with_name(out.name + ".qc.tsv").exists()
 
 
 def test_liftover_build_drops_rows_when_lifted_ploidy_class_changes(tmp_path):
@@ -634,11 +628,7 @@ def test_liftover_build_lifts_one_side_multibase_rows_with_qc(tmp_path):
         ["1", "3", "rs1", "AT", "A"],
         ["1", "4", "rs2", "G", "A"],
     ]
-    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "lifted"],
-        [".", "1", "rs2", "lifted"],
-    ]
+    assert not out.with_name(out.name + ".qc.tsv").exists()
 
 
 def test_liftover_build_drops_multiallelic_liftover_output_with_qc(tmp_path):

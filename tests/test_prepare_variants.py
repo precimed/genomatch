@@ -399,7 +399,6 @@ def test_prepare_variants_deferred_plink_splitx_runs_after_liftover(tmp_path):
     ]
     assert read_tsv(tmp_path / "prepared.lifted.vmap.qc.tsv") == [
         ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "lifted"],
         [".", "1", "rsX", "ploidy_class_changed"],
     ]
     assert read_tsv(tmp_path / "prepared.splitx.vmap") == [

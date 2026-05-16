@@ -71,10 +71,7 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
         "contig_naming": "ncbi",
         "variants_count": len(entries),
     }
-    expected_qc = [["source_shard", "source_index", "source_id", "status"]]
-    for idx, entry in enumerate(entries):
-        expected_qc.append([".", str(idx), entry.rsid, "lifted"])
-    assert read_tsv(lifted.with_name(lifted.name + ".qc.tsv")) == expected_qc
+    assert not lifted.with_name(lifted.name + ".qc.tsv").exists()
 
     result = run_py_with_env("restrict_build_compatible.py", env, "--source", lifted, "--output", validated)
     assert result.returncode == 0, result.stderr
