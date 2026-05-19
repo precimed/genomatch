@@ -57,6 +57,14 @@ def parse_args() -> argparse.Namespace:
         help="Optional base prefix for retained intermediates; defaults to --output",
     )
     parser.add_argument(
+        "--src-build",
+        choices=build_choices,
+        help=(
+            "Known source genome build for imported metadata. When supplied, this is passed to the importer "
+            "as --genome-build and build guessing is skipped after import."
+        ),
+    )
+    parser.add_argument(
         "--dst-build",
         default="GRCh38",
         choices=build_choices,
@@ -118,6 +126,8 @@ def importer_command(args: argparse.Namespace, output_path: Path) -> list[str]:
             if "@" not in args.input:
                 raise ValueError("--shards requires --input to contain '@'")
             cmd.extend(["--shards", args.shards])
+    if args.src_build:
+        cmd.extend(["--genome-build", args.src_build])
     cmd.extend(["--max-allele-length", str(args.max_allele_length)])
     return cmd
 

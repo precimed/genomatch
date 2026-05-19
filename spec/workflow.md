@@ -42,20 +42,22 @@ In that workflow:
 - treat `--output` as an output stem, not as a full filename
 - the final prepared output artifact is exactly `<output>.vmap`
 - omitted `--prefix` means the exact `--output` stem value
+- accept optional `--src-build` as the known source genome build and pass it through to the selected `import_*` tool as `--genome-build`
 - default `--dst-build` to `GRCh38`
 - default `--dst-contig-naming` to `ncbi`
 - accept `--allow-strand-flips` / `--no-allow-strand-flips`, defaulting strand-flip allowance to enabled
 - accept `--norm-indels` / `--no-norm-indels`, defaulting indel normalization to enabled
 - dispatch to the appropriate `import_*` tool for the selected input format
 - for `--input-format sumstats`, pass `--id-lookup` through to `import_sumstats.py` when supplied
+- pass `--src-build` through to the importer as `--genome-build` when supplied; in `import_sumstats.py --id-lookup` mode, lookup-object target metadata still takes precedence over the `--genome-build` value as defined by the importer spec
 - pass `--max-allele-length` through unchanged when supplied
 - pass `--shards` through unchanged when supplied
 - skip `normalize_contigs.py` only when the current retained object already declares the requested `--dst-contig-naming`
 - run `normalize_contigs.py` when the current retained object omits `contig_naming` or declares a different naming than requested
 - exception: if `--dst-contig-naming=plink_splitx` and the current retained stage has `genome_build=unknown`, the wrapper must defer final `plink_splitx` normalization until build is known
 - in that deferred `plink_splitx` case, if the current retained stage also omits `contig_naming`, the wrapper must first normalize to interim build-independent `plink` so that `guess_build.py` can run on declared contigs
-- run `guess_build.py` in place on the current retained stage
-- with `--resume`, skip `guess_build.py` when the current retained stage already has resolved `genome_build`
+- run `guess_build.py` in place on the current retained stage when its `genome_build` is `unknown`
+- skip `guess_build.py` when the current retained stage already has resolved `genome_build`, including when `--src-build` supplied known importer metadata
 - run `restrict_build_compatible.py` before any optional liftover
 - by default, pass both `--allow-strand-flips` and `--norm-indels` through to `restrict_build_compatible.py`
 - if `--no-allow-strand-flips` is supplied to `prepare_variants.py`, omit `--allow-strand-flips` when invoking `restrict_build_compatible.py`
@@ -135,7 +137,7 @@ Per-contig-group execution:
 
 - for each target-contig group, replace `@` in wrapper `--prefix` with the canonical group token (`1` through `22`, `X`, `Y`, or `MT`); all wrapper-managed retained intermediates and temporary files for that invocation must be under this per-contig-group stem
 - invoke `prepare_variants.py` once per target-contig group with the original `@` input template, `--shards <comma-separated exact selected shard tokens for this target-contig group>`, wrapper-controlled `--contigs <target contig label for this group>`, and the per-contig-group stem as both `--prefix` and group final `--output`
-- pass all other preparation controls through unchanged to each per-contig-group `prepare_variants.py` invocation, including build, contig naming, strand, indel, allele-length, `--resume`, and `--force` controls
+- pass all other preparation controls through unchanged to each per-contig-group `prepare_variants.py` invocation, including source build, destination build, contig naming, strand, indel, allele-length, `--resume`, and `--force` controls
 - the importer invoked inside `prepare_variants.py` must preserve each exact selected shard token as `source_shard`
 - the wrapper-controlled contig filter ensures each per-contig-group final `.vmap` contains only that target contig; a group final may contain zero rows after filtering
 

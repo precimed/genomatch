@@ -36,7 +36,7 @@ Illustrative stage flow:
 | --- | --- | --- |
 | Import | Always runs `import_<format>.py`; passes importer controls such as `--max-allele-length`, `--shards`, and sumstats-only `--id-lookup` when supplied | `<prefix>.imported.vmap` |
 | Contig normalization | Runs `normalize_contigs.py --to <dst-contig-naming>` when the current object omits `contig_naming` or differs from `--dst-contig-naming`; final `plink_splitx` can be deferred until build is known | `<prefix>.normalized.vmap` |
-| Build resolution | Runs `guess_build.py` in place, unless `--resume` can skip because build is already resolved | current retained `.vmap` |
+| Build resolution | Runs `guess_build.py` in place when the current object still has `genome_build=unknown`; skipped when build is already resolved, including after `--src-build` import metadata | current retained `.vmap` |
 | Same-build reference filtering | Always runs before any optional liftover; invokes `restrict_build_compatible.py`, passing `--allow-strand-flips` unless disabled, `--norm-indels` unless disabled, and `--sort --drop-duplicates` when current build already matches `--dst-build` | `<prefix>.build_compatible.vmap` |
 | Liftover | Runs `liftover_build.py --target-build <dst-build>` when the current build differs from `--dst-build` after same-build filtering | `<prefix>.lifted.vmap` |
 | Deferred split-X normalization | Runs `normalize_contigs.py --to plink_splitx` when `--dst-contig-naming=plink_splitx` and final split-X normalization was deferred until build resolution | `<prefix>.splitx.vmap` |
@@ -50,6 +50,7 @@ Illustrative stage flow:
 | `--input`, `--output` | Required raw input payload and output stem. Genotype payload inputs may be sharded via `@`; see [spec/shard-discovery.md](../spec/shard-discovery.md). The final prepared output is always a single `<output>.vmap` |
 | `--sumstats-metadata`, `--id-lookup` | Sumstats-only controls: `--sumstats-metadata` is required for `--input-format sumstats` and follows the raw metadata schema at [schemas/raw-sumstats-metadata.yaml](../src/genomatch/schemas/raw-sumstats-metadata.yaml), which is the same specification used by [BioPsyk/cleansumstats](https://github.com/BioPsyk/cleansumstats). `--id-lookup` optionally fills missing `chr`/`pos` by matching on variant ID against a `.vmap` or compatible `.vtable` target side, and becomes required when those fields are absent from the summary-stat metadata. See [sumstats.md](sumstats.md#prepare-snp-only-files-with-id-lookup) |
 | `--dst-contig-naming` | Target contig naming; defaults to `ncbi`. Supported values are `ncbi`, `ucsc`, `plink`, and `plink_splitx`; `plink_splitx` follows PLINK `--split-x` style X/XY_PAR labeling. See [spec/contigs-and-metadata.md](../spec/contigs-and-metadata.md) |
+| `--src-build` | Known source genome build (`GRCh37`, `GRCh38`, or `T2T-CHM13v2.0`). When supplied, it is passed to the importer as source metadata and `prepare_variants.py` skips `guess_build.py`. For summary statistics with `--id-lookup`, lookup-object target metadata still takes precedence during import |
 | `--dst-build` | Target genome build (`GRCh37`, `GRCh38`, or `T2T-CHM13v2.0`); defaults to `GRCh38`. If the input build differs, liftover rewrites both coordinates and alleles via `bcftools +liftover`, then emits canonical target rows with `a2=reference`. See [spec/variant-transforms.md](../spec/variant-transforms.md) |
 | `--[no-]allow-strand-flips` | Control strand-flip allowance during same-build reference-aware restriction; enabled by default |
 | `--[no-]norm-indels` | Control indel normalization during same-build reference-aware restriction; `bcftools norm` is used internally when enabled |
@@ -67,7 +68,7 @@ Illustrative stage flow:
 | `--input`, `--input-format` | Required sharded raw input. `--input` must contain `@`; `--input-format` may be `bim`, `pvar`, or `vcf` |
 | `--output` | Required non-sharded output stem. The final prepared output is `<output>.vmap` |
 | `--prefix` | Required retained-intermediate stem and must contain `@`; per-contig-group retained outputs replace `@` with the target contig group token |
-| Other preparation flags | Same meaning as `prepare_variants.py` and passed through to each per-contig-group invocation |
+| Other preparation flags | Same meaning as `prepare_variants.py` and passed through to each per-contig-group invocation, including `--src-build` |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
 
 ## Intersect variants

@@ -47,6 +47,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Non-sharded output stem; final artifact is <output>.vmap")
     parser.add_argument("--prefix", required=True, help="Sharded retained-intermediate prefix containing @")
     parser.add_argument(
+        "--src-build",
+        choices=build_choices,
+        help=(
+            "Known source genome build for imported metadata. Passed through to prepare_variants.py, "
+            "which forwards it to the importer."
+        ),
+    )
+    parser.add_argument(
         "--dst-build",
         default="GRCh38",
         choices=build_choices,
@@ -135,6 +143,8 @@ def prepare_command(
         "--max-allele-length",
         str(args.max_allele_length),
     )
+    if args.src_build:
+        cmd.extend(["--src-build", args.src_build])
     cmd.append("--allow-strand-flips" if args.allow_strand_flips else "--no-allow-strand-flips")
     cmd.append("--norm-indels" if args.norm_indels else "--no-norm-indels")
     if args.drop_strand_ambiguous:

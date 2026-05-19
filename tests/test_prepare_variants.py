@@ -121,12 +121,30 @@ def test_prepare_variants_argparse_rejects_invalid_dst_build(tmp_path):
     assert "invalid choice: 'hg38'" in result.stderr
 
 
+def test_prepare_variants_argparse_rejects_invalid_src_build(tmp_path):
+    result = run_py(
+        "prepare_variants.py",
+        "--input",
+        tmp_path / "source.bim",
+        "--input-format",
+        "bim",
+        "--output",
+        tmp_path / "prepared",
+        "--src-build",
+        "hg19",
+    )
+
+    assert result.returncode != 0
+    assert "invalid choice: 'hg19'" in result.stderr
+
+
 def test_prepare_variants_help_lists_dst_build_choices():
     result = run_py("prepare_variants.py", "--help")
 
     assert result.returncode == 0
     help_text = " ".join(result.stdout.split())
     assert "Destination genome build (GRCh37, GRCh38, T2T-CHM13v2.0; default: GRCh38)" in help_text
+    assert "Known source genome build for imported metadata" in help_text
 
 
 def base_env(
@@ -435,6 +453,40 @@ def test_prepare_variants_fresh_known_build_skips_guess_build(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
+    assert "skipping guess_build.py" in result.stderr
+    command_lines = [line for line in result.stderr.splitlines() if "+ " in line]
+    assert not any("guess_build.py" in line for line in command_lines)
+    assert read_tsv(tmp_path / "prepared.vmap") == [["1", "1", "rs1", "G", "A", ".", "0", "identity"]]
+
+
+def test_prepare_variants_src_build_passes_importer_metadata_and_skips_guess_build(tmp_path):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "A" * 10},
+        grch38_sequences={"chr1": "T" * 10},
+    )
+    source = tmp_path / "source.bim"
+    output = tmp_path / "prepared"
+    write_bim(source, ["1\trs1\t0\t1\tG\tA"])
+
+    result = run_py_with_env(
+        "prepare_variants.py",
+        env,
+        "--input",
+        source,
+        "--input-format",
+        "bim",
+        "--output",
+        output,
+        "--src-build",
+        "GRCh37",
+        "--dst-build",
+        "GRCh37",
+    )
+
+    assert result.returncode == 0, result.stderr
+    import_line = next(line for line in result.stderr.splitlines() if "import_bim.py" in line)
+    assert "--genome-build GRCh37" in import_line
     assert "skipping guess_build.py" in result.stderr
     command_lines = [line for line in result.stderr.splitlines() if "+ " in line]
     assert not any("guess_build.py" in line for line in command_lines)

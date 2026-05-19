@@ -41,6 +41,19 @@ from utils import read_tsv, run_py, run_py_with_env
             ],
             "invalid choice: 'hg38'",
         ),
+        (
+            [
+                "--input",
+                "source.@.bim",
+                "--prefix",
+                "work/@/prepared",
+                "--output",
+                "prepared",
+                "--src-build",
+                "hg19",
+            ],
+            "invalid choice: 'hg19'",
+        ),
     ],
 )
 def test_prepare_variants_sharded_validates_sharded_contract(args, message):
@@ -56,6 +69,7 @@ def test_prepare_variants_sharded_help_lists_dst_build_choices():
     assert result.returncode == 0
     help_text = " ".join(result.stdout.split())
     assert "Destination genome build (GRCh37, GRCh38, T2T-CHM13v2.0; default: GRCh38)" in help_text
+    assert "Known source genome build for imported metadata" in help_text
 
 
 def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_rank_order(tmp_path):
@@ -85,6 +99,8 @@ def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_ran
         output,
         "--shards",
         "10,2,NONPAR,nonpar",
+        "--src-build",
+        "GRCh37",
         "--dst-build",
         "GRCh37",
         "--no-norm-indels",
@@ -94,6 +110,7 @@ def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_ran
     assert "sort_variants.py" not in result.stderr
 
     command_lines = [line for line in result.stderr.splitlines() if "+ prepare_variants.py" in line]
+    assert all("--src-build GRCh37" in line for line in command_lines)
     x_lines = [line for line in command_lines if str(tmp_path / "work" / "reference.X.prepared") in line]
     assert len(x_lines) == 1
     assert "--shards NONPAR,nonpar" in x_lines[0]

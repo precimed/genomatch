@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.4.2] - 2026-05-19
+
+### Added
+- Added `prepare_variants.py` and `prepare_variants_sharded.py --src-build` to declare a known source genome build and skip build guessing during preparation.
+
 ## [v0.4.1] - 2026-05-16
 
 ### Added

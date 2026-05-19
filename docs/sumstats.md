@@ -72,6 +72,7 @@ prepare_variants.py \
 `prepare_variants.py --input-format sumstats` supports these summary-statistics controls:
 
 - `--id-lookup` enables the SNP-only coordinate lookup mode described above.
+- `--src-build` declares the source genome build when it is already known and skips build guessing after import. In `--id-lookup` mode, the lookup object's target metadata still defines the imported build and contig naming.
 - `--max-allele-length` is passed to the importer and drops rows whose effect or other allele exceeds the configured length. The default is `150`.
 - `--chr2use` / `--contigs` restrict the final prepared `.vmap` to selected contigs.
 
