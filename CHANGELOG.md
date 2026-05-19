@@ -9,7 +9,7 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 ## [v0.4.3] - 2026-05-19
 
 ### Added
-- Added `assign_vmap_ids.py` for replacing IDs in an existing `.vmap` after preparation. IDs are copied from a prepared `.vmap` or `.vtable` lookup by exact `chrom:pos:a1:a2` match; row order and provenance are preserved. Rows without a non-missing assigned ID are dropped by default, with `--unmatched-id-policy` available to retain unmatched rows as generated variant-key IDs or `.` IDs.
+- Added `assign_vmap_ids.py` for replacing IDs in an existing `.vmap` after preparation. IDs are copied from a prepared `.vmap` or `.vtable` lookup by exact `chrom:pos:a1:a2` match; row order and provenance are preserved. Rows without a non-missing assigned ID are dropped by default, with `--unmatched-id-policy` available to retain unmatched rows as generated variant-key IDs or `.` IDs. Duplicate retained non-missing output IDs fail by default; use `--duplicate-id-policy` to allow them or drop all duplicated-ID rows to QC.
 
 ## [v0.4.2] - 2026-05-19
 

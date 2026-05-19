@@ -125,7 +125,7 @@ Rows with missing IDs or IDs absent from the lookup are dropped and recorded in 
 
 `--id-lookup` is only a preparation-time coordinate-enrichment step. Downstream matching still uses exact prepared `chr:bp:a1:a2` rows and ignores variant IDs. It is independent of `--retain-snp-id`: `--retain-snp-id` is only a projection-time option for `project_payload.py` that decides whether the output `SNP` column uses `.vmap` IDs or generated `chrom:pos:a1:a2` IDs. It does not affect whether prepared `.vmap` files retain raw IDs for later use as `--id-lookup` objects.
 
-For the opposite direction, use `assign_vmap_ids.py` after preparation or restriction. It matches already-prepared `.vmap` rows to an ID source by exact `chrom:pos:a1:a2` and copies IDs onto the `.vmap`; it does not fill missing coordinates by matching raw summary-statistic IDs. By default it drops rows that have no ID-source match, but `--unmatched-id-policy variant-key` or `--unmatched-id-policy missing` can retain those rows with generated `chrom:pos:a1:a2` IDs or `.` IDs.
+For the opposite direction, use `assign_vmap_ids.py` after preparation or restriction. It matches already-prepared `.vmap` rows to an ID source by exact `chrom:pos:a1:a2` and copies IDs onto the `.vmap`; it does not fill missing coordinates by matching raw summary-statistic IDs. See [Assign vmap IDs](workflow.md#assign-vmap-ids) for policy details.
 
 ## Project Summary Statistics
 

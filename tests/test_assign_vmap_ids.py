@@ -126,6 +126,7 @@ def test_assign_vmap_ids_missing_policy_retains_unmatched_rows_with_missing_id_w
         [
             "1\t10\told1\tA\tG\t.\t0\tidentity",
             "1\t20\told2\tC\tT\t.\t1\tidentity",
+            "1\t30\told3\tG\tA\t.\t2\tidentity",
         ],
     )
     write_vtable(id_source, ["1\t10\trs10\tA\tG"])
@@ -146,8 +147,118 @@ def test_assign_vmap_ids_missing_policy_retains_unmatched_rows_with_missing_id_w
     assert read_tsv(out) == [
         ["1", "10", "rs10", "A", "G", ".", "0", "identity"],
         ["1", "20", ".", "C", "T", ".", "1", "identity"],
+        ["1", "30", ".", "G", "A", ".", "2", "identity"],
     ]
     assert not out.with_name(out.name + ".qc.tsv").exists()
+
+
+def test_assign_vmap_ids_rejects_duplicate_output_ids_by_default(tmp_path):
+    source = tmp_path / "source.vmap"
+    id_source = tmp_path / "ids.vtable"
+    out = tmp_path / "out.vmap"
+    write_vmap(
+        source,
+        [
+            "1\t10\told1\tA\tG\t.\t0\tidentity",
+            "1\t20\told2\tC\tT\t.\t1\tidentity",
+        ],
+    )
+    write_vtable(
+        id_source,
+        [
+            "1\t10\trs_dup\tA\tG",
+            "1\t20\trs_dup\tC\tT",
+        ],
+    )
+
+    result = run_py("assign_vmap_ids.py", "--vmap", source, "--id-source", id_source, "--output", out)
+
+    assert result.returncode != 0
+    assert "duplicate non-missing ID 'rs_dup'" in result.stderr
+    assert not out.exists()
+
+
+def test_assign_vmap_ids_duplicate_id_policy_allow_keeps_duplicate_output_ids(tmp_path):
+    source = tmp_path / "source.vmap"
+    id_source = tmp_path / "ids.vtable"
+    out = tmp_path / "out.vmap"
+    write_vmap(
+        source,
+        [
+            "1\t10\told1\tA\tG\t.\t0\tidentity",
+            "1\t20\told2\tC\tT\t.\t1\tidentity",
+        ],
+    )
+    write_vtable(
+        id_source,
+        [
+            "1\t10\trs_dup\tA\tG",
+            "1\t20\trs_dup\tC\tT",
+        ],
+    )
+
+    result = run_py(
+        "assign_vmap_ids.py",
+        "--vmap",
+        source,
+        "--id-source",
+        id_source,
+        "--output",
+        out,
+        "--duplicate-id-policy",
+        "allow",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [
+        ["1", "10", "rs_dup", "A", "G", ".", "0", "identity"],
+        ["1", "20", "rs_dup", "C", "T", ".", "1", "identity"],
+    ]
+    assert not out.with_name(out.name + ".qc.tsv").exists()
+
+
+def test_assign_vmap_ids_duplicate_id_policy_drop_all_audits_duplicate_output_ids(tmp_path):
+    source = tmp_path / "source.vmap"
+    id_source = tmp_path / "ids.vtable"
+    out = tmp_path / "out.vmap"
+    write_vmap(
+        source,
+        [
+            "1\t10\told1\tA\tG\t.\t0\tidentity",
+            "1\t20\told2\tC\tT\t.\t1\tidentity",
+            "1\t30\told3\tG\tA\t.\t2\tidentity",
+            "1\t40\told4\tA\tC\t.\t3\tidentity",
+        ],
+    )
+    write_vtable(
+        id_source,
+        [
+            "1\t10\trs_dup\tA\tG",
+            "1\t20\trs_dup\tC\tT",
+            "1\t30\trs30\tG\tA",
+        ],
+    )
+
+    result = run_py(
+        "assign_vmap_ids.py",
+        "--vmap",
+        source,
+        "--id-source",
+        id_source,
+        "--output",
+        out,
+        "--duplicate-id-policy",
+        "drop-all",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "30", "rs30", "G", "A", ".", "2", "identity"]]
+    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
+        ["source_shard", "source_index", "source_id", "status"],
+        [".", "0", "old1", "duplicate_id"],
+        [".", "1", "old2", "duplicate_id"],
+        [".", "3", "old4", "id_not_found"],
+    ]
 
 
 def test_assign_vmap_ids_accepts_vmap_id_source_and_ignores_its_provenance(tmp_path):
@@ -235,6 +346,7 @@ def test_assign_vmap_ids_rejects_duplicate_used_key_across_id_source_chunks(tmp_
             id_source,
             id_source_info,
             unmatched_id_policy="drop",
+            duplicate_id_policy="fail",
         )
 
 

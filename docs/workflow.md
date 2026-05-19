@@ -95,6 +95,8 @@ This is the reverse direction from summary-statistics `prepare_variants.py --id-
 
 By default, rows without an exact ID-source match are dropped and recorded in `<output>.qc.tsv` with status `id_not_found`. To retain those unmatched rows, use `--unmatched-id-policy variant-key` to write `id=chrom:pos:a1:a2`, or `--unmatched-id-policy missing` to write `id=.`; retained unmatched rows are not written to QC. Rows whose matched ID-source ID is empty or `.` are always dropped and audited with status `missing_id`.
 
+By default, retained output IDs must be unique, excluding missing IDs (`.` or empty). If two retained rows would receive the same non-missing ID, the tool fails clearly. Use `--duplicate-id-policy allow` to keep duplicate IDs, or `--duplicate-id-policy drop-all` to drop all rows carrying duplicated output IDs and audit them with status `duplicate_id`.
+
 If the ID source contains a duplicate `chrom:pos:a1:a2` key that is present in the source `.vmap`, the tool fails clearly; duplicate unused keys are ignored. The inputs must have the same `genome_build` and `contig_naming`; no contig normalization, allele flipping, or liftover is performed.
 
 ```bash
@@ -109,6 +111,7 @@ assign_vmap_ids.py \
   --vmap study.reference.vmap \
   --id-source dbsnp.vmap \
   --unmatched-id-policy variant-key \
+  --duplicate-id-policy drop-all \
   --output study.reference.mixed_ids.vmap
 ```
 

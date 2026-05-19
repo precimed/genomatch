@@ -50,6 +50,15 @@ def parse_args() -> argparse.Namespace:
             "Rows matched to missing ID-source IDs are always dropped and audited."
         ),
     )
+    parser.add_argument(
+        "--duplicate-id-policy",
+        choices=["allow", "fail", "drop-all"],
+        default="fail",
+        help=(
+            "How to handle duplicate non-missing IDs in the retained output .vmap: "
+            "fail clearly (default), allow them, or drop all rows carrying duplicated IDs to QC."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -73,12 +82,27 @@ def require_no_duplicate_candidate_keys(coordinates: pd.DataFrame, *, path: Path
         raise_duplicate_used_key(path, coordinates.loc[duplicate_mask].iloc[0])
 
 
+def duplicated_output_id_mask(frame: pd.DataFrame) -> pd.Series:
+    ids = frame["id"].astype(str).str.strip()
+    non_missing_id_mask = ~ids.isin({"", "."})
+    return non_missing_id_mask & ids.duplicated(keep=False)
+
+
+def raise_duplicate_output_id(frame: pd.DataFrame) -> None:
+    duplicate_id = str(frame.loc[duplicated_output_id_mask(frame), "id"].iloc[0])
+    raise ValueError(
+        f"output .vmap would contain duplicate non-missing ID {duplicate_id!r}; "
+        "use --duplicate-id-policy allow or --duplicate-id-policy drop-all to override"
+    )
+
+
 def assign_ids_from_id_source(
     source_frame: pd.DataFrame,
     id_source_path: Path,
     id_source_info,
     *,
     unmatched_id_policy: str,
+    duplicate_id_policy: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Assumes: source_frame is a loaded, unique-target source .vmap frame.
     # Performs: SV(streamed ID-source filtering, duplicate-used-key checks, vectorized ID assignment).
@@ -86,6 +110,7 @@ def assign_ids_from_id_source(
     source_keys = exact_key_index(source_frame)
     row_idx_column = "_row_idx"
     assigned_id_column = "_assigned_id"
+    source_id_column = "_source_id"
     source_frame[row_idx_column] = pd.RangeIndex(len(source_frame))
     source_frame[assigned_id_column] = pd.Series([None] * len(source_frame), dtype="object")
     observed_rows = 0
@@ -126,6 +151,7 @@ def assign_ids_from_id_source(
     retain_mask = (matched_mask & ~missing_id_mask) | (unmatched_mask & (unmatched_id_policy != "drop"))
 
     out_frame = source_frame.loc[retain_mask].copy()
+    out_frame[source_id_column] = out_frame["id"].astype(str)
     out_assigned_ids = assigned_ids.loc[retain_mask].copy()
     out_unmatched_mask = out_assigned_ids.isna()
     if bool(out_unmatched_mask.any()):
@@ -135,14 +161,31 @@ def assign_ids_from_id_source(
         elif unmatched_id_policy == "missing":
             out_assigned_ids.loc[out_unmatched_mask] = "."
     out_frame["id"] = out_assigned_ids.astype(str).to_numpy()
-    out_frame = out_frame.drop(columns=[row_idx_column, assigned_id_column])
 
     dropped_frame = source_frame.loc[~retain_mask].copy()
     if not dropped_frame.empty:
         dropped_frame["status"] = "missing_id"
         dropped_frame.loc[unmatched_mask.loc[dropped_frame.index], "status"] = "id_not_found"
         dropped_frame.loc[missing_id_mask.loc[dropped_frame.index], "status"] = "missing_id"
-        dropped_frame = dropped_frame.drop(columns=[row_idx_column, assigned_id_column])
+
+    if duplicate_id_policy != "allow":
+        duplicate_id_mask = duplicated_output_id_mask(out_frame)
+        if bool(duplicate_id_mask.any()):
+            if duplicate_id_policy == "fail":
+                raise_duplicate_output_id(out_frame)
+            duplicate_dropped_frame = out_frame.loc[duplicate_id_mask].copy()
+            duplicate_dropped_frame["status"] = "duplicate_id"
+            duplicate_dropped_frame["id"] = duplicate_dropped_frame[source_id_column].astype(str)
+            dropped_frame = pd.concat([dropped_frame, duplicate_dropped_frame], axis=0)
+            out_frame = out_frame.loc[~duplicate_id_mask].copy()
+
+    out_frame = out_frame.drop(columns=[row_idx_column, assigned_id_column, source_id_column])
+    if not dropped_frame.empty:
+        dropped_frame = dropped_frame.sort_values(row_idx_column, kind="stable")
+        dropped_frame = dropped_frame.drop(
+            columns=[row_idx_column, assigned_id_column, source_id_column],
+            errors="ignore",
+        )
     return out_frame.reset_index(drop=True), dropped_frame.reset_index(drop=True)
 
 
@@ -175,6 +218,7 @@ def main() -> int:
         id_source_path,
         id_source_info,
         unmatched_id_policy=args.unmatched_id_policy,
+        duplicate_id_policy=args.duplicate_id_policy,
     )
     qc_path = output_path.with_name(output_path.name + ".qc.tsv")
     if dropped_frame.empty:

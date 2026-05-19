@@ -291,6 +291,10 @@ The migrated suite must keep coverage for:
 - `--unmatched-id-policy variant-key` retains rows without an ID-source match with `id=chrom:pos:a1:a2` and no QC row
 - `--unmatched-id-policy missing` retains rows without an ID-source match with `id=.` and no QC row
 - rows matched to a missing ID-source ID are dropped and audited with `missing_id`
+- by default, duplicate retained non-missing output IDs fail clearly
+- `--duplicate-id-policy allow` retains duplicate non-missing output IDs
+- `--duplicate-id-policy drop-all` drops all rows carrying duplicate non-missing output IDs and audits them with `duplicate_id`
+- duplicate-ID checks ignore missing IDs (`.` or empty)
 - `assign_vmap_ids.py` emits `.vmap`
 
 ### Unions

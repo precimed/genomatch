@@ -48,6 +48,7 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - `assign_vmap_ids.py` assigns IDs to one source `.vmap` from an ID source `.vmap` / `.vtable`
 - CLI shape is `assign_vmap_ids.py --vmap <source.vmap> --id-source <source.vmap|source.vtable> --output <output.vmap>`
 - optional `--unmatched-id-policy {drop,variant-key,missing}` controls source `.vmap` rows with no exact `--id-source` match; default is `drop`
+- optional `--duplicate-id-policy {allow,fail,drop-all}` controls duplicate non-missing IDs in retained output rows; default is `fail`
 - `assign_vmap_ids.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `assign_vmap_ids.py` performs no implicit normalization, allele flipping, liftover, or ID-based matching
 - matching is by exact `chrom:pos:a1:a2`
@@ -63,6 +64,10 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - with `--unmatched-id-policy variant-key`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are retained with `id=chrom:pos:a1:a2` from the source `.vmap` row and are not audited
 - with `--unmatched-id-policy missing`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are retained with `id=.` and are not audited
 - rows whose matching `--id-source` ID is empty or `.` are dropped and audited in `<output>.qc.tsv` with status `missing_id`
+- with `--duplicate-id-policy fail`, if retained output rows would contain duplicate non-missing IDs, fail clearly
+- with `--duplicate-id-policy allow`, duplicate non-missing output IDs are retained
+- with `--duplicate-id-policy drop-all`, all rows carrying duplicate non-missing output IDs are dropped and audited in `<output>.qc.tsv` with status `duplicate_id`
+- duplicate-ID checks ignore missing IDs (`.` or empty)
 - `<output>.qc.tsv` contains dropped rows only; rows are keyed by source `.vmap` provenance and contain `source_shard`, `source_index`, `source_id`, and `status`
 - if no rows are dropped, no QC sidecar is emitted and any stale `<output>.qc.tsv` is removed
 - output is `.vmap`
