@@ -1,7 +1,11 @@
 import json
 
+import pandas as pd
 import pytest
 
+from genomatch import vtable_utils
+from genomatch.exact_set_utils import load_target_object_info
+from genomatch.sumstats_id_lookup import augment_rows_frame_with_id_lookup
 from utils import read_tsv, run_py, write_lines
 
 
@@ -765,7 +769,7 @@ def test_import_sumstats_id_lookup_accepts_vmap_and_ignores_provenance(tmp_path)
     assert meta_payload["target"]["contig_naming"] == "ucsc"
 
 
-def test_import_sumstats_id_lookup_ignores_invalid_lookup_ids_and_audits_invalid_unmatched_and_ambiguous_source_ids(tmp_path):
+def test_import_sumstats_id_lookup_ignores_invalid_lookup_ids_allows_same_coordinate_duplicates_and_audits_unmatched(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     id_vtable = tmp_path / "lookup.vtable"
@@ -785,9 +789,8 @@ def test_import_sumstats_id_lookup_ignores_invalid_lookup_ids_and_audits_invalid
         id_vtable,
         [
             "1\t10\t.\tA\tG",
-            "1\t11\t\tA\tG",
             "1\t12\trs_dup\tA\tG",
-            "1\t13\trs_dup\tA\tG",
+            "1\t12\trs_dup\tC\tT",
             "1\t14\trs_ok\tA\tG",
         ],
         genome_build="GRCh37",
@@ -807,14 +810,116 @@ def test_import_sumstats_id_lookup_ignores_invalid_lookup_ids_and_audits_invalid
     )
 
     assert result.returncode == 0, result.stderr
-    assert "ignored 2 --id-lookup rows" in result.stderr
-    assert read_tsv(out) == [["1", "14", "rs_ok", "A", "G", ".", "3", "identity"]]
+    assert "ignored 1 --id-lookup rows" in result.stderr
+    assert read_tsv(out) == [
+        ["1", "12", "rs_dup", "A", "G", ".", "2", "identity"],
+        ["1", "14", "rs_ok", "A", "G", ".", "3", "identity"],
+    ]
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
         ["source_shard", "source_index", "reason"],
         [".", "0", "invalid_id"],
         [".", "1", "id_not_found"],
-        [".", "2", "ambiguous_id_match"],
     ]
+
+
+def test_import_sumstats_id_lookup_rejects_needed_id_with_different_coordinate_matches(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    id_vtable = tmp_path / "lookup.vtable"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["SNP\tEA\tOA", "rs_dup\tA\tG"])
+    write_lines(meta, ["col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+    write_vtable_with_meta(
+        id_vtable,
+        [
+            "1\t12\trs_dup\tA\tG",
+            "1\t13\trs_dup\tA\tG",
+        ],
+        genome_build="GRCh37",
+        contig_naming="ncbi",
+    )
+
+    result = run_py(
+        "import_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--id-lookup",
+        id_vtable,
+        "--output",
+        out,
+    )
+
+    assert result.returncode != 0
+    assert "--id-lookup is ambiguous for source ID 'rs_dup'" in result.stderr
+    assert "1:12 and 1:13" in result.stderr
+    assert not out.exists()
+
+
+def test_import_sumstats_id_lookup_rejects_needed_id_with_different_coordinates_across_lookup_chunks(
+    tmp_path,
+    monkeypatch,
+):
+    id_vtable = tmp_path / "lookup.vtable"
+    write_vtable_with_meta(
+        id_vtable,
+        [
+            "1\t12\trs_dup\tA\tG",
+            "1\t13\trs_dup\tA\tG",
+        ],
+        genome_build="GRCh37",
+        contig_naming="ncbi",
+    )
+    rows_frame = pd.DataFrame(
+        {
+            "chrom": [""],
+            "pos": [""],
+            "id": ["rs_dup"],
+            "a1": ["A"],
+            "a2": ["G"],
+            "source_shard": ["."],
+            "source_index": [0],
+        }
+    )
+    monkeypatch.setattr(vtable_utils, "WRITE_CHUNK_ROWS", 1)
+
+    with pytest.raises(ValueError, match="--id-lookup is ambiguous for source ID 'rs_dup'"):
+        augment_rows_frame_with_id_lookup(rows_frame, id_vtable, load_target_object_info(id_vtable))
+
+
+def test_import_sumstats_id_lookup_ignores_irrelevant_duplicate_lookup_ids(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    id_vtable = tmp_path / "lookup.vtable"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["SNP\tEA\tOA", "rs_ok\tA\tG"])
+    write_lines(meta, ["col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+    write_vtable_with_meta(
+        id_vtable,
+        [
+            "1\t10\trs_unused\tA\tG",
+            "1\t11\trs_unused\tC\tT",
+            "1\t14\trs_ok\tA\tG",
+        ],
+        genome_build="GRCh37",
+        contig_naming="ncbi",
+    )
+
+    result = run_py(
+        "import_sumstats.py",
+        "--input",
+        sumstats,
+        "--sumstats-metadata",
+        meta,
+        "--id-lookup",
+        id_vtable,
+        "--output",
+        out,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "14", "rs_ok", "A", "G", ".", "0", "identity"]]
 
 
 def test_import_sumstats_id_lookup_requires_metadata_to_omit_chr_and_pos(tmp_path):

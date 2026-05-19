@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "genomatch"
-version = "0.4.2"
+version = "0.4.3"
 description = "A Python toolkit for auditable harmonization, liftover, intersection, and projection of genetic variant tables and payloads."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,6 +25,7 @@ dependencies = [
 "apply_vmap_to_bfile.py" = "genomatch.apply_vmap_to_bfile:cli_main"
 "apply_vmap_to_pfile.py" = "genomatch.apply_vmap_to_pfile:cli_main"
 "apply_vmap_to_sumstats.py" = "genomatch.apply_vmap_to_sumstats:cli_main"
+"assign_vmap_ids.py" = "genomatch.assign_vmap_ids:cli_main"
 "convert_vmap_to_target.py" = "genomatch.convert_vmap_to_target:cli_main"
 "drop_strand_ambiguous.py" = "genomatch.drop_strand_ambiguous:cli_main"
 "guess_build.py" = "genomatch.guess_build:cli_main"

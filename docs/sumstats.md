@@ -96,15 +96,15 @@ col_OR: odds_ratio
 col_P: p_value
 ```
 
-The lookup object should usually be a `.vmap` whose target-side `id` column contains the raw summary-statistic IDs. Its target-side metadata defines the starting build and contig naming before `prepare_variants.py` applies the requested `--dst-build` and `--dst-contig-naming`.
+The lookup object should usually be a `.vmap` whose `id` column contains the raw summary-statistic IDs. Its metadata defines the starting build and contig naming before `prepare_variants.py` applies the requested `--dst-build` and `--dst-contig-naming`.
 
-The usual source for an `--id-lookup` object is a `.vmap` that was already produced by `prepare_variants.py` from another dataset whose raw variant ID column contains dbSNP rsIDs or the same ID namespace used by the SNP-only summary statistics. Importers preserve those raw IDs in the target-side `.vmap` `id` column, while coordinate and allele transforms update `chrom`, `pos`, `a1`, and `a2` as needed. `restrict_vmap.py` also preserves the source `.vmap` `id` values when filtering by target membership. That makes a prepared or restricted `.vmap` reusable as an rsID-to-target-coordinate lookup for later SNP-only summary-statistics imports.
+The usual source for an `--id-lookup` object is a `.vmap` that was already produced by `prepare_variants.py` from another dataset whose raw variant ID column contains dbSNP rsIDs or the same ID namespace used by the SNP-only summary statistics. Importers preserve those raw IDs in the `.vmap` `id` column, while coordinate and allele transforms update `chrom`, `pos`, `a1`, and `a2` as needed. `restrict_vmap.py` also preserves the source `.vmap` `id` values when filtering by target membership. That makes a prepared or restricted `.vmap` reusable as an rsID-to-coordinate lookup for later SNP-only summary-statistics imports.
 
 The lookup object must also have its normal metadata sidecar. A `.vmap` sidecar lives at `<lookup>.vmap.meta.json` and stores the build and contig naming under `target`.
 
 Warning: do not use `.vtable` files produced by `union_variants.py` or `intersect_variants.py` as rsID lookup inputs. Those tools intentionally rewrite the `id` column to target-derived `chrom:pos:a1:a2` IDs, so their IDs will not match SNP-only summary-statistic rsIDs. A `.vtable` is suitable for `--id-lookup` only if its `id` column is explicitly in the same ID namespace as the raw summary-statistic `SNP` values.
 
-When a `.vmap` is supplied, only target-side `chrom`, `pos`, and `id` are used. Its `source_shard`, `source_index`, `allele_op`, and source-side metadata are ignored, even if source-side and target-side metadata differ, because this step is only recovering target coordinates for raw summary-statistic IDs, not applying the lookup object's provenance.
+When a `.vmap` is supplied, only `chrom`, `pos`, and `id` are used. Its `source_shard`, `source_index`, `allele_op`, and source provenance are ignored, because this step is only recovering coordinates for raw summary-statistic IDs, not applying the lookup object's provenance.
 
 Then prepare the SNP-only summary statistics:
 
@@ -119,11 +119,13 @@ prepare_variants.py \
   --output work/study
 ```
 
-In this mode, raw `SNP` values are matched against target-side lookup IDs. Imported `chrom` and `pos` come from the lookup object, while imported `a1` and `a2` still come from raw `EffectAllele` and `OtherAllele`. The imported build and contig naming are inherited from the lookup object's target-side metadata.
+In this mode, raw `SNP` values are matched against lookup IDs. Imported `chrom` and `pos` come from the lookup object, while imported `a1` and `a2` still come from raw `EffectAllele` and `OtherAllele`. The imported build and contig naming are inherited from the lookup object's metadata.
 
-Rows with missing IDs, IDs absent from the lookup, or IDs that match multiple lookup rows are dropped and recorded in `<output>.imported.vmap.qc.tsv` during preparation. The QC reasons are `invalid_id`, `id_not_found`, and `ambiguous_id_match`.
+Rows with missing IDs or IDs absent from the lookup are dropped and recorded in `<output>.imported.vmap.qc.tsv` during preparation. The QC reasons are `invalid_id` and `id_not_found`. If a raw summary-statistic ID resolves to more than one distinct lookup `chrom` / `pos` pair, preparation fails clearly because the lookup object is ambiguous for a needed ID; duplicate lookup IDs that resolve to the same `chrom` / `pos` are allowed, regardless of lookup-object alleles.
 
-`--id-lookup` is only a preparation-time coordinate-enrichment step. Downstream matching still uses exact prepared `chr:bp:a1:a2` rows and ignores variant IDs. It is independent of `--retain-snp-id`: `--retain-snp-id` is only a projection-time option for `project_payload.py` that decides whether the output `SNP` column uses target-side `.vmap` IDs or generated `chrom:pos:a1:a2` IDs. It does not affect whether prepared `.vmap` files retain raw IDs for later use as `--id-lookup` objects.
+`--id-lookup` is only a preparation-time coordinate-enrichment step. Downstream matching still uses exact prepared `chr:bp:a1:a2` rows and ignores variant IDs. It is independent of `--retain-snp-id`: `--retain-snp-id` is only a projection-time option for `project_payload.py` that decides whether the output `SNP` column uses `.vmap` IDs or generated `chrom:pos:a1:a2` IDs. It does not affect whether prepared `.vmap` files retain raw IDs for later use as `--id-lookup` objects.
+
+For the opposite direction, use `assign_vmap_ids.py` after preparation or restriction. It matches already-prepared `.vmap` rows to an ID source by exact `chrom:pos:a1:a2` and copies IDs onto the `.vmap`; it does not fill missing coordinates by matching raw summary-statistic IDs. By default it drops rows that have no ID-source match, but `--unmatched-id-policy variant-key` or `--unmatched-id-policy missing` can retain those rows with generated `chrom:pos:a1:a2` IDs or `.` IDs.
 
 ## Project Summary Statistics
 
@@ -151,7 +153,7 @@ The output always writes explicit canonical variant columns first:
 CHR  POS  SNP  EffectAllele  OtherAllele
 ```
 
-By default, output `SNP` is generated from the target row as `chrom:pos:a1:a2`. Use `--retain-snp-id` only when the output must preserve target-side `.vmap` IDs instead.
+By default, output `SNP` is generated from the `.vmap` row as `chrom:pos:a1:a2`. Use `--retain-snp-id` only when the output must preserve `.vmap` IDs instead.
 
 The projected output also gets a metadata sidecar at `<output>.meta.yaml`. The sidecar describes the emitted tab-delimited file, target build and contig naming, canonical variant columns, retained payload columns, and whether clean harmonization was used.
 

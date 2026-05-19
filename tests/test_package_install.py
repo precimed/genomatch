@@ -51,9 +51,11 @@ def test_pip_install_exposes_cli_tools(tmp_path):
     prepare_variants = scripts_dir / "prepare_variants.py"
     project_payload = scripts_dir / "project_payload.py"
     restrict_vmap = scripts_dir / "restrict_vmap.py"
+    assign_vmap_ids = scripts_dir / "assign_vmap_ids.py"
     assert prepare_variants.exists()
     assert project_payload.exists()
     assert restrict_vmap.exists()
+    assert assign_vmap_ids.exists()
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(site_packages) + os.pathsep + env.get("PYTHONPATH", "")

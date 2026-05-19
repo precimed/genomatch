@@ -126,17 +126,25 @@ def drop_duplicate_target_identities(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.loc[~duplicate_mask].reset_index(drop=True)
 
 
+def format_target_key_ids(frame: pd.DataFrame) -> pd.Series:
+    missing = [column for column in TARGET_KEY_COLUMNS if column not in frame.columns]
+    if missing:
+        missing_csv = ",".join(missing)
+        raise ValueError(f"target frame is missing required columns: {missing_csv}")
+    return (
+        frame["chrom"].astype(str)
+        + ":"
+        + frame["pos"].astype(str)
+        + ":"
+        + frame["a1"].astype(str)
+        + ":"
+        + frame["a2"].astype(str)
+    )
+
+
 def assign_target_derived_ids(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
-    out["id"] = (
-        out["chrom"].astype(str)
-        + ":"
-        + out["pos"].astype(str)
-        + ":"
-        + out["a1"].astype(str)
-        + ":"
-        + out["a2"].astype(str)
-    )
+    out["id"] = format_target_key_ids(out)
     return out
 
 

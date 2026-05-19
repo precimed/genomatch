@@ -54,6 +54,7 @@ Within [README.md](README.md) and the user documentation in [docs/](docs/), the 
 - target-side transforms on `.vmap` preserve provenance unless the tool explicitly materializes a provenance-free `.vtable` or otherwise documents a provenance break
 - `intersect_variants.py` always emits a provenance-free `.vtable`
 - `restrict_vmap.py` restricts one source `.vmap` by exact membership in all supplied `.vtable` / `.vmap` inputs and emits a mapped-only `.vmap` preserving source provenance and `allele_op`
+- `assign_vmap_ids.py` assigns `.vmap` IDs from a `.vmap` / `.vtable` ID source by exact `chrom:pos:a1:a2` match; by default it retains only rows with a non-missing assigned ID, with explicit policy options for retaining unmatched rows
 
 ## Canonical tools surface
 
@@ -71,6 +72,7 @@ Within [README.md](README.md) and the user documentation in [docs/](docs/), the 
 - `convert_vmap_to_target.py`
 - `intersect_variants.py`
 - `restrict_vmap.py`
+- `assign_vmap_ids.py`
 - `union_variants.py`
 - `apply_vmap_to_sumstats.py`
 - `apply_vmap_to_bfile.py`

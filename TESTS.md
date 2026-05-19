@@ -23,6 +23,7 @@ Active migrated modules currently include:
 - `tests/test_convert_vmap_to_target.py`
 - `tests/test_intersect_variants.py`
 - `tests/test_restrict_vmap.py`
+- `tests/test_assign_vmap_ids.py`
 - `tests/test_union_variants.py`
 - `tests/test_apply_vmap_to_sumstats.py`
 - `tests/test_apply_vmap_to_bfile.py`
@@ -80,9 +81,10 @@ The migrated suite must keep coverage for:
 - `import_sumstats.py --id-lookup` inherits imported `genome_build` and `contig_naming` from the lookup object's target-side metadata
 - `import_sumstats.py --id-lookup` accepts `.vmap` lookup objects while ignoring source provenance
 - `import_sumstats.py --id-lookup` ignores lookup-table rows whose `id` is missing, empty, or `.`, and emits a warning
+- `import_sumstats.py --id-lookup` allows duplicate lookup IDs when they resolve to the same `chrom` and `pos`, ignoring lookup-object alleles
+- `import_sumstats.py --id-lookup` fails clearly when a raw summary-stat `SNP` value resolves to more than one distinct lookup `chrom` / `pos` pair
 - `import_sumstats.py --id-lookup` drops source rows whose `SNP` is missing, empty, or `.` with QC reason `invalid_id`
 - `import_sumstats.py --id-lookup` drops unmatched source rows with QC reason `id_not_found`
-- `import_sumstats.py --id-lookup` drops source rows with non-unique lookup matches with QC reason `ambiguous_id_match`
 
 ### Metadata and contigs
 
@@ -274,6 +276,22 @@ The migrated suite must keep coverage for:
 - restriction inputs affect membership only
 - multiple restriction inputs are combined by intersection, not union
 - `restrict_vmap.py` emits `.vmap`
+
+### `.vmap` ID assignment
+
+- `assign_vmap_ids.py` accepts one source `.vmap`, one `.vmap` / `.vtable` ID source, and named `--output`
+- `assign_vmap_ids.py` requires the same `genome_build` and the same `contig_naming` across inputs
+- `assign_vmap_ids.py` performs no implicit normalization
+- matching is by exact `chrom:pos:a1:a2`
+- duplicate `chrom:pos:a1:a2` keys in the ID source are ignored when absent from the source `.vmap`
+- duplicate `chrom:pos:a1:a2` keys in the ID source fail clearly when present in the source `.vmap`
+- output IDs come from the ID source
+- output row order, coordinates, provenance, and `allele_op` come from the source `.vmap`
+- by default, rows without an ID-source match are dropped and audited in `<output>.qc.tsv` with `id_not_found`
+- `--unmatched-id-policy variant-key` retains rows without an ID-source match with `id=chrom:pos:a1:a2` and no QC row
+- `--unmatched-id-policy missing` retains rows without an ID-source match with `id=.` and no QC row
+- rows matched to a missing ID-source ID are dropped and audited with `missing_id`
+- `assign_vmap_ids.py` emits `.vmap`
 
 ### Unions
 

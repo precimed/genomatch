@@ -43,6 +43,31 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - for memory efficiency, `restrict_vmap.py` may intersect smaller restriction inputs before scanning the source `.vmap`; if the source `.vmap` is not the smallest object, the implementation may continue reducing candidate membership until it reaches the source, then introduce the source `.vmap` IDs, order, provenance, and `allele_op`, and continue filtering against remaining restriction inputs
 - if the source `.vmap` is the smallest object, the implementation may read or stream the source first and then stream restriction inputs as membership filters while preserving source `.vmap` output semantics
 
+## Assigning `.vmap` IDs
+
+- `assign_vmap_ids.py` assigns IDs to one source `.vmap` from an ID source `.vmap` / `.vtable`
+- CLI shape is `assign_vmap_ids.py --vmap <source.vmap> --id-source <source.vmap|source.vtable> --output <output.vmap>`
+- optional `--unmatched-id-policy {drop,variant-key,missing}` controls source `.vmap` rows with no exact `--id-source` match; default is `drop`
+- `assign_vmap_ids.py` requires the same `genome_build` and the same `contig_naming` across inputs
+- `assign_vmap_ids.py` performs no implicit normalization, allele flipping, liftover, or ID-based matching
+- matching is by exact `chrom:pos:a1:a2`
+- the input named by `--vmap` must be a `.vmap`
+- the input named by `--id-source` may be `.vmap` or `.vtable`; when it is `.vmap`, only target-side rows are used and its provenance is ignored
+- duplicate `chrom:pos:a1:a2` keys in `--id-source` may be ignored when that key is absent from the source `.vmap`
+- if `--id-source` contains duplicate `chrom:pos:a1:a2` keys for any key present in the source `.vmap`, fail clearly
+- retained output row order follows the source `.vmap`
+- retained output provenance (`source_shard`, `source_index`) and `allele_op` come from the source `.vmap`
+- retained output `chrom`, `pos`, `a1`, and `a2` come from the source `.vmap`
+- retained output `id` is copied from the matching `--id-source` row
+- with `--unmatched-id-policy drop`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are dropped and audited in `<output>.qc.tsv` with status `id_not_found`
+- with `--unmatched-id-policy variant-key`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are retained with `id=chrom:pos:a1:a2` from the source `.vmap` row and are not audited
+- with `--unmatched-id-policy missing`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are retained with `id=.` and are not audited
+- rows whose matching `--id-source` ID is empty or `.` are dropped and audited in `<output>.qc.tsv` with status `missing_id`
+- `<output>.qc.tsv` contains dropped rows only; rows are keyed by source `.vmap` provenance and contain `source_shard`, `source_index`, `source_id`, and `status`
+- if no rows are dropped, no QC sidecar is emitted and any stale `<output>.qc.tsv` is removed
+- output is `.vmap`
+- newly written output metadata must include `variants_count`
+
 ## Intersections
 
 - `intersect_variants.py` intersects exact `chrom:pos:a1:a2`

@@ -162,7 +162,7 @@ def rewrite_variant_fields(raw: str, replacements: Dict[str, str]) -> str:
 
 @dataclass(frozen=True)
 class VariantColumnMapping:
-    chr: int
+    chr: Optional[int]
     pos: Optional[int]
     snp: Optional[int]
     effect_allele: int

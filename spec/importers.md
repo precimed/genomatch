@@ -127,9 +127,12 @@ The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`
 - in `--id-lookup` mode, imported target-side `chrom` and `pos` come from the matched lookup object row rather than from the raw summary-stat payload
 - in `--id-lookup` mode, imported metadata `genome_build` and `contig_naming` are inherited from the lookup object's target-side metadata rather than inferred from the raw summary-stat payload; this inherited metadata takes precedence over the `--genome-build` CLI value
 - `a1` and `a2` still come from the raw summary-stat payload as `EffectAllele` and `OtherAllele`; `--id-lookup` does not change import-time allele ordering
+- lookup-object `a1` and `a2` are ignored for `--id-lookup` disambiguation; the lookup object supplies coordinates only
 - rows of `--id-lookup` whose `id` is missing, empty, or `.` are ignored by the lookup table and must emit a warning
+- duplicate lookup IDs are allowed when all rows for that ID resolve to the same `chrom` and `pos`, regardless of lookup-object `a1` / `a2`
+- duplicate lookup IDs that are not present among raw summary-stat `SNP` values may be ignored
+- if any raw summary-stat `SNP` value resolves through `--id-lookup` to more than one distinct `chrom` / `pos` pair, fail clearly because the lookup object is ambiguous for a needed source ID
 - if a raw summary-stat `SNP` value is missing, empty, or `.`, the source row must be dropped with auditable import QC reason `invalid_id`
 - if a raw summary-stat `SNP` value has no match in the filtered target-side lookup `id` set, the source row must be dropped with auditable import QC reason `id_not_found`
-- if a raw summary-stat `SNP` value matches multiple rows in the filtered target-side lookup `id` set, the source row must be dropped with auditable import QC reason `ambiguous_id_match`
 - if `--id-lookup` is not supplied and the importer can not determine target-side `chrom` and `pos` from the raw summary-stat input, the importer must fail clearly
 - `--id-lookup` is an import-time coordinate-enrichment step only; downstream exact set semantics remain `chr:bp:a1:a2`, ignoring `id`
