@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.4.4] - 2026-06-08
+
 ### Fixed
 - Fixed a performance regression in `intersect_variants.py` and `restrict_vmap.py` introduced in `v0.4.0`, which made large inputs much slower and more memory-intensive than necessary.
 
