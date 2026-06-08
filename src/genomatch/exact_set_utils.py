@@ -153,9 +153,11 @@ def empty_key_index() -> ExactVariantKeys:
 
 
 def restrict_frame_to_membership_chunks(driver_frame: pd.DataFrame, restriction_path: Path) -> tuple[pd.DataFrame, int]:
+    # Assumes: driver_frame has validated target columns; restriction_path has validated metadata.
+    # Performs: PN/PV via chunk readers, SV(exact target-key membership), row counting.
+    # Guarantees: retained driver rows whose target keys occur in the restriction object.
     driver_keys = exact_key_index(driver_frame)
     matched_keys = empty_key_index()
-    seen_vmap_keys = empty_key_index()
     row_count = 0
     is_vmap = restriction_path.name.endswith(".vmap")
     if restriction_path.name.endswith(".vtable"):
@@ -171,10 +173,10 @@ def restrict_frame_to_membership_chunks(driver_frame: pd.DataFrame, restriction_
             frame = frame.loc[:, ["chrom", "pos", "id", "a1", "a2"]]
         row_count += len(frame)
         chunk_keys = exact_key_index(frame)
-        if is_vmap:
-            if chunk_keys.isin(seen_vmap_keys).any():
-                raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
-            seen_vmap_keys = seen_vmap_keys.union(chunk_keys)
+        # PERF: membership scans can stream tens of millions of .vmap rows.
+        # iter_vmap_table_chunks validates each chunk, but retaining all seen
+        # target keys solely for cross-chunk duplicate checks would scale with
+        # the restriction input instead of the usually small driver set.
         matched_keys = matched_keys.union(chunk_keys[chunk_keys.isin(driver_keys)])
 
     retain_mask = driver_keys.isin(matched_keys)
