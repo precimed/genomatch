@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import logging
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Sequence
@@ -9,6 +9,7 @@ from typing import Iterable, List, Sequence
 import pandas as pd
 
 _ACGT_RE = re.compile(r"^[ACGT]+$")
+logger = logging.getLogger(__name__)
 
 from .contig_utils import (
     canonical_contig_from_any_supported_label,
@@ -128,10 +129,9 @@ def finalize_imported_vmap_vectorized(
     if infer_target_contig_naming:
         contig_naming = infer_contig_naming(chroms)
         if contig_naming is None and importer_should_warn_for_contigs(chroms):
-            print(
+            logger.warning(
                 "Warning: retained rows include mixed or invalid contig labels; preserving contigs as-is, "
-                "omitting contig_naming from metadata, and requiring normalize_contigs.py before downstream use.",
-                file=sys.stderr,
+                "omitting contig_naming from metadata, and requiring normalize_contigs.py before downstream use."
             )
     else:
         contig_naming = target_contig_naming
