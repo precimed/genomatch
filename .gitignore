@@ -27,8 +27,7 @@ cmake-build-*/
 
 config.yaml
 
-dev/variant_lists/*
-!dev/variant_lists/SCRIPTS.md
+dev/*
 
 ref/*
 
