@@ -3,6 +3,7 @@ import gzip
 import math
 
 import pandas as pd
+import pytest
 import yaml
 
 from genomatch.apply_vmap_sumstats import run_sumstats_apply
@@ -11,11 +12,11 @@ from genomatch.sumstats_utils import iter_sumstats_table_chunks
 from utils import REPO_ROOT, read_tsv, run_py, write_json, write_lines
 
 
-def write_vmap_with_meta(path, lines):
+def write_vmap_with_meta(path, lines, *, contig_naming="ncbi"):
     write_lines(path, lines)
     write_json(
         path.with_name(path.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
+        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": contig_naming}},
     )
 
 
@@ -1478,7 +1479,12 @@ def test_apply_vmap_to_sumstats_clean_use_af_inference_derives_n(tmp_path):
     assert math.isclose(float(values["N"]), 38.6666666666667, rel_tol=1e-12)
 
 
-def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_path):
+@pytest.mark.parametrize(
+    ("contig_naming", "chrom"),
+    [("ncbi", "MT"), ("ucsc", "chrM"), ("plink", "26"), ("plink_splitx", "25")],
+)
+def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_path, contig_naming, chrom):
+    pos = 60001 if contig_naming == "plink_splitx" else 100
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"
     vmap = tmp_path / "map.vmap"
@@ -1487,7 +1493,7 @@ def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_
         sumstats,
         [
             "CHR\tPOS\tSNP\tEA\tOA\tBETA",
-            "1\t100\trs1\tA\tG\t0.5",
+            f"{chrom}\t{pos}\trs1\tAT\tCGT\t0.5",
         ],
     )
     write_lines(
@@ -1503,7 +1509,7 @@ def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_
             "stats_TotalN: 100",
         ],
     )
-    write_vmap_with_meta(vmap, ["1\t100\trs1\tA\tG\t.\t0\tidentity"])
+    write_vmap_with_meta(vmap, [f"{chrom}\t{pos}\trs1\tAT\tCGT\t.\t0\tidentity"], contig_naming=contig_naming)
 
     result = run_py(
         "apply_vmap_to_sumstats.py",
@@ -1521,8 +1527,11 @@ def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tN\tBETA\n"
-        "1\t100\t1:100:A:G\tA\tG\t100\t0.5\n"
+        f"{chrom}\t{pos}\t{chrom}:{pos}:AT:CGT\tAT\tCGT\t100\t0.5\n"
     )
+    sidecar = read_yaml(out.with_name(out.name + ".meta.yaml"))
+    assert sidecar["contig_naming"] == contig_naming
+    assert "col_P" not in sidecar
 
 
 def test_apply_vmap_to_sumstats_clean_swap_keeps_direction(tmp_path):

@@ -351,7 +351,7 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py --clean` applies the second validation pass after derivation so invalid derived values are cleared back to missing
 - `apply_vmap_to_sumstats.py --clean` applies swap / flip_swap transforms to cleaned numeric effect columns while preserving `Direction` unchanged
 - `apply_vmap_to_sumstats.py --clean` writes tab-delimited output with canonical cleaned payload column ordering and serializes missing values as empty fields
-- `apply_vmap_to_sumstats.py --clean` covers cleaned-schema fields such as `StudyN` only as explicitly defined by the current cleaned-sumstats spec
+- `apply_vmap_to_sumstats.py --clean` covers canonical fields such as `StudyN` only as explicitly defined by [sumstats-harmonization.md](spec/sumstats-harmonization.md)
 - genotype-payload `apply_vmap_*` tools (`apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`) preserve `.vmap` row order
 - genotype-payload `apply_vmap_*` tools resolve source rows by exact `source_shard + source_index`
 - for genotype-payload `apply_vmap_*` tools, `source_shard` lookup is exact stored provenance and not chromosome interpretation

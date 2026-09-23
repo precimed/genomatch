@@ -30,8 +30,6 @@ The implementation of this module must be contained in a separate file or module
 ### Metadata
 
 Metadata is described by `schemas/raw-sumstats-metadata.yaml`.
-The cleaned output payload/stat column order is declared by `schemas/cleaned-sumstats.yaml`, excluding `CHR`, `POS`, `SNP`, `EffectAllele`, and `OtherAllele` which are outside this module.
-`schemas/cleaned-sumstats.yaml` is guidance for canonical column naming and preferred ordering; it is not a normative validation contract for the output of this module.
 
 This module does not use, drop, or otherwise process source-side `CHR`, `POS`, `SNP`, `EffectAllele`, `OtherAllele`, or joined source variant fields. Those are handled by base payload application.
 
@@ -76,7 +74,7 @@ Rules below refer to column names without `col_` prefix, i.e. `BETA` refers to t
 - metadata string values used as column references: apply the same cleanup so `col_*` references match the cleaned headers
 - arbitrary unrecognized columns may remain ambiguous after header normalization; they are later dropped
 - raise error if any metadata-declared `col_*` reference cannot be identified uniquely in the `sumstats` dataframe after the full normalization above
-- rename `sumstats` columns to canonical names as per `schemas/cleaned-sumstats.yaml`, and update `metadata` accordingly.
+- rename payload/stat columns to their metadata key without the `col_` prefix (e.g. `col_BETA` gives `BETA`), and update `metadata` accordingly.
 - if two metadata-declared input columns collapse to the same canonical cleaned column name after normalization and renaming, fail cleanly rather than choosing one
 - drop any columns that are unrecognized (not described by the metadata)
 - drop columns with all missing values, and remove them from metadata
@@ -101,7 +99,7 @@ Apply these rules to `col_P`:
 - treat `N < 0`, `CaseN < 0`, `ControlN < 0` as missing
 - treat `INFO < 0` as missing
 - treat `AF < 0` or `AF > 1` as missing for all allele frequency columns (`EAF`, `CaseEAF`, `ControlEAF`, and their `OAF` counterparts)
-- `Direction` is passed through unchanged
+- `Direction` is text and is passed through unchanged
 
 ### Effective AF definition from Other AF
 
@@ -147,7 +145,11 @@ Historical note: the following rules from cleansumstats will not be implemented:
 
 ### Output
 
-Re-order payload/stat columns according to `schemas/cleaned-sumstats.yaml`, excluding `CHR`, `POS`, `SNP`, `EffectAllele`, and `OtherAllele` which are outside this module.
+Emit the payload/stat columns present after harmonization in this order:
+
+`P`, `Z`, `N`, `BETA`, `OR`, `SE`, `ORL95`, `ORU95`, `CaseN`, `ControlN`, `StudyN`, `INFO`, `Direction`, `EAF`, `CaseEAF`, `ControlEAF`.
+
+Payload/stat columns, including `P`, are optional.
 Return updated `sumstats` dataframe and updated `metadata`.
 Final file formatting, missing-value serialization, output variant columns, row retention, and `<output>.meta.yaml` sidecar emission are defined by [payload-application.md](payload-application.md).
 
