@@ -122,9 +122,9 @@ This subsection is implementation guidance only; any implementation that preserv
 - projection mode must fail cleanly before reading payload rows if any retained metadata-declared payload/stat column would be emitted as `CHR`, `POS`, `SNP`, `EffectAllele`, or `OtherAllele`
 - unrecognized input columns are not carried through projection or clean output
 - `apply_vmap_to_sumstats.py` preserves `.vmap` row order throughout its pipeline
-- `apply_vmap_to_sumstats.py` always emits explicit canonical output variant columns from the `.vmap` target rows, not from source payload values; these columns are named and derived as follows:
+- `apply_vmap_to_sumstats.py` always emits explicit canonical output variant columns from the [`.vmap` target rows](core-objects.md#invariants), not from source payload values; these columns are named and derived as follows:
   - `CHR` from target `chrom`
-  - `POS` from target `pos`
+  - `POS` from target `pos` (a positive, one-based integer)
   - `SNP` from the shared output-ID rule above
   - `EffectAllele` from target `a1`
   - `OtherAllele` from target `a2`
