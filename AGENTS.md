@@ -7,9 +7,9 @@ When making changes to source-of-truth files, avoid repeating the information in
 
 Within `README.md` and `docs/`, the following sections are intentionally normative and may serve as source of truth:
 
-- the top-level object and metadata summary in `docs/concepts.md`
+- the top-level object and metadata summary in `docs/primitives.md`
 - the primitive/canonical tools summary in `docs/primitives.md`
-- `Using .vmap vs .vtable as input across tools` in `docs/concepts.md`
+- `Using .vmap vs .vtable as input across tools` in `docs/primitives.md`
 
 ## Change discipline
 

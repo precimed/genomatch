@@ -6,30 +6,33 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+### Important: regenerate your outputs
+
+This release fixes a major bug in indel handling: earlier versions could choose the wrong reference allele, for example recording a deletion as an insertion. Regenerate all outputs from your original raw inputs, and don't reuse earlier outputs, including through `--resume`.
+
 ### Changed
 
-- Removed `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`; use `sort_variants.py` for explicit ordering and optional keep-first cleanup. Preparation always retains a final `<prefix>.sorted.vmap` stage, covered by preflight and resume/force handling, including when liftover runs.
-- Repeated variant keys are now accepted in `.vmap` inputs to `intersect_variants.py` and `union_variants.py`, and in restriction inputs to `restrict_vmap.py`. Previously, these inputs could be rejected for containing duplicates.
-- Tools accepting `.vmap` or `.vtable` follow the [common transformation and QC contract](spec/variant-transforms.md#tools-accepting-vmap-or-vtable). Operations requiring row-level QC also write sidecars for `.vtable` inputs.
-- Restriction now drops all `.vtable` rows whose distinct input variant keys become equal after transformation and audits them with `duplicate_target`, replacing the previous retention of all rows with duplicate output variant keys or keep-first behavior with `--drop-duplicates`. Affected outputs will contain fewer rows; this also affects SNV-only inputs.
+**`prepare_variants.py` and `prepare_variants_sharded.py`**
 
-- Revised the [reference-compatibility contract](spec/variant-transforms.md#same-build-reference-compatibility) and [preparation input/option policy](spec/workflow.md#input-variant-filtering-and-indel-options).
-- `restrict_build_compatible.py` and both preparation wrappers now default to SNV-only input. Commands that previously retained multibase input must add `--include-indels`, including commands already passing `--norm-indels`.
-- Direct `restrict_build_compatible.py` calls no longer swap indels automatically. To permit that behavior, supply both `--include-indels` and `--allow-indel-swaps`; preparation wrappers enable indel swaps when input inclusion is requested unless explicitly disabled.
-- `liftover_build.py` now trusts callers to supply source-REF-compatible `a2` and writes `REF=a2, ALT=a1` without rechecking source sequence or reselecting source allele order. If source compatibility is not guaranteed, first run `restrict_build_compatible.py` with the required input/operation options; see the [required source reference compatibility](spec/variant-transforms.md#required-source-reference-compatibility).
-- Same-build `--allow-strand-flips` now applies only to input SNVs. Review multibase inputs that previously relied on strand repair; chain-directed strand changes during liftover remain supported.
-- Restriction with `--include-indels` and liftover now support both-multibase inputs and outputs, subject to their reference and QC contracts. Restriction can retain these representations without `--norm-indels`; normalization no longer requires an output allele to become single-base.
-- Normalization retains diagnostic VCFs and logs in the `<output>.bcftools_norm*` namespace. Suffixes and partitioning within that namespace are implementation-defined, and no aggregation is required. Every restriction run removes stale files in the namespace, including when normalization is disabled.
-- QC consumers must stop expecting `norm_ambiguous_orientation` and `norm_unsupported_complex_indel`. `norm_ref_mismatch` remains a row-level exclusion when an input submitted for normalization yields no output record; unexpected observed normalization REF mismatches now fail the invocation. Liftover replaces `unsupported_non_snv` with `unsupported_representation` for unrepresentable lifted outputs, including `FLIP`/`SWAP` annotations that do not map to a supported `allele_op`; these are row-level QC exclusions rather than invocation failures.
-- When upgrading to the corrected indel reference-allele assignment and normalization algorithm, delete all outputs from previous runs, including intermediate maps, retained bcftools files, membership tables, restricted maps, and projected payloads, and regenerate from the original raw inputs. Do not reuse those outputs through `--resume`. Existing maps cannot be reliably repaired by re-normalization, and the unchanged file format does not identify maps produced by the old algorithm.
+- These tools now by default process SNVs only. Add `--include-indels` to keep indels and other multi-base variants, even if you already pass `--norm-indels`. `--include-indels` also turns on indel normalization and conservative allele swaps, which you can turn off with `--no-norm-indels` or `--no-allow-indel-swaps`.
+- The implied reference allele is `REF` in VCF and PVAR, column 6 in BIM, and `OtherAllele` in summary statistics. Provisional REF status is not recognized, so these alleles are treated like any other implied reference.
+- Indels are checked against the full reference allele, not just its first base. If the implied reference allele matches, the row keeps its allele order, even if the other allele also matches. Alleles are swapped only if the implied reference doesn't match and the other allele does. Rows with no match are dropped and recorded in QC as `no_reference_match`. Because a match doesn't prove which allele is truly the reference, check your allele conventions for inputs that don't declare REF/ALT, such as BIM files and summary statistics.
+- Strand flips stay on by default but now apply to SNVs only.
+- Variants with two multi-base alleles, such as MNVs, are retained when possible.
+- The pipeline now always sorts variants at the very end.
+
+**Individual tools**
+
+- `restrict_build_compatible.py` follows the same rules, but every indel option is off by default: `--include-indels` keeps multi-base variants, and `--allow-indel-swaps` and `--norm-indels` must be added separately.
+- Removed `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`. Use `sort_variants.py` to sort; its `--drop-duplicates` keeps the first of any exact duplicates.
+- `liftover_build.py` no longer checks source alleles against the reference and expects `a2` to be the reference allele. If you run it directly, run `restrict_build_compatible.py` first. The preparation tools already do.
+- `.vmap` and `.vtable` inputs now get the same treatment, including the same filtering, duplicate handling and QC. `.vtable` inputs now get a QC file too, which identifies dropped rows by `row_idx`.
+- When different `.vtable` rows become the same variant during restriction, for example `A/G` and `G/A` at one position, all of them are now dropped and recorded in QC as `duplicate_target`. `.vmap` already worked this way. Some outputs will have fewer rows, including SNV-only ones.
+- Repeated variant keys are now accepted in `.vmap` inputs to `intersect_variants.py` and `union_variants.py`, and in restriction inputs to `restrict_vmap.py`. Previously, these inputs could be rejected for containing duplicates.
 
 ### Fixed
 
-- Fixed a severe `--norm-indels` performance regression introduced by reference-allele assignment changes: normalization results are assigned in bulk instead of writing each row through pandas.
-
-### Pending verification
-
-- Revalidate Tutorial 1 and its fixtures against the revised indel preparation behavior.
+- Updated Tutorial 1 and its example data to match the corrected indel handling. The examples now include a deletion with a multi-base reference allele and a substitution where both alleles are multi-base, and the prepared variant counts and projected genotypes and effects were checked.
 
 ## [v0.4.4] - 2026-06-08
 

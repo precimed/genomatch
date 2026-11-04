@@ -49,10 +49,12 @@ def test_pip_install_exposes_cli_tools(tmp_path):
     scripts_dir = installed_scripts_dir(prefix)
     site_packages = installed_site_packages(prefix)
     prepare_variants = scripts_dir / "prepare_variants.py"
+    prepare_variants_sharded = scripts_dir / "prepare_variants_sharded.py"
     project_payload = scripts_dir / "project_payload.py"
     restrict_vmap = scripts_dir / "restrict_vmap.py"
     assign_vmap_ids = scripts_dir / "assign_vmap_ids.py"
     assert prepare_variants.exists()
+    assert prepare_variants_sharded.exists()
     assert project_payload.exists()
     assert restrict_vmap.exists()
     assert assign_vmap_ids.exists()

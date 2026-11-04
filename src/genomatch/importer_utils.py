@@ -164,7 +164,9 @@ def finalize_imported_vmap_vectorized(
         _require_columns(qc_rows_frame, IMPORT_QC_COLUMNS, label="import qc")
         qc_view = qc_rows_frame.loc[:, IMPORT_QC_COLUMNS]
     if not duplicate_qc.empty:
-        qc_view = pd.concat([qc_view, duplicate_qc], ignore_index=True)
+        # Empty dataclass QC frames have float columns; concatenating them would
+        # turn otherwise integral source locators into values such as `31.0`.
+        qc_view = duplicate_qc if qc_view.empty else pd.concat([qc_view, duplicate_qc], ignore_index=True)
     if qc_view.empty:
         return
     write_import_qc(output_path.with_name(output_path.name + ".qc.tsv"), qc_view)

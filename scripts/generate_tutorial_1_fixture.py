@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
+import math
 import os
 import random
 import shutil
@@ -14,12 +16,13 @@ from pathlib import Path
 from typing import Iterable
 
 import pysam
+import pandas as pd
 import yaml
+from scipy.stats import norm
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 FIXTURE_DIR = REPO_ROOT / "examples" / "tutorial-1"
-SCRATCH_DIR = Path(os.environ.get("TMPDIR", "/tmp")) / "genomatch-tutorial-1-generator"
 SEED = 20260514
 CHROMS = ("21", "22", "X")
 ALLOWED_BASES = ("A", "C", "G", "T")
@@ -35,13 +38,13 @@ ISSUE_LEGEND = {
     "allele_swap": "source alleles are reversed relative to the reference-oriented target row",
     "strand_flip": "source alleles are reverse-complemented relative to the reference-oriented target row",
     "strand_ambiguous": "SNP has an A/T or C/G allele pair",
-    "indel": "row is an insertion/deletion represented with A/C/G/T alleles",
+    "indel": "row has multibase A/C/G/T alleles (insertion, deletion, or MNV)",
     "multiallelic": "VCF row has multiple ALT alleles and is dropped by the importer",
     "mixed_contig_label": "study rows intentionally mix accepted contig-label spellings",
     "duplicate_rsid": "same rsID appears at more than one coordinate",
     "placeholder_id": "input ID is '.'",
     "duplicate_target": "duplicate chrom/position/allele identity within one input",
-    "liftover_collision": "two study rows collapse to the same target identity after preparation",
+    "reference_collision": "opposite-order study rows collapse during same-build reference assignment",
     "invalid_allele": "row contains a non-A/C/G/T allele and is dropped during import",
     "lowercase_allele": "lowercase alleles are accepted and normalized",
     "long_allele": "allele exceeds the tutorial max allele length and is dropped during import",
@@ -298,7 +301,7 @@ def reverse_validated_candidates(
 
 def build_scenarios(assets: dict[str, Path]) -> list[Scenario]:
     scenarios: list[Scenario] = []
-    with tempfile.TemporaryDirectory(prefix="tutorial-1-liftover.") as tmp:
+    with tempfile.TemporaryDirectory(prefix="tutorial-1-liftover.", dir=FIXTURE_DIR.parent) as tmp:
         tmp_dir = Path(tmp)
         for chrom in CHROMS:
             required = sum(COUNTS_BY_CHROM[chrom].values()) + 8
@@ -348,27 +351,43 @@ def build_scenarios(assets: dict[str, Path]) -> list[Scenario]:
                             allele_mode_cohort=cohort_mode,
                         )
                     )
-    scenarios = add_special_flags_and_indels(scenarios)
+    scenarios = add_special_flags_and_indels(scenarios, assets["grch38_fasta"])
     return scenarios
 
 
-def add_special_flags_and_indels(scenarios: list[Scenario]) -> list[Scenario]:
+def add_special_flags_and_indels(scenarios: list[Scenario], fasta_path: Path) -> list[Scenario]:
     out = list(scenarios)
     duplicate_rsid_indices = [3, 97]
     for idx in duplicate_rsid_indices:
         out[idx] = replace(out[idx], study_id="rsDUPLICATE", reference_id="rsDUPLICATE", issue_tags=tuple(dict.fromkeys((*out[idx].issue_tags, "duplicate_rsid"))))
     placeholder_idx = 11
     out[placeholder_idx] = replace(out[placeholder_idx], reference_id=".", cohort_id=".", issue_tags=tuple(dict.fromkeys((*out[placeholder_idx].issue_tags, "placeholder_id"))))
-    invalid_stat_idx = next(i for i, row in enumerate(out) if row.study and row.reference)
+    # Keep the invalid-stat example separate from duplicate and ambiguous exclusions,
+    # so the clean projection actually exercises numeric validation.
+    duplicate_names = {row.name for row in study_duplicate_source_rows(out)}
+    invalid_stat_idx = next(i for i, row in enumerate(out) if row.study and row.reference
+                            and row.name not in duplicate_names and "strand_ambiguous" not in row.issue_tags)
     out[invalid_stat_idx] = replace(out[invalid_stat_idx], invalid_stat=True, issue_tags=tuple(dict.fromkeys((*out[invalid_stat_idx].issue_tags, "invalid_stat"))))
 
-    indel_slots = [i for i, row in enumerate(out) if row.reference and row.cohort and not row.study][:4]
+    indel_slots = [i for i, row in enumerate(out) if row.reference and row.cohort and not row.study][:6]
     for offset, idx in enumerate(indel_slots):
         row = out[idx]
         ref = row.candidate.ref38
         alt = ref + ("A" if ref != "A" else "C")
-        candidate = replace(row.candidate, alt38=alt)
-        out[idx] = replace(out[idx], candidate=candidate, variant_kind="insertion", issue_tags=tuple(dict.fromkeys((*row.issue_tags, "indel"))))
+        mode, kind = row.allele_mode_cohort, "insertion"
+        if offset >= 4:
+            with pysam.FastaFile(str(fasta_path)) as fasta:
+                ref = fasta.fetch(f"chr{row.candidate.chrom}", row.candidate.pos38 - 1, row.candidate.pos38 + 1).upper()
+            if len(ref) != 2 or any(base not in ALLOWED_BASES for base in ref):
+                raise RuntimeError("multibase fixture REF must match two real FASTA bases")
+            alt = ref[0] if offset == 4 else "".join(alt_for(base, 1) for base in ref)
+            mode, kind = "identity", "deletion" if offset == 4 else "mnv"
+        candidate = replace(row.candidate, ref38=ref, alt38=alt)
+        # SNV ambiguity tags no longer describe these replaced allele pairs.
+        tags = [tag for tag in row.issue_tags if tag not in {"strand_ambiguous", "strand_flip", "allele_swap"}]
+        tags.extend({"identity": (), "swap": ("allele_swap",), "flip": ("strand_flip",)}[mode])
+        out[idx] = replace(out[idx], candidate=candidate, variant_kind=kind,
+                           allele_mode_cohort=mode, issue_tags=tuple(dict.fromkeys((*tags, "indel"))))
     return out
 
 
@@ -416,7 +435,7 @@ def write_reference_vcf(scenarios: list[Scenario], output: Path) -> None:
 def write_sumstats(scenarios: list[Scenario], output: Path) -> None:
     rows = [row for row in scenarios if row.study]
     collision_source, lowercase_source = study_duplicate_source_rows(scenarios)
-    rows.append(replace(collision_source, name="t1_liftover_collision_partner", study_id="rsTUT_COLLISION", allele_mode_study="swap", issue_tags=("liftover_collision", "duplicate_target")))
+    rows.append(replace(collision_source, name="t1_reference_collision_partner", study_id="rsTUT_COLLISION", allele_mode_study="swap", issue_tags=("reference_collision", "duplicate_target")))
     rows.append(replace(lowercase_source, name="t1_lowercase_alleles", study_id="rsTUT_LOWER", allele_mode_study="identity", issue_tags=("lowercase_allele", "duplicate_target")))
     rng = random.Random(SEED + 1)
     rng.shuffle(rows)
@@ -562,6 +581,8 @@ def study_duplicate_source_rows(scenarios: list[Scenario]) -> tuple[Scenario, Sc
 
 
 def dropped_study_row_names(scenarios: list[Scenario]) -> set[str]:
+    if not any(row.study for row in scenarios):
+        return set()
     duplicate_names = {row.name for row in study_duplicate_source_rows(scenarios)}
     strand_ambiguous_names = {
         row.name
@@ -571,29 +592,77 @@ def dropped_study_row_names(scenarios: list[Scenario]) -> set[str]:
     return duplicate_names | strand_ambiguous_names
 
 
-def effective_membership(row: Scenario, dropped_study_row_names: set[str]) -> tuple[bool, bool, bool]:
-    return row.reference, row.study and row.name not in dropped_study_row_names, row.cohort
+VariantKey = tuple[str, str, str, str]
 
 
-def venn_counts(scenarios: list[Scenario]) -> dict[str, int]:
-    dropped_names = dropped_study_row_names(scenarios)
-    effective = [effective_membership(row, dropped_names) for row in scenarios]
+def expected_preparation(scenarios: list[Scenario], assets: dict[str, Path], work: Path
+                         ) -> dict[str, dict[str, VariantKey]]:
+    """Build expectations from raw scenarios/FASTA and direct normalization, not maps.
+
+    Assumes: real round-tripping SNV candidates and explicit multibase scenarios.
+    Performs: SV(full REF matching), external normalization of selected alleles.
+    Guarantees: independently predicted keys per scenario and payload.
+    """
+    expected: dict[str, dict[str, VariantKey]] = {role: {} for role in ("reference", "study", "cohort")}
+    normalizations = []
+    dropped = dropped_study_row_names(scenarios)
+    with pysam.FastaFile(str(assets["grch38_fasta"])) as fasta:
+        for row in scenarios:
+            c = row.candidate
+            key = (c.chrom, str(c.pos38), c.alt38, c.ref38)
+            if fasta.fetch(f"chr{c.chrom}", c.pos38 - 1, c.pos38 - 1 + len(c.ref38)).upper() != c.ref38:
+                raise RuntimeError(f"fixture REF does not match full FASTA sequence: {row.name}")
+            if row.reference:
+                expected["reference"][row.name] = key
+            if row.study and row.name not in dropped:
+                expected["study"][row.name] = key
+            if row.cohort:
+                if row.variant_kind == "snv":
+                    expected["cohort"][row.name] = key
+                else:
+                    a1, a2 = source_alleles(c.ref38, c.alt38, row.allele_mode_cohort)
+                    # Only forward identity/swap are permitted for multibase input.
+                    for alt, ref in ((a1, a2), (a2, a1)):
+                        observed = fasta.fetch(f"chr{c.chrom}", c.pos38 - 1, c.pos38 - 1 + len(ref)).upper()
+                        if observed == ref:
+                            expected["cohort"][row.name] = (c.chrom, str(c.pos38), alt, ref)
+                            break
+            if row.variant_kind != "snv":
+                for role in ("reference", "cohort"):
+                    if row.name in expected[role]:
+                        chrom, pos, alt, ref = expected[role][row.name]
+                        normalizations.append((chrom, int(pos), f"{role}:{row.name}", ref, alt))
+    if normalizations:
+        source, target = work / "expected.input.vcf", work / "expected.normalized.vcf"
+        write_liftover_input(source, normalizations)
+        result = subprocess.run(["bcftools", "norm", "-c", "e", "-f", str(assets["grch38_fasta"]),
+                                 "-o", str(target), str(source)], capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(f"fixture expectation normalization failed: {result.stderr}")
+        records = parse_lifted(target)
+        if set(records) != {record[2] for record in normalizations}:
+            raise RuntimeError("fixture expectation normalization lost or duplicated records")
+        for row_id, (chrom, pos, ref, alt) in records.items():
+            role, name = row_id.split(":", 1)
+            expected[role][name] = (chrom, str(pos), alt, ref)
+    return expected
+
+
+def venn_counts(expected: dict[str, dict[str, VariantKey]]) -> dict[str, int]:
+    reference, study, cohort = (set(expected[role].values()) for role in ("reference", "study", "cohort"))
     return {
-        "reference": sum(reference for reference, _study, _cohort in effective),
-        "study": sum(study for _reference, study, _cohort in effective),
-        "cohort": sum(cohort for _reference, _study, cohort in effective),
-        "3-way": sum(reference and study and cohort for reference, study, cohort in effective),
-        "ref+study": sum(reference and study and not cohort for reference, study, cohort in effective),
-        "ref+cohort": sum(reference and cohort and not study for reference, study, cohort in effective),
-        "study+cohort": sum(study and cohort and not reference for reference, study, cohort in effective),
-        "reference_only": sum(reference and not study and not cohort for reference, study, cohort in effective),
-        "study_only": sum(study and not reference and not cohort for reference, study, cohort in effective),
-        "cohort_only": sum(cohort and not reference and not study for reference, study, cohort in effective),
+        "reference": len(reference), "study": len(study), "cohort": len(cohort),
+        "3-way": len(reference & study & cohort),
+        "ref+study": len((reference & study) - cohort),
+        "ref+cohort": len((reference & cohort) - study),
+        "study+cohort": len((study & cohort) - reference),
+        "reference_only": len(reference - study - cohort),
+        "study_only": len(study - reference - cohort),
+        "cohort_only": len(cohort - reference - study),
     }
 
 
-def write_manifest(scenarios: list[Scenario], output: Path) -> None:
-    dropped_names = dropped_study_row_names(scenarios)
+def write_manifest(scenarios: list[Scenario], expected: dict[str, dict[str, VariantKey]], output: Path) -> None:
     duplicate_drop_names = {row.name for row in study_duplicate_source_rows(scenarios)}
     fieldnames = [
         "row_id",
@@ -610,6 +679,9 @@ def write_manifest(scenarios: list[Scenario], output: Path) -> None:
         "study_id",
         "cohort_id",
         "issue_tags",
+        "prepared_reference_key",
+        "prepared_study_key",
+        "prepared_cohort_key",
         "notes",
     ]
     with output.open("w", encoding="utf-8", newline="\n") as handle:
@@ -617,10 +689,10 @@ def write_manifest(scenarios: list[Scenario], output: Path) -> None:
         writer.writeheader()
         for row in scenarios:
             candidate = row.candidate
-            reference, study, cohort = effective_membership(row, dropped_names)
-            membership = "+".join(name for name, enabled in (("reference", reference), ("study", study), ("cohort", cohort)) if enabled)
+            membership = "+".join(name for name in ("reference", "study", "cohort") if getattr(row, name))
             issue_tags = tuple(row.issue_tags)
-            notes = "generated from real local FASTA and UCSC chain liftover"
+            notes = ("generated from real local FASTA and UCSC chain liftover" if row.variant_kind == "snv"
+                     else "generated from full GRCh38 FASTA; no GRCh37 counterpart is asserted")
             note_parts: list[str] = []
             if row.name in duplicate_drop_names:
                 issue_tags = tuple(dict.fromkeys((*issue_tags, "duplicate_target")))
@@ -633,6 +705,10 @@ def write_manifest(scenarios: list[Scenario], output: Path) -> None:
                     "raw study row exists, but Tutorial 1 uses --drop-strand-ambiguous so it is excluded "
                     "from effective study membership"
                 )
+            if row.cohort and row.name not in expected["cohort"]:
+                note_parts.append("cohort build-compatible QC: no_reference_match; multibase strand repair is disabled")
+            elif row.cohort and row.reference and expected["cohort"][row.name] != expected["reference"][row.name]:
+                note_parts.append("cohort forward allele assignment selects a different event; excluded by exact reference membership without a QC sidecar")
             if note_parts:
                 notes = "; ".join(note_parts)
             writer.writerow(
@@ -643,22 +719,25 @@ def write_manifest(scenarios: list[Scenario], output: Path) -> None:
                     "pos38": candidate.pos38,
                     "ref38": candidate.ref38,
                     "alt38": candidate.alt38,
-                    "chrom37": f"chr{candidate.chrom}",
-                    "pos37": candidate.pos37,
-                    "ref37": candidate.ref37,
-                    "alt37": candidate.alt37,
+                    "chrom37": f"chr{candidate.chrom}" if row.variant_kind == "snv" else "",
+                    "pos37": candidate.pos37 if row.variant_kind == "snv" else "",
+                    "ref37": candidate.ref37 if row.variant_kind == "snv" else "",
+                    "alt37": candidate.alt37 if row.variant_kind == "snv" else "",
                     "reference_id": row.reference_id or "",
                     "study_id": row.study_id or "",
                     "cohort_id": row.cohort_id or "",
                     "issue_tags": ",".join(issue_tags),
                     "notes": notes,
+                    **{f"prepared_{role}_key": ":".join(expected[role].get(row.name, ()))
+                       for role in ("reference", "study", "cohort")},
                 }
             )
         extra_rows = [
             ("t1_multiallelic_drop", "reference", "multiallelic", "VCF importer reports multiallelic"),
-            ("t1_invalid_allele_drop", "study/reference", "invalid_allele", "importers report non_actg_allele"),
+            ("t1_invalid_ref_drop", "reference", "invalid_allele", "VCF importer reports non_actg_allele"),
+            ("t1_invalid_allele_drop", "study", "invalid_allele", "sumstats importer reports non_actg_allele"),
             ("t1_long_allele_drop", "study/reference", "long_allele", "importers report allele_too_long"),
-            ("t1_liftover_collision_partner", "study", "liftover_collision,duplicate_target", "reverse allele row collapses during preparation"),
+            ("t1_reference_collision_partner", "study", "reference_collision,duplicate_target", "opposite allele row collapses during same-build reference assignment"),
             ("t1_lowercase_alleles", "study", "lowercase_allele,duplicate_target", "lowercase study alleles are accepted before duplicate-target QC"),
             ("t1_duplicate_bim_key", "cohort", "duplicate_target", "duplicate BIM target identity is reported during cohort preparation"),
             ("fixture_unsorted_inputs", "reference/study/cohort", "unsorted", "raw input rows are shuffled deterministically before writing"),
@@ -681,9 +760,12 @@ def write_fixture_readme(counts: dict[str, int], output: Path) -> None:
         "",
         "The fixture is intentionally messy. Warnings during preparation and projection are expected; inspect `manifest.tsv` for the reason each special row exists.",
         "",
-        "## Intended Membership Counts",
+        "## Prepared Membership Counts",
         "",
-        "These counts describe the fixture's intended membership after duplicate-target and study-side strand-ambiguous exclusions. Observed membership also depends on reference-allele assignment QC; revalidate it after the pending indel changes using the prepared maps and QC described in the tutorial.",
+        "These are exact prepared variant-key set counts after QC and the tutorial's study-side strand-ambiguous filter. The generator predicts keys from the raw scenarios, full FASTA sequences, and direct bcftools normalization, then checks the tutorial outputs against them.",
+        "",
+        "In `manifest.tsv`, `membership` records raw scenario participation. The `prepared_reference_key`, `prepared_study_key`, and `prepared_cohort_key` columns record expected prepared keys; an empty key means exclusion. A cohort key can differ from its reference key even when both originate from the same scenario.",
+        "GRCh37 counterpart columns are empty for the native GRCh38 multibase scenarios; those examples do not claim a cross-build allele correspondence.",
         "",
         f"`reference={counts['reference']}  study={counts['study']}  cohort={counts['cohort']}`",
         "",
@@ -737,28 +819,243 @@ def run_cli(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
         raise RuntimeError(f"validation command failed: {rendered}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
 
 
-def validate_roundtrip(fixture_dir: Path) -> None:
-    if SCRATCH_DIR.exists():
-        shutil.rmtree(SCRATCH_DIR)
-    try:
-        (SCRATCH_DIR / "work").mkdir(parents=True)
-        (SCRATCH_DIR / "out").mkdir(parents=True)
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(SRC_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
-        commands = [
-            [sys.executable, "-m", "genomatch.prepare_variants", "--input", str(fixture_dir / "reference.grch38.vcf"), "--input-format", "vcf", "--dst-build", "GRCh38", "--dst-contig-naming", "ncbi", "--output", str(SCRATCH_DIR / "work/reference")],
-            [sys.executable, "-m", "genomatch.prepare_variants", "--input-format", "sumstats", "--sumstats-metadata", str(fixture_dir / "study.grch37.meta.yaml"), "--dst-build", "GRCh38", "--dst-contig-naming", "ncbi", "--drop-strand-ambiguous", "--output", str(SCRATCH_DIR / "work/study")],
-            [sys.executable, "-m", "genomatch.prepare_variants_sharded", "--input", str(fixture_dir / "cohort.@.bim"), "--input-format", "bim", "--prefix", str(SCRATCH_DIR / "work/cohort.@"), "--output", str(SCRATCH_DIR / "work/cohort"), "--dst-build", "GRCh38", "--dst-contig-naming", "ncbi", "--shards", "21,22,X"],
-            [sys.executable, "-m", "genomatch.restrict_vmap", str(SCRATCH_DIR / "work/study.vmap"), str(SCRATCH_DIR / "work/reference.vmap"), "--output", str(SCRATCH_DIR / "work/study.reference.vmap")],
-            [sys.executable, "-m", "genomatch.restrict_vmap", str(SCRATCH_DIR / "work/cohort.vmap"), str(SCRATCH_DIR / "work/reference.vmap"), "--output", str(SCRATCH_DIR / "work/cohort.reference.vmap")],
-            [sys.executable, "-m", "genomatch.project_payload", "--input-format", "sumstats-clean", "--sumstats-metadata", str(fixture_dir / "study.grch37.meta.yaml"), "--vmap", str(SCRATCH_DIR / "work/study.reference.vmap"), "--output", str(SCRATCH_DIR / "out/study.reference.tsv"), "--use-af-inference"],
-            [sys.executable, "-m", "genomatch.project_payload", "--input", str(fixture_dir / "cohort.@.bim"), "--input-format", "bfile", "--vmap", str(SCRATCH_DIR / "work/cohort.reference.vmap"), "--output", str(SCRATCH_DIR / "out/cohort.@"), "--skip-ploidy-check"],
-        ]
-        for cmd in commands:
-            run_cli(cmd, cwd=REPO_ROOT, env=env)
-    finally:
-        if SCRATCH_DIR.exists():
-            shutil.rmtree(SCRATCH_DIR)
+MAP_COLUMNS = ["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"]
+KEY_COLUMNS = ["chrom", "pos", "a1", "a2"]
+
+
+def check(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(f"tutorial validation: {message}")
+
+
+def read_map(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path, sep="\t", header=None, names=MAP_COLUMNS, dtype=str, keep_default_na=False)
+
+
+def variant_keys(frame: pd.DataFrame) -> list[VariantKey]:
+    return list(frame[KEY_COLUMNS].itertuples(index=False, name=None))
+
+
+def coordinate_order(key: VariantKey) -> tuple:
+    chrom, pos, a1, a2 = key
+    return (23 if chrom == "X" else int(chrom), int(pos), a1, a2)
+
+
+def expected_operation(raw: tuple[str, str], target: tuple[str, str], *, multibase: bool) -> str:
+    a1, a2 = (allele.upper() for allele in raw)
+    candidates = [("identity", (a1, a2)), ("swap", (a2, a1))]
+    if not multibase:
+        candidates += [("flip", (complement(a1), complement(a2))),
+                       ("flip_swap", (complement(a2), complement(a1)))]
+    for operation, alleles in candidates:
+        if alleles == target:
+            return operation
+    raise RuntimeError(f"unexpected fixture allele correspondence: {raw} -> {target}")
+
+
+def decode_bed(path: Path, n_variants: int, n_samples: int = 6) -> list[list[int]]:
+    """Decode fixture BED bytes independently of the production payload reader."""
+    data = path.read_bytes()
+    width = (n_samples + 3) // 4
+    check(data[:3] == b"\x6c\x1b\x01" and len(data) == 3 + width * n_variants, f"BED shape: {path}")
+    return [[(data[3 + row * width + sample // 4] >> (2 * (sample % 4))) & 3
+             for sample in range(n_samples)] for row in range(n_variants)]
+
+
+def validate_stage_accounting(work: Path, stem: str, input_locators: set[tuple[str, str]],
+                              stages: tuple[str, ...], original_ids: dict[tuple[str, str], str]) -> None:
+    """Every import/reference exclusion must have its original locator in QC."""
+    for stage in stages:
+        path = work / "work" / f"{stem}.{stage}.vmap"
+        frame = read_map(path)
+        retained = set(frame[["source_shard", "source_index"]].itertuples(index=False, name=None))
+        qc_path = Path(str(path) + ".qc.tsv")
+        qc = pd.read_csv(qc_path, sep="\t", dtype=str) if qc_path.exists() else pd.DataFrame(
+            columns=["source_shard", "source_index", "source_id", "status"])
+        dropped = set(qc[["source_shard", "source_index"]].itertuples(index=False, name=None))
+        check(retained <= input_locators and dropped == input_locators - retained
+              and len(qc) == len(dropped), f"{stem}.{stage} original QC locators/counts")
+        reasons = qc["reason"] if stage == "imported" and qc_path.exists() else qc["status"]
+        check(set(reasons) <= {"multiallelic", "non_actg_allele", "allele_too_long", "duplicate_target", "no_reference_match"},
+              f"{stem}.{stage} QC reasons")
+        for record, reason in zip(qc.itertuples(index=False), reasons):
+            source_id = original_ids[(record.source_shard, record.source_index)]
+            expected_reason = ({"t1_multiallelic_drop": "multiallelic", "t1_invalid_allele_drop": "non_actg_allele",
+                                "t1_invalid_ref_drop": "non_actg_allele",
+                                "t1_long_allele_drop": "allele_too_long"}.get(source_id, "duplicate_target")
+                               if stage == "imported" else "no_reference_match" if stem.startswith("cohort.") else "duplicate_target")
+            check(reason == expected_reason, f"{stem}.{stage} QC reason for {source_id}")
+        if stage != "imported":
+            check(all(row.source_id == original_ids[(row.source_shard, row.source_index)] for row in qc.itertuples(index=False)),
+                  f"{stem}.{stage} QC source IDs")
+        input_locators = retained
+
+
+def validate_outputs(fixture_dir: Path, work: Path, scenarios: list[Scenario],
+                     expected: dict[str, dict[str, VariantKey]], assets: dict[str, Path]) -> None:
+    """Check small tutorial outputs against independent keys and raw payload bytes."""
+    maps = {}
+    raw_study = pd.read_csv(fixture_dir / "study.grch37.tsv", sep="\t", dtype=str)
+    raw_bims = {chrom: [line.split() for line in (fixture_dir / f"cohort.{chrom}.bim").read_text().splitlines()]
+                for chrom in CHROMS}
+    source_candidates = {(row.candidate.chrom, str(row.candidate.pos38)): row for row in scenarios if row.cohort}
+    raw_reference = [line.split("\t") for line in (fixture_dir / "reference.grch38.vcf").read_text().splitlines() if not line.startswith("#")]
+    for role, ids in (("reference", [row[2] for row in raw_reference]), ("study", raw_study.marker)):
+        original_ids = {(".", str(i)): row_id for i, row_id in enumerate(ids)}
+        validate_stage_accounting(work, role, set(original_ids), ("imported", "normalized", "build_compatible"), original_ids)
+    for chrom, rows in raw_bims.items():
+        # The BIM shards start in the requested NCBI naming, so no normalization
+        # stage is required for these inputs.
+        validate_stage_accounting(work, f"cohort.{chrom}", {(chrom, str(i)) for i in range(len(rows))},
+                                  ("imported", "build_compatible"), {(chrom, str(i)): row[1] for i, row in enumerate(rows)})
+    reference_candidates = {(row.candidate.chrom, str(row.candidate.pos38)): row for row in scenarios if row.reference}
+    study_candidates = {(row.candidate.chrom, str(row.candidate.pos37)): row for row in scenarios if row.study}
+    with pysam.FastaFile(str(assets["grch38_fasta"])) as fasta:
+        for role in ("reference", "study", "cohort"):
+            path = work / "work" / f"{role}.vmap"
+            frame = read_map(path)
+            maps[role] = frame
+            keys = variant_keys(frame)
+            check(set(keys) == set(expected[role].values()) and len(keys) == len(set(keys)), f"{role} prepared keys")
+            check(keys == sorted(keys, key=coordinate_order), f"{role} coordinate ordering")
+            meta = json.loads(Path(str(path) + ".meta.json").read_text())
+            check(meta["target"]["genome_build"] == "GRCh38" and meta["target"]["contig_naming"] == "ncbi"
+                  and meta["variants_count"] == len(frame), f"{role} metadata")
+            stems = [role] if role != "cohort" else [f"cohort.{chrom}" for chrom in CHROMS]
+            for stem in stems:
+                sorted_frame = read_map(work / "work" / f"{stem}.sorted.vmap")
+                subset = frame if role != "cohort" else frame[frame.chrom == stem.split(".")[-1]]
+                check(sorted_frame.equals(subset.reset_index(drop=True)), f"{stem} retained sort stage")
+                imported_meta = json.loads((work / "work" / f"{stem}.imported.vmap.meta.json").read_text())
+                sorted_meta = json.loads((work / "work" / f"{stem}.sorted.vmap.meta.json").read_text())
+                check(sorted_meta["derived_from"] == imported_meta["derived_from"], f"{stem} origin metadata")
+            for row in frame.itertuples(index=False):
+                observed = fasta.fetch(f"chr{row.chrom}", int(row.pos) - 1, int(row.pos) - 1 + len(row.a2)).upper()
+                check(observed == row.a2, f"{role} full reference allele at {row.chrom}:{row.pos}")
+                if role == "study":
+                    raw = raw_study.iloc[int(row.source_index)]
+                    check(row.source_shard == ".", "study source shard")
+                    scenario = study_candidates[(raw.chromosome.removeprefix("chr"), raw.base_pair)]
+                    check(tuple(getattr(row, column) for column in KEY_COLUMNS) == expected[role][scenario.name], "study source locator")
+                    operation = expected_operation((raw.effect_allele_raw, raw.other_allele_raw), (row.a1, row.a2), multibase=False)
+                    check(row.allele_op == operation and row.id == raw.marker, "study provenance/operation")
+                elif role == "reference":
+                    raw = raw_reference[int(row.source_index)]
+                    scenario = reference_candidates[(raw[0].removeprefix("chr"), raw[1])]
+                    check(row.source_shard == "." and row.id == raw[2] and row.allele_op == "identity"
+                          and tuple(getattr(row, column) for column in KEY_COLUMNS) == expected[role][scenario.name],
+                          "reference source locator/operation")
+                elif role == "cohort":
+                    raw = raw_bims[row.source_shard][int(row.source_index)]
+                    scenario = source_candidates[(row.source_shard, raw[3])]
+                    check(tuple(getattr(row, column) for column in KEY_COLUMNS) == expected[role][scenario.name], "cohort source locator")
+                    target = (row.a1, row.a2)
+                    if scenario.variant_kind != "snv":
+                        a1, a2 = raw[4:6]
+                        ref_matches = fasta.fetch(f"chr{row.source_shard}", int(raw[3]) - 1, int(raw[3]) - 1 + len(a2)).upper() == a2
+                        target = (a1, a2) if ref_matches else (a2, a1)
+                    operation = expected_operation(tuple(raw[4:6]), target, multibase=scenario.variant_kind != "snv")
+                    check(row.allele_op == operation and row.id == raw[1], "cohort provenance/operation")
+        for role in ("study", "cohort"):
+            source = maps[role]
+            restricted = read_map(work / "work" / f"{role}.reference.vmap")
+            selected = [key in set(expected["reference"].values()) for key in variant_keys(source)]
+            check(restricted.equals(source.loc[selected].reset_index(drop=True)), f"{role} exact restriction/provenance")
+            via_table = read_map(work / "work" / f"{role}.via_table.vmap")
+            check(via_table.equals(restricted), f"{role} vmap/vtable membership equivalence")
+            check(not Path(str(work / "work" / f"{role}.reference.vmap") + ".qc.tsv").exists(), "membership restriction has no QC sidecar")
+            maps[f"{role}.reference"] = restricted
+    validate_projection(fixture_dir, work, maps, raw_study, raw_bims)
+    # Check the multibase exclusions against original raw ordinals, not IDs alone.
+    qc = []
+    for path in (work / "work").glob("cohort.*.build_compatible.vmap.qc.tsv"):
+        qc.extend(pd.read_csv(path, sep="\t", dtype=str).to_dict("records"))
+    expected_drops = {(chrom, str(index), raw[1], "no_reference_match")
+                      for chrom, rows in raw_bims.items() for index, raw in enumerate(rows)
+                      if source_candidates[(chrom, raw[3])].name not in expected["cohort"]}
+    check({(row["source_shard"], row["source_index"], row["source_id"], row["status"]) for row in qc} == expected_drops,
+          "cohort reference-assignment QC")
+
+
+def validate_projection(fixture_dir: Path, work: Path, maps: dict[str, pd.DataFrame],
+                        raw_study: pd.DataFrame, raw_bims: dict[str, list[list[str]]]) -> None:
+    projected = pd.read_csv(work / "out/study.reference.tsv", sep="\t", keep_default_na=False)
+    study = maps["study.reference"]
+    check(len(projected) == len(study), "projected study count")
+    for source, output in zip(study.itertuples(index=False), projected.to_dict("records")):
+        raw = raw_study.iloc[int(source.source_index)]
+        swapped = source.allele_op in {"swap", "flip_swap"}
+        key = (source.chrom, source.pos, source.a1, source.a2)
+        check((str(output["CHR"]), str(output["POS"]), output["EffectAllele"], output["OtherAllele"]) == key
+              and output["SNP"] == ":".join(key), "projected study variant/order")
+        beta = math.log(float(raw.odds_ratio)) * (-1 if swapped else 1)
+        check(math.isclose(float(output["BETA"]), beta, rel_tol=1e-7), "projected beta sign")
+        check(math.isclose(float(output["OR"]), float(raw.odds_ratio) ** (-1 if swapped else 1), rel_tol=1e-7), "projected OR")
+        case_n, control_n = float(raw.case_count), float(raw.control_count)
+        check(math.isclose(float(output["N"]), 4 / (1 / case_n + 1 / control_n), rel_tol=1e-7), "effective N")
+        check(output["Direction"] == raw.direction, "Direction unchanged")
+        for name, raw_name in (("CaseEAF", "case_other_af"), ("ControlEAF", "control_other_af")):
+            oaf = float(raw[raw_name])
+            if not 0 <= oaf <= 1:
+                check(output[name] == "", f"invalid {name} serialized missing")
+            else:
+                check(math.isclose(float(output[name]), oaf if swapped else 1 - oaf, rel_tol=1e-7), f"{name} orientation")
+        if not 0 <= float(raw.p_value) <= 1:
+            check(output["P"] == "" and output["Z"] == "", "invalid P/Z serialized missing")
+        else:
+            z = math.copysign(abs(norm.ppf(float(raw.p_value) / 2)), beta)
+            check(math.isclose(float(output["Z"]), z, rel_tol=1e-7), "projected Z sign")
+    check(any(float(raw_study.iloc[int(index)].p_value) > 1 for index in study.source_index), "invalid-stat example reaches projection")
+    meta = yaml.safe_load((work / "out/study.reference.tsv.meta.yaml").read_text())
+    check(meta["genome_build"] == "GRCh38" and meta["contig_naming"] == "ncbi" and meta["clean"], "projected metadata")
+    check(meta["path_sumStats"] == "study.reference.tsv" and meta["missing_value"] == ""
+          and meta["delimiter"] == "\t" and meta["use_af_inference"]
+          and all(value in projected.columns for key, value in meta.items() if key.startswith("col_")),
+          "projected metadata column mappings/serialization")
+    for chrom in CHROMS:
+        subset = maps["cohort.reference"].query("chrom == @chrom")
+        output_rows = [line.split() for line in (work / f"out/cohort.{chrom}.bim").read_text().splitlines()]
+        check(len(output_rows) == len(subset), f"cohort {chrom} projected count")
+        actual_genotypes = decode_bed(work / f"out/cohort.{chrom}.bed", len(subset))
+        raw_genotypes = {shard: decode_bed(fixture_dir / f"cohort.{shard}.bed", len(rows)) for shard, rows in raw_bims.items()}
+        for row, output, genotypes in zip(subset.itertuples(index=False), output_rows, actual_genotypes):
+            key = (row.chrom, row.pos, row.a1, row.a2)
+            check(output[0] == chrom and output[1] == ":".join(key)
+                  and output[3:] == [row.pos, row.a1, row.a2], "projected BIM/order")
+            expected_genotypes = raw_genotypes[row.source_shard][int(row.source_index)]
+            if row.allele_op in {"swap", "flip_swap"}:
+                expected_genotypes = [{0: 3, 3: 0}.get(value, value) for value in expected_genotypes]
+            check(genotypes == expected_genotypes, "projected genotypes and missing calls")
+        check((work / f"out/cohort.{chrom}.fam").read_bytes() == (fixture_dir / f"cohort.{chrom}.fam").read_bytes(), "sample order")
+
+
+def validate_roundtrip(fixture_dir: Path, scratch_dir: Path, scenarios: list[Scenario],
+                       expected: dict[str, dict[str, VariantKey]], assets: dict[str, Path]) -> None:
+    (scratch_dir / "work").mkdir(parents=True)
+    (scratch_dir / "out").mkdir(parents=True)
+    env = os.environ.copy()
+    env["MATCH_REFERENCE_ACCESS_MODE"] = "LEGACY"
+    env["PYTHONPATH"] = str(SRC_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    commands = [
+        ["prepare_variants.py", "--input", str(fixture_dir / "reference.grch38.vcf"), "--input-format", "vcf", "--include-indels", "--dst-build", "GRCh38", "--dst-contig-naming", "ncbi", "--output", str(scratch_dir / "work/reference")],
+        ["prepare_variants.py", "--input-format", "sumstats", "--sumstats-metadata", str(fixture_dir / "study.grch37.meta.yaml"), "--dst-build", "GRCh38", "--dst-contig-naming", "ncbi", "--drop-strand-ambiguous", "--output", str(scratch_dir / "work/study")],
+        ["prepare_variants_sharded.py", "--input", str(fixture_dir / "cohort.@.bim"), "--input-format", "bim", "--include-indels", "--prefix", str(scratch_dir / "work/cohort.@"), "--output", str(scratch_dir / "work/cohort"), "--dst-build", "GRCh38", "--dst-contig-naming", "ncbi", "--shards", "21,22,X"],
+        ["restrict_vmap.py", str(scratch_dir / "work/study.vmap"), str(scratch_dir / "work/reference.vmap"), "--output", str(scratch_dir / "work/study.reference.vmap")],
+        ["restrict_vmap.py", str(scratch_dir / "work/cohort.vmap"), str(scratch_dir / "work/reference.vmap"), "--output", str(scratch_dir / "work/cohort.reference.vmap")],
+        ["project_payload.py", "--input-format", "sumstats-clean", "--sumstats-metadata", str(fixture_dir / "study.grch37.meta.yaml"), "--vmap", str(scratch_dir / "work/study.reference.vmap"), "--output", str(scratch_dir / "out/study.reference.tsv"), "--use-af-inference"],
+        ["project_payload.py", "--input", str(fixture_dir / "cohort.@.bim"), "--input-format", "bfile", "--vmap", str(scratch_dir / "work/cohort.reference.vmap"), "--output", str(scratch_dir / "out/cohort.@"), "--skip-ploidy-check"],
+    ]
+    for cmd in commands:
+        run_cli(cmd, cwd=REPO_ROOT, env=env)
+    for role in ("study", "cohort"):
+        membership = scratch_dir / "work" / f"{role}.reference.vtable"
+        run_cli(["intersect_variants.py",
+                 str(scratch_dir / "work/reference.vmap"), str(scratch_dir / "work" / f"{role}.vmap"),
+                 "--output", str(membership)], cwd=REPO_ROOT, env=env)
+        run_cli(["restrict_vmap.py", str(scratch_dir / "work" / f"{role}.vmap"),
+                 str(membership), "--output", str(scratch_dir / "work" / f"{role}.via_table.vmap")],
+                cwd=REPO_ROOT, env=env)
+    validate_outputs(fixture_dir, scratch_dir, scenarios, expected, assets)
 
 
 def main() -> int:
@@ -768,20 +1065,24 @@ def main() -> int:
     config_path = require_match_config()
     assets = load_assets(config_path)
     scenarios = build_scenarios(assets)
-    counts = venn_counts(scenarios)
-
-    if FIXTURE_DIR.exists():
-        shutil.rmtree(FIXTURE_DIR)
-    FIXTURE_DIR.mkdir(parents=True)
-    write_reference_vcf(scenarios, FIXTURE_DIR / "reference.grch38.vcf")
-    write_sumstats(scenarios, FIXTURE_DIR / "study.grch37.tsv")
-    write_sumstats_metadata(FIXTURE_DIR / "study.grch37.meta.yaml")
-    write_cohort_bfiles(scenarios, FIXTURE_DIR)
-    write_manifest(scenarios, FIXTURE_DIR / "manifest.tsv")
-    write_fixture_readme(counts, FIXTURE_DIR / "README.md")
-    validate_static_files(FIXTURE_DIR)
-    if not args.skip_validation:
-        validate_roundtrip(FIXTURE_DIR)
+    # Use a checkout-local workspace: real-reference stages can retain sizable
+    # artifacts, so they must not spill into the system temporary directory.
+    with tempfile.TemporaryDirectory(prefix="tutorial-1-verification.", dir=FIXTURE_DIR.parent) as tmp:
+        work = Path(tmp)
+        expected = expected_preparation(scenarios, assets, work)
+        counts = venn_counts(expected)
+        if FIXTURE_DIR.exists():
+            shutil.rmtree(FIXTURE_DIR)
+        FIXTURE_DIR.mkdir(parents=True)
+        write_reference_vcf(scenarios, FIXTURE_DIR / "reference.grch38.vcf")
+        write_sumstats(scenarios, FIXTURE_DIR / "study.grch37.tsv")
+        write_sumstats_metadata(FIXTURE_DIR / "study.grch37.meta.yaml")
+        write_cohort_bfiles(scenarios, FIXTURE_DIR)
+        write_manifest(scenarios, expected, FIXTURE_DIR / "manifest.tsv")
+        write_fixture_readme(counts, FIXTURE_DIR / "README.md")
+        validate_static_files(FIXTURE_DIR)
+        if not args.skip_validation:
+            validate_roundtrip(FIXTURE_DIR, work / "roundtrip", scenarios, expected, assets)
     print(f"reference={counts['reference']}  study={counts['study']}  cohort={counts['cohort']}")
     print(f"3-way={counts['3-way']}  ref+study={counts['ref+study']}  ref+cohort={counts['ref+cohort']}  study+cohort={counts['study+cohort']}")
     print(f"reference_only={counts['reference_only']}  study_only={counts['study_only']}  cohort_only={counts['cohort_only']}")

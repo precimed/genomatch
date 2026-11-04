@@ -665,6 +665,23 @@ def test_import_sumstats_fails_on_headerless_input(tmp_path):
     assert "column not found for col_CHR" in result.stderr
 
 
+@pytest.mark.parametrize("with_invalid", [False, True])
+def test_import_bim_duplicate_qc_preserves_integer_source_indices(tmp_path, with_invalid):
+    source, output = tmp_path / "source.bim", tmp_path / "output.vmap"
+    rows = ["1\tfirst\t0\t10\tA\tG", "1\tduplicate\t0\t10\tA\tG"]
+    if with_invalid:
+        rows.append("1\tinvalid\t0\t11\tI\tG")
+    write_lines(source, rows)
+    result = run_py("import_bim.py", "--input", source, "--output", output)
+    assert result.returncode == 0, result.stderr
+    qc = read_tsv(output.with_name(output.name + ".qc.tsv"))
+    expected = [[".", "1", "duplicate_target"]]
+    if with_invalid:
+        expected.append([".", "2", "non_actg_allele"])
+    assert qc[0] == ["source_shard", "source_index", "reason"]
+    assert sorted(qc[1:]) == sorted(expected)
+
+
 def test_import_sumstats_deduplicates_target_identity_first_wins_and_audits_dropped_rows(tmp_path):
     sumstats = tmp_path / "ss.tsv"
     meta = tmp_path / "ss.yaml"

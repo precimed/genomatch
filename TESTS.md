@@ -530,6 +530,7 @@ The migrated suite must keep coverage for:
 
 ## Fixture strategy
 
+- Tutorial 1 regeneration must reproduce the checked-in fixture bytes from local real references. Its end-to-end regression checks documented command arguments, independently predicted prepared keys, full REF compatibility, original provenance and allele operations, QC, `.vmap`/intersection `.vtable` membership equivalence, and projected genotypes and clean summary-statistic values. Corrupted outputs must fail validation rather than passing on command exit codes alone; see `tests/integration/test_tutorial_1.py`.
 - Prefer small hand-written `.vtable`, `.vmap`, and sumstats fixtures.
 - Keep external-tool integration out of the default unit suite unless the canonical tool requires it.
 - Canonical tests must not depend on `.match`, source-side `.vmap` metadata, dual-build BIM, or hidden cross-build behavior.
