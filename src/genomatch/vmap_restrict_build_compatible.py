@@ -6,20 +6,18 @@ import json
 import logging
 import shlex
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence, Set, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 import pandas as pd
 
 from ._cli_utils import run_cli
-from .reference_utils import fetch_reference_bases, resolve_bcftools_binary, resolve_internal_reference_fasta
+from .reference_utils import fetch_reference_bases, reference_alleles_match, resolve_bcftools_binary, resolve_internal_reference_fasta
 from .haploid_utils import expected_ploidy_pair
 from .tabular_rows import VMapRowsTable, VariantRowsTable
 from .vtable_utils import (
     VariantRow,
-    complement_allele,
     compose_allele_ops_series,
     convert_contig_label,
     duplicate_target_rows_mask_table,
@@ -37,17 +35,7 @@ from .vtable_utils import (
 )
 
 
-NORM_STATUS_PRIORITY = (
-    "norm_multiple_output_records",
-    "norm_multiallelic",
-    "norm_not_atcg_alleles",
-    "norm_identical_ref_alt_alleles",
-    "norm_invalid_position",
-    "unsupported_target_contig",
-    "ploidy_class_changed",
-    "norm_unsupported_complex_indel",
-    "norm_ref_mismatch",
-)
+NORMALIZATION_BATCH_ROWS = 100_000
 
 ALLELE_COMPLEMENT_TABLE = str.maketrans("ACGT", "TGCA")
 logger = logging.getLogger(__name__)
@@ -183,6 +171,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow strand-complemented allele restriction against the declared build",
     )
+    parser.add_argument("--include-indels", action="store_true", help="Admit multibase input (default: SNV-only)")
+    parser.add_argument("--allow-indel-swaps", action="store_true", help="Allow REF/ALT exchange for multibase input")
     parser.add_argument(
         "--norm-indels",
         action="store_true",
@@ -190,96 +180,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
-
-def canonicalize_reference_anchored_row(row: VariantRow, ref_base: str) -> Tuple[VariantRow, str] | None:
-    if len(row.a2) == 1 and row.a2 == ref_base:
-        return row, "identity"
-    if len(row.a1) == 1 and row.a1 == ref_base:
-        return VariantRow(row.chrom, row.pos, row.id, row.a2, row.a1), "swap"
-    return None
-
-
-def restrict_row_against_reference(
-    row: VariantRow,
-    ref_base: str,
-    *,
-    allow_strand_flips: bool,
-) -> Tuple[VariantRow, str] | None:
-    canonical = canonicalize_reference_anchored_row(row, ref_base)
-    if canonical is not None:
-        return canonical
-    if not allow_strand_flips:
-        return None
-    try:
-        complemented = VariantRow(
-            row.chrom,
-            row.pos,
-            row.id,
-            complement_allele(row.a1),
-            complement_allele(row.a2),
-        )
-    except ValueError:
-        return None
-    canonical = canonicalize_reference_anchored_row(complemented, ref_base)
-    if canonical is None:
-        return None
-    restricted_row, local_op = canonical
-    if local_op == "identity":
-        return restricted_row, "flip"
-    return restricted_row, "flip_swap"
-
-
-def restrict_rows(
-    rows: Sequence[VariantRow],
-    fasta_path: Path,
-    contig_naming: str,
-    allow_strand_flips: bool,
-) -> List[Tuple[VariantRow | None, str]]:
-    # Assumes: input rows are already validated for allele token domain.
-    # Performs: SV(reference-anchored restriction + optional strand-flip matching).
-    # Guarantees: row-aligned restriction outcomes with local allele operation tags.
-    row_list = list(rows)
-    frame = pd.DataFrame(
-        {
-            "chrom": [row.chrom for row in row_list],
-            "pos": [row.pos for row in row_list],
-        }
-    )
-
-    positions = [int(row.pos) for row in row_list]
-    frame["pos_int"] = positions
-
-    ucsc_contigs: List[str | None] = []
-    for chrom in frame["chrom"].tolist():
-        try:
-            ucsc_contigs.append(normalize_contig_for_reference(str(chrom), contig_naming, "ucsc"))
-        except ValueError:
-            ucsc_contigs.append(None)
-    frame["ucsc_contig"] = ucsc_contigs
-
-    query_pairs = [
-        (ucsc_contig, pos)
-        for ucsc_contig, pos in zip(frame["ucsc_contig"].tolist(), frame["pos_int"].tolist())
-        if ucsc_contig is not None
-    ]
-    reference_bases = fetch_reference_bases(fasta_path, query_pairs)
-    frame["ref_base"] = [
-        reference_bases.get((ucsc_contig, pos), "") if ucsc_contig is not None else ""
-        for ucsc_contig, pos in zip(frame["ucsc_contig"].tolist(), frame["pos_int"].tolist())
-    ]
-
-    out_rows: List[Tuple[VariantRow | None, str]] = []
-    # PERF: loop retained; allele reconciliation logic is row-local with no cross-row state, so
-    # vectorization would require encoding the decision tree in masks without clarity benefit;
-    # expected cardinality matches caller's row count (SNV or indel subset, not full table).
-    for row, ref_base in zip(row_list, frame["ref_base"].tolist()):
-        if ref_base not in {"A", "C", "G", "T"}:
-            out_rows.append((None, "identity"))
-            continue
-        restricted = restrict_row_against_reference(row, ref_base, allow_strand_flips=allow_strand_flips)
-        out_rows.append(restricted if restricted is not None else (None, "identity"))
-    return out_rows
 
 
 def normalize_candidate_to_ucsc_vcf(candidate: NormalizationCandidate, contig_naming: str) -> Tuple[str, str, str, str, str]:
@@ -325,126 +225,18 @@ def write_bcftools_norm_log(log_path: Path, cmd: Sequence[str], result: subproce
     )
 
 
-def append_bcftools_norm_log(
-    log_path: Path,
-    cmd: Sequence[str],
-    result: subprocess.CompletedProcess[str],
-    *,
-    label: str | None = None,
-    mode: str,
-) -> None:
-    lines: List[str] = []
-    if label:
-        lines.append(f"[{label}]")
-    lines.extend(
-        [
-            f"command: {shlex.join(cmd)}",
-            f"returncode: {result.returncode}",
-            "stdout:",
-            result.stdout.rstrip("\n"),
-            "stderr:",
-            result.stderr.rstrip("\n"),
-            "",
-        ]
-    )
-    with open(log_path, mode, encoding="utf-8", newline="\n") as handle:
-        handle.write("\n".join(lines))
-
-
-def run_bcftools_norm_once(
-    input_vcf: Path,
-    output_vcf: Path,
-    fasta_path: Path,
-    *,
-    check_mode: str,
-) -> Tuple[List[str], subprocess.CompletedProcess[str]]:
-    bcftools = resolve_bcftools_binary()
-    cmd = [
-        bcftools,
-        "norm",
-        "-f",
-        str(fasta_path),
-        "-c",
-        check_mode,
-        "-o",
-        str(output_vcf),
-        "-Ov",
-        str(input_vcf),
-    ]
-    return cmd, subprocess.run(cmd, capture_output=True, text=True, check=False)
-
-
-def parse_bcftools_check_ref_warnings(stderr_text: str) -> Set[Tuple[str, str, str, str]]:
-    warned_records: Set[Tuple[str, str, str, str]] = set()
-    for line in stderr_text.splitlines():
-        parts = line.rstrip("\n").split("\t")
-        if len(parts) == 5 and parts[0] == "REF_MISMATCH":
-            warned_records.add((parts[1], parts[2], parts[3], parts[4]))
-    return warned_records
-
-
-def write_vcf_excluding_ref_mismatch_records(input_vcf: Path, output_vcf: Path, warned_records: Set[Tuple[str, str, str, str]]) -> None:
-    with open(input_vcf, "r", encoding="utf-8", newline="") as src, open(
-        output_vcf, "w", encoding="utf-8", newline="\n"
-    ) as dst:
-        for line in src:
-            if not line.strip() or line.startswith("#"):
-                dst.write(line)
-                continue
-            chrom, pos, _row_id, ref, alt, *_rest = line.rstrip("\n").split("\t")
-            if (chrom, pos, ref, alt) in warned_records:
-                continue
-            dst.write(line)
-
-
-def run_bcftools_norm_check_ref_x_workaround(input_vcf: Path, output_vcf: Path, fasta_path: Path, *, log_path: Path) -> None:
-    # Work around upstream bcftools issue #2427: `bcftools norm -c x` may segfault when the
-    # first non-header record has a REF mismatch. Emulate strict `-c x` filtering via two
-    # `-c w` passes by warning on REF mismatches first, then excluding exactly those records.
-    first_cmd, first_result = run_bcftools_norm_once(input_vcf, output_vcf, fasta_path, check_mode="w")
-    append_bcftools_norm_log(log_path, first_cmd, first_result, label="check_ref_w_pass1", mode="w")
-    if first_result.returncode != 0:
-        text = (first_result.stderr or first_result.stdout).strip()
-        if text:
-            raise ValueError(f"bcftools norm failed: {text} (see {log_path})")
-        raise ValueError(f"bcftools norm failed with exit code {first_result.returncode}; see {log_path}")
-    warned_records = parse_bcftools_check_ref_warnings(first_result.stderr)
-    with tempfile.TemporaryDirectory(prefix="restrict_build_compatible.issue2427.", dir=output_vcf.parent) as temp_dir_name:
-        filtered_input = Path(temp_dir_name) / "bcftools_norm_input_x_filtered.vcf"
-        write_vcf_excluding_ref_mismatch_records(input_vcf, filtered_input, warned_records)
-        second_cmd, second_result = run_bcftools_norm_once(filtered_input, output_vcf, fasta_path, check_mode="w")
-        append_bcftools_norm_log(log_path, second_cmd, second_result, label="check_ref_w_pass2", mode="a")
-    if second_result.returncode != 0:
-        text = (second_result.stderr or second_result.stdout).strip()
-        if text:
-            raise ValueError(f"bcftools norm failed: {text} (see {log_path})")
-        raise ValueError(f"bcftools norm failed with exit code {second_result.returncode}; see {log_path}")
-
-
-def run_bcftools_norm(input_vcf: Path, output_vcf: Path, fasta_path: Path, *, check_mode: str, log_path: Path) -> None:
-    if check_mode == "x":
-        run_bcftools_norm_check_ref_x_workaround(input_vcf, output_vcf, fasta_path, log_path=log_path)
-        return
-    cmd, result = run_bcftools_norm_once(input_vcf, output_vcf, fasta_path, check_mode=check_mode)
+def run_bcftools_norm(input_vcf: Path, output_vcf: Path, fasta_path: Path, *, log_path: Path) -> None:
+    cmd = [resolve_bcftools_binary(), "norm", "-f", str(fasta_path), "-c", "e",
+           "-o", str(output_vcf), "-Ov", str(input_vcf)]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     write_bcftools_norm_log(log_path, cmd, result)
     if result.returncode != 0:
-        text = (result.stderr or result.stdout).strip()
-        if text:
-            raise ValueError(f"bcftools norm failed: {text} (see {log_path})")
-        raise ValueError(f"bcftools norm failed with exit code {result.returncode}; see {log_path}")
-
-
-def normalization_debug_vcf_path(output_path: Path, *, check_mode: str, kind: str) -> Path:
-    return output_path.with_name(output_path.name + f".bcftools_norm_{kind}_{check_mode}.vcf")
-
-
-def normalization_debug_log_path(output_path: Path, *, check_mode: str) -> Path:
-    return output_path.with_name(output_path.name + f".bcftools_norm_output_{check_mode}.log")
+        detail = (result.stderr or result.stdout).strip()
+        raise ValueError(f"bcftools norm failed: {detail or result.returncode} (see {log_path})")
 
 
 def is_normalized_acgt_allele(value: str) -> bool:
-    token = value.strip()
-    return bool(token) and set(token) <= {"A", "C", "G", "T"}
+    return bool(value) and set(value) <= {"A", "C", "G", "T"}
 
 
 def parse_normalized_candidates(
@@ -462,7 +254,7 @@ def parse_normalized_candidates(
             if not raw_line.strip() or raw_line.startswith("#"):
                 continue
             parts = raw_line.rstrip("\n").split("\t")
-            if len(parts) < 5:
+            if len(parts) < 8:
                 raise ValueError(f"invalid normalized VCF row: {raw_line.strip()}")
             chrom, pos, candidate_id, ref, alt = parts[:5]
             if candidate_id not in candidate_lookup:
@@ -479,6 +271,7 @@ def parse_normalized_candidates(
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "norm_multiple_output_records")
             continue
         chrom, pos, ref, alt = records[0]
+        ref, alt = ref.upper(), alt.upper()
         if "," in alt:
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "norm_multiallelic")
             continue
@@ -502,42 +295,45 @@ def parse_normalized_candidates(
             outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "unsupported_target_contig")
             continue
         canonical = VariantRow(final_chrom, str(final_pos), candidate.row.id, alt, ref)
-        if len(canonical.a1) > 1 and len(canonical.a2) > 1:
-            outcomes[candidate_id] = NormalizationOutcome(None, candidate.local_op, "norm_unsupported_complex_indel")
-            continue
         outcomes[candidate_id] = NormalizationOutcome(canonical, candidate.local_op)
     return outcomes
 
 
-def normalize_candidates(
-    candidates: Sequence[NormalizationCandidate],
-    *,
-    fasta_path: Path,
-    contig_naming: str,
-    check_mode: str,
-    output_path: Path,
-) -> Dict[str, NormalizationOutcome]:
-    if not candidates:
-        return {}
-    input_vcf = normalization_debug_vcf_path(output_path, check_mode=check_mode, kind="input")
-    output_vcf = normalization_debug_vcf_path(output_path, check_mode=check_mode, kind="output")
-    log_path = normalization_debug_log_path(output_path, check_mode=check_mode)
-    write_normalization_vcf(input_vcf, candidates, contig_naming)
-    run_bcftools_norm(input_vcf, output_vcf, fasta_path, check_mode=check_mode, log_path=log_path)
-    return parse_normalized_candidates(
-        output_vcf,
-        {candidate.candidate_id: candidate for candidate in candidates},
-        contig_naming,
+def require_reference_matches(rows: Sequence[VariantRow], fasta_path: Path, contig_naming: str) -> None:
+    # Assumes: canonical sequence rows from assignment or normalized-output parsing.
+    # Performs: SV(full REF invariant at the external-tool boundary).
+    # Guarantees: every supplied a2 matches the configured FASTA or the run fails.
+    matches = reference_alleles_match(
+        fasta_path,
+        [normalize_contig_for_reference(row.chrom, contig_naming, "ucsc") for row in rows],
+        [int(row.pos) for row in rows], [row.a2 for row in rows],
     )
+    if not matches.all():
+        raise ValueError("unexpected REF mismatch after reference-allele assignment")
 
 
-def pick_branch3_failure_status(statuses: Sequence[str]) -> str:
-    if statuses and all(status == "norm_ref_mismatch" for status in statuses):
-        return "norm_ref_mismatch"
-    for status in NORM_STATUS_PRIORITY:
-        if status in statuses:
-            return status
-    return "norm_ref_mismatch"
+def normalize_candidates(
+    candidates: Sequence[NormalizationCandidate], *, fasta_path: Path,
+    contig_naming: str, output_path: Path,
+) -> Dict[str, NormalizationOutcome]:
+    # Assumes: each record carries one selected REF/ALT assignment and a stable ID.
+    # Performs: SV(reference invariants), batched external normalization and boundary PV/SV.
+    # Guarantees: one outcome per selected ID, retaining each batch's diagnostics.
+    outcomes: Dict[str, NormalizationOutcome] = {}
+    # PERF: bounded batches limit VCF/record bookkeeping; never spawn per variant.
+    for start in range(0, len(candidates), NORMALIZATION_BATCH_ROWS):
+        batch = candidates[start:start + NORMALIZATION_BATCH_ROWS]
+        require_reference_matches([candidate.row for candidate in batch], fasta_path, contig_naming)
+        batch_path = output_path.with_name(output_path.name + f".bcftools_norm_batch{start // NORMALIZATION_BATCH_ROWS}")
+        input_vcf = batch_path.with_name(batch_path.name + ".input.vcf")
+        output_vcf = batch_path.with_name(batch_path.name + ".output.vcf")
+        log_path = batch_path.with_name(batch_path.name + ".log")
+        write_normalization_vcf(input_vcf, batch, contig_naming)
+        run_bcftools_norm(input_vcf, output_vcf, fasta_path, log_path=log_path)
+        parsed = parse_normalized_candidates(output_vcf, {c.candidate_id: c for c in batch}, contig_naming)
+        require_reference_matches([o.row for o in parsed.values() if o.row is not None], fasta_path, contig_naming)
+        outcomes.update(parsed)
+    return outcomes
 
 
 def apply_normalization_ploidy_filter(
@@ -565,239 +361,64 @@ def apply_normalization_ploidy_filter(
     return outcome
 
 
-def restrict_rows_with_indel_normalization(
-    rows: Sequence[VariantRow],
-    fasta_path: Path,
-    contig_naming: str,
-    *,
-    allow_strand_flips: bool,
-    genome_build: str,
-    output_path: Path,
-) -> List[NormalizationOutcome]:
-    # Assumes: input rows are already validated for allele token domain.
-    # Performs: SV(branching by allele lengths + normalization/restriction + ploidy filtering).
-    # Guarantees: one normalization outcome per input row with canonical local-op/status encoding.
-    outcomes: List[NormalizationOutcome] = [NormalizationOutcome(None, "identity") for _ in rows]
-    snv_indices: List[int] = []
-    one_multibase_indices: List[int] = []
-    both_multibase_indices: List[int] = []
-    for idx, row in enumerate(rows):
-        a1_len = len(row.a1.strip())
-        a2_len = len(row.a2.strip())
-        if a1_len == 1 and a2_len == 1:
-            snv_indices.append(idx)
-        elif (a1_len == 1) != (a2_len == 1):
-            one_multibase_indices.append(idx)
-        else:
-            both_multibase_indices.append(idx)
-
-    if snv_indices:
-        snv_results = restrict_rows(
-            [rows[idx] for idx in snv_indices],
-            fasta_path,
-            contig_naming,
-            allow_strand_flips,
-        )
-        for input_index, (restricted_row, local_op) in zip(snv_indices, snv_results):
-            if restricted_row is None:
-                outcomes[input_index] = NormalizationOutcome(None, local_op)
-            else:
-                outcomes[input_index] = NormalizationOutcome(restricted_row, local_op)
-
-    branch2_candidates: List[NormalizationCandidate] = []
-    if one_multibase_indices:
-        branch2_results = restrict_rows(
-            [rows[idx] for idx in one_multibase_indices],
-            fasta_path,
-            contig_naming,
-            allow_strand_flips,
-        )
-        for input_index, (restricted_row, local_op) in zip(one_multibase_indices, branch2_results):
-            if restricted_row is None:
-                outcomes[input_index] = NormalizationOutcome(None, local_op)
-                continue
-            branch2_candidates.append(
-                NormalizationCandidate(
-                    candidate_id=f"branch2_row{input_index}",
-                    input_index=input_index,
-                    row=restricted_row,
-                    local_op=local_op,
-                )
-            )
-        branch2_outcomes = normalize_candidates(
-            branch2_candidates,
-            fasta_path=fasta_path,
-            contig_naming=contig_naming,
-            check_mode="e",
-            output_path=output_path,
-        )
-        for candidate in branch2_candidates:
-            parsed = branch2_outcomes[candidate.candidate_id]
-            outcomes[candidate.input_index] = apply_normalization_ploidy_filter(
-                rows[candidate.input_index],
-                parsed,
-                genome_build=genome_build,
-            )
-
-    branch3_candidates: List[NormalizationCandidate] = []
-    if both_multibase_indices:
-        for input_index in both_multibase_indices:
-            row = rows[input_index]
-            branch3_candidates.extend(
-                [
-                    NormalizationCandidate(
-                        candidate_id=f"branch3_row{input_index}_identity",
-                        input_index=input_index,
-                        row=row,
-                        local_op="identity",
-                    ),
-                    NormalizationCandidate(
-                        candidate_id=f"branch3_row{input_index}_swap",
-                        input_index=input_index,
-                        row=VariantRow(row.chrom, row.pos, row.id, row.a2, row.a1),
-                        local_op="swap",
-                    ),
-                ]
-            )
-        branch3_outcomes = normalize_candidates(
-            branch3_candidates,
-            fasta_path=fasta_path,
-            contig_naming=contig_naming,
-            check_mode="x",
-            output_path=output_path,
-        )
-        grouped: Dict[int, List[NormalizationOutcome]] = {}
-        for candidate in branch3_candidates:
-            grouped.setdefault(candidate.input_index, []).append(
-                apply_normalization_ploidy_filter(
-                    rows[candidate.input_index],
-                    branch3_outcomes[candidate.candidate_id],
-                    genome_build=genome_build,
-                )
-            )
-        for input_index, candidate_outcomes in grouped.items():
-            survivors = [candidate for candidate in candidate_outcomes if candidate.row is not None]
-            if len(survivors) == 1:
-                outcomes[input_index] = survivors[0]
-                continue
-            if len(survivors) == 2:
-                outcomes[input_index] = NormalizationOutcome(None, "identity", "norm_ambiguous_orientation")
-                continue
-            outcomes[input_index] = NormalizationOutcome(
-                None,
-                "identity",
-                pick_branch3_failure_status(
-                    [candidate.status for candidate in candidate_outcomes if candidate.status is not None]
-                ),
-            )
-    return outcomes
-
-
 def build_restriction_outcomes_table(
-    source_rows_table: VariantRowsTable,
-    *,
-    fasta_path: Path,
-    contig_naming: str,
-    allow_strand_flips: bool,
-    norm_indels: bool,
-    genome_build: str,
-    output_path: Path,
+    source_rows_table: VariantRowsTable, *, fasta_path: Path, contig_naming: str,
+    allow_strand_flips: bool, norm_indels: bool, genome_build: str,
+    output_path: Path, include_indels: bool = False, allow_indel_swaps: bool = False,
 ) -> pd.DataFrame:
-    # Assumes: source rows already pass boundary contig and allele validation checks.
-    # Performs: SV(split by SNV vs indel; vectorized SNV restriction; row-based indel restriction/normalization).
-    # Guarantees: one aligned outcome record per input row with keep/local_op/status and canonical out_* fields.
-    source_frame = (
-        source_rows_table.to_frame(copy=False)
-        .loc[:, ["chrom", "pos", "id", "a1", "a2"]]
-        .reset_index(drop=True)
-    )
-    outcomes = pd.DataFrame(
-        {
-            "keep": pd.Series(False, index=source_frame.index, dtype=bool),
-            "local_op": pd.Series("identity", index=source_frame.index, dtype="object"),
-            "status": pd.Series([None] * len(source_frame), dtype="object"),
-            "out_chrom": source_frame["chrom"],
-            "out_pos": source_frame["pos"],
-            "out_id": source_frame["id"],
-            "out_a1": source_frame["a1"],
-            "out_a2": source_frame["a2"],
-        }
-    )
+    # Assumes: loader-owned PN/PV and boundary allele/contig validation have completed.
+    # Performs: SV(input filtering, ordered full-REF assignment, normalization and ploidy).
+    # Guarantees: aligned outcomes; structural indexes never replace stored QC locators.
+    source = source_rows_table.frame.loc[:, ["chrom", "pos", "id", "a1", "a2"]].reset_index(drop=True)
+    outcomes = source.add_prefix("out_").copy()
+    outcomes["keep"] = False
+    outcomes["local_op"] = "identity"
+    outcomes["status"] = None
+    identical = source["a1"].eq(source["a2"])
+    snv = source["a1"].str.len().eq(1) & source["a2"].str.len().eq(1)
+    outcomes.loc[identical, "status"] = "identical_alleles"
+    outcomes.loc[~identical & ~snv & (not include_indels), "status"] = "non_snv_input"
+    snv_idx = source.index[snv & ~identical]
+    if len(snv_idx):
+        selected = restrict_rows_table(
+            VariantRowsTable.from_frame(source.loc[snv_idx].reset_index(drop=True), copy=False),
+            fasta_path, contig_naming, allow_strand_flips,
+        )
+        for column in ("keep", "local_op", "out_a1", "out_a2"):
+            outcomes.loc[snv_idx, column] = selected[column].to_numpy(dtype=bool if column == "keep" else object)
 
-    snv_mask = source_frame["a1"].str.len().eq(1) & source_frame["a2"].str.len().eq(1)
-    snv_idx = source_frame.index[snv_mask]
-    indel_idx = source_frame.index[~snv_mask]
-
-    if not snv_idx.empty:
-        snv_input = source_frame.loc[snv_idx, ["chrom", "pos", "id", "a1", "a2"]].reset_index(drop=True)
-        snv_restricted = restrict_rows_table(
-            VariantRowsTable.from_frame(snv_input, copy=False),
-            fasta_path,
-            contig_naming,
-            allow_strand_flips,
-        ).reset_index(drop=True)
-        outcomes.loc[snv_idx, "keep"] = snv_restricted["keep"].to_numpy(dtype=bool)
-        outcomes.loc[snv_idx, "local_op"] = snv_restricted["local_op"].to_numpy(dtype=object)
-        outcomes.loc[snv_idx, "out_chrom"] = snv_restricted["out_chrom"].to_numpy(dtype=object)
-        outcomes.loc[snv_idx, "out_pos"] = snv_restricted["out_pos"].to_numpy(dtype=object)
-        outcomes.loc[snv_idx, "out_id"] = snv_restricted["out_id"].to_numpy(dtype=object)
-        outcomes.loc[snv_idx, "out_a1"] = snv_restricted["out_a1"].to_numpy(dtype=object)
-        outcomes.loc[snv_idx, "out_a2"] = snv_restricted["out_a2"].to_numpy(dtype=object)
-
-    if not indel_idx.empty:
-        indel_frame = source_frame.loc[indel_idx, ["chrom", "pos", "id", "a1", "a2"]].reset_index(drop=True)
-        indel_rows: List[VariantRow] = []
-        for chrom, pos, row_id, a1, a2 in indel_frame.itertuples(index=False, name=None):
-            indel_rows.append(VariantRow(str(chrom), str(pos), str(row_id), str(a1), str(a2)))
-        if norm_indels:
-            indel_outcomes = restrict_rows_with_indel_normalization(
-                indel_rows,
-                fasta_path,
-                contig_naming,
-                allow_strand_flips=allow_strand_flips,
-                genome_build=genome_build,
-                output_path=output_path,
-            )
-        else:
-            restricted = restrict_rows(indel_rows, fasta_path, contig_naming, allow_strand_flips)
-            indel_outcomes = [NormalizationOutcome(row, local_op) for row, local_op in restricted]
-
-        keep_values: List[bool] = []
-        local_ops: List[str] = []
-        statuses: List[str | None] = []
-        out_chrom: List[str] = []
-        out_pos: List[str] = []
-        out_id: List[str] = []
-        out_a1: List[str] = []
-        out_a2: List[str] = []
-        # PERF: loop retained for indel outcome projection; indel subset is expected smaller than SNV subset.
-        for fallback_row, outcome in zip(indel_rows, indel_outcomes):
-            local_ops.append(outcome.local_op)
-            statuses.append(outcome.status)
-            if outcome.row is None:
-                keep_values.append(False)
-                out_chrom.append(fallback_row.chrom)
-                out_pos.append(fallback_row.pos)
-                out_id.append(fallback_row.id)
-                out_a1.append(fallback_row.a1)
-                out_a2.append(fallback_row.a2)
-                continue
-            keep_values.append(True)
-            out_chrom.append(outcome.row.chrom)
-            out_pos.append(outcome.row.pos)
-            out_id.append(outcome.row.id)
-            out_a1.append(outcome.row.a1)
-            out_a2.append(outcome.row.a2)
-
-        outcomes.loc[indel_idx, "keep"] = keep_values
-        outcomes.loc[indel_idx, "local_op"] = local_ops
-        outcomes.loc[indel_idx, "status"] = statuses
-        outcomes.loc[indel_idx, "out_chrom"] = pd.array(out_chrom, dtype=object)
-        outcomes.loc[indel_idx, "out_pos"] = pd.array(out_pos, dtype=object)
-        outcomes.loc[indel_idx, "out_id"] = pd.array(out_id, dtype=object)
-        outcomes.loc[indel_idx, "out_a1"] = pd.array(out_a1, dtype=object)
-        outcomes.loc[indel_idx, "out_a2"] = pd.array(out_a2, dtype=object)
-
+    multibase = source.loc[~snv & ~identical] if include_indels else source.iloc[:0]
+    contigs = [normalize_contig_for_reference(chrom, contig_naming, "ucsc") for chrom in multibase["chrom"]]
+    positions = multibase["pos"].astype(int).tolist()
+    identity = reference_alleles_match(fasta_path, contigs, positions, multibase["a2"].tolist())
+    swap = reference_alleles_match(fasta_path, contigs, positions, multibase["a1"].tolist()) if allow_indel_swaps else identity & False
+    swapped_idx = multibase.index[~identity & swap]
+    selected_idx = multibase.index[identity | swap]
+    outcomes.loc[selected_idx, "keep"] = True
+    outcomes.loc[swapped_idx, "local_op"] = "swap"
+    outcomes.loc[swapped_idx, ["out_a1", "out_a2"]] = source.loc[
+        swapped_idx, ["a2", "a1"]
+    ].to_numpy(dtype=object)
+    selected_candidates: List[NormalizationCandidate] = []
+    if norm_indels:
+        # PERF: row objects are needed only for multibase VCF emission and round-trip bookkeeping.
+        for idx, values in zip(selected_idx, outcomes.loc[selected_idx].itertuples(index=False, name=None)):
+            chrom, pos, row_id, a1, a2, _keep, local_op, _status = values
+            selected_candidates.append(NormalizationCandidate(
+                f"row{idx}", idx, VariantRow(chrom, pos, row_id, a1, a2), local_op,
+            ))
+    if selected_candidates:
+        normalized = normalize_candidates(selected_candidates, fasta_path=fasta_path, contig_naming=contig_naming, output_path=output_path)
+        # PERF: normalization bookkeeping is multibase-only and bounded by candidate batches.
+        for candidate in selected_candidates:
+            idx = candidate.input_index
+            result = apply_normalization_ploidy_filter(candidate.row, normalized[candidate.candidate_id], genome_build=genome_build)
+            outcomes.at[idx, "keep"] = result.row is not None
+            outcomes.at[idx, "status"] = result.status
+            if result.row is not None:
+                outcomes.loc[idx, ["out_chrom", "out_pos", "out_a1", "out_a2"]] = [result.row.chrom, result.row.pos, result.row.a1, result.row.a2]
+    unmatched = ~outcomes["keep"] & outcomes["status"].isna()
+    outcomes.loc[unmatched, "status"] = "no_reference_match"
     return outcomes
 
 
@@ -834,15 +455,12 @@ def main() -> int:
     fasta_path = resolve_internal_reference_fasta(str(genome_build))
     duplicate_target_count = 0
     qc_output_path = output_path.with_name(output_path.name + ".qc.tsv")
-    if args.norm_indels:
-        for check_mode in ("e", "x"):
-            for kind in ("input", "output"):
-                debug_vcf = normalization_debug_vcf_path(output_path, check_mode=check_mode, kind=kind)
-                if debug_vcf.exists():
-                    debug_vcf.unlink()
-            debug_log = normalization_debug_log_path(output_path, check_mode=check_mode)
-            if debug_log.exists():
-                debug_log.unlink()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    for diagnostic in output_path.parent.iterdir():
+        if diagnostic.name.startswith(output_path.name + ".bcftools_norm") and diagnostic.is_file():
+            diagnostic.unlink()
+    if not args.include_indels and (args.allow_indel_swaps or args.norm_indels):
+        logger.warning("multibase operations are no-ops without --include-indels because multibase input is excluded")
 
     restricted_outcomes = build_restriction_outcomes_table(
         source_rows_table,
@@ -850,14 +468,12 @@ def main() -> int:
         contig_naming=contig_naming,
         allow_strand_flips=args.allow_strand_flips,
         norm_indels=bool(args.norm_indels),
+        include_indels=args.include_indels,
+        allow_indel_swaps=args.allow_indel_swaps,
         genome_build=str(genome_build),
         output_path=output_path,
     )
     keep_mask = restricted_outcomes["keep"].astype(bool)
-    # Legacy reference-only exclusions have no normalization status. Audit them
-    # for both object types using the shared reference-assignment exclusion.
-    no_match = ~keep_mask & restricted_outcomes["status"].isna()
-    restricted_outcomes.loc[no_match, "status"] = "no_reference_match"
     flip_count = int((keep_mask & restricted_outcomes["local_op"].isin(["flip", "flip_swap"])).sum())
 
     # Both object types share target selection, duplicate handling, and QC.
@@ -924,6 +540,13 @@ def main() -> int:
         "normalization": "none" if contig_naming == "ucsc" else f"{contig_naming}->ucsc",
         "allow_strand_flips": bool(args.allow_strand_flips),
         "norm_indels": bool(args.norm_indels),
+        "include_indels": args.include_indels,
+        "allow_indel_swaps": args.allow_indel_swaps,
+        "assignment_counts": restricted_outcomes.loc[
+            ~restricted_outcomes["status"].isin(["identical_alleles", "non_snv_input", "no_reference_match"]),
+            "local_op",
+        ].value_counts().to_dict(),
+        "exclusion_counts": {**restricted_outcomes["status"].dropna().value_counts().to_dict(), "duplicate_target": duplicate_target_count},
         "input_rows": input_row_count,
         "output_rows": output_row_count,
         "dropped_rows": input_row_count - output_row_count,

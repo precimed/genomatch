@@ -1,15 +1,11 @@
 import json
 import os
-import shutil
 import stat
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from genomatch.vmap_restrict_build_compatible import run_bcftools_norm_check_ref_x_workaround
-from utils import read_tsv, run_py_with_env, write_fasta, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
+from utils import read_tsv, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def write_fake_norm_bcftools(path, behavior_path, log_path):
@@ -98,72 +94,11 @@ def restrict_env_with_fake_norm(
 
 
 def norm_debug_vcf_path(output_path, *, check_mode, kind):
-    return output_path.with_name(output_path.name + f".bcftools_norm_{kind}_{check_mode}.vcf")
+    return output_path.with_name(output_path.name + (f".bcftools_norm_batch0.{kind}.vcf" if check_mode == "e" else f".bcftools_norm_{kind}_{check_mode}.vcf"))
 
 
 def norm_debug_log_path(output_path, *, check_mode):
-    return output_path.with_name(output_path.name + f".bcftools_norm_output_{check_mode}.log")
-
-
-def write_issue_2427_fixture(tmp_path):
-    fasta = tmp_path / "ref.fa"
-    vcf = tmp_path / "in.vcf"
-    write_fasta(fasta, {"chr1": "AAA"})
-    write_lines(
-        vcf,
-        [
-            "##fileformat=VCFv4.2",
-            "##contig=<ID=chr1>",
-            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
-            "chr1\t1\tbad\tC\tA\t.\tPASS\t.",
-            "chr1\t2\tgood\tA\tAT\t.\tPASS\t.",
-        ],
-    )
-    return fasta, vcf
-
-
-def test_bcftools_issue_2427_check_ref_x_segfault_reproduced(tmp_path):
-    """Sentinel: this should pass only while upstream bcftools issue #2427 exists.
-
-    Once bcftools fixes the segfault, this test should fail and signal that the
-    workaround can be removed.
-    """
-    bcftools = shutil.which("bcftools")
-    samtools = shutil.which("samtools")
-    if bcftools is None or samtools is None:
-        pytest.skip("bcftools and samtools are required for the issue #2427 sentinel test")
-    fasta, vcf = write_issue_2427_fixture(tmp_path)
-    subprocess.run([samtools, "faidx", str(fasta)], check=True)
-    output_vcf = tmp_path / "out.vcf"
-    result = subprocess.run(
-        [bcftools, "norm", "-f", str(fasta), "-c", "x", "-o", str(output_vcf), "-Ov", str(vcf)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode in {-11, 139}
-
-
-def test_bcftools_issue_2427_workaround_with_check_ref_w_matches_expected_filtering(tmp_path):
-    bcftools = shutil.which("bcftools")
-    samtools = shutil.which("samtools")
-    if bcftools is None or samtools is None:
-        pytest.skip("bcftools and samtools are required for the issue #2427 workaround test")
-    fasta, vcf = write_issue_2427_fixture(tmp_path)
-    subprocess.run([samtools, "faidx", str(fasta)], check=True)
-    output_vcf = tmp_path / "out.vcf"
-    log_path = tmp_path / "out.log"
-    run_bcftools_norm_check_ref_x_workaround(vcf, output_vcf, fasta, log_path=log_path)
-    retained_records = [
-        line.rstrip("\n")
-        for line in output_vcf.read_text(encoding="utf-8").splitlines()
-        if line and not line.startswith("#")
-    ]
-    assert retained_records == ["chr1\t2\tgood\tA\tAT\t.\tPASS\t."]
-    log_text = log_path.read_text(encoding="utf-8")
-    assert "[check_ref_w_pass1]" in log_text
-    assert "[check_ref_w_pass2]" in log_text
-    assert "REF_MISMATCH\tchr1\t1\tC\tA" in log_text
+    return output_path.with_name(output_path.name + (f".bcftools_norm_batch0.log" if check_mode == "e" else f".bcftools_norm_output_{check_mode}.log"))
 
 
 def test_restrict_build_compatible_vmap_uses_config_and_preserves_provenance(tmp_path):
@@ -327,12 +262,14 @@ def test_restrict_build_compatible_vtable_emits_vtable_and_keeps_reference_ancho
         source,
         "--output",
         out,
+        "--include-indels",
+        "--allow-indel-swaps",
     )
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [["1", "1", "t1", "AT", "A"]]
 
 
-def test_restrict_build_compatible_vtable_can_flip_reference_anchored_non_snv(tmp_path):
+def test_restrict_build_compatible_vtable_does_not_flip_multibase_input(tmp_path):
     grch37 = tmp_path / "GRCh37.ucsc.fa"
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
@@ -357,7 +294,8 @@ def test_restrict_build_compatible_vtable_can_flip_reference_anchored_non_snv(tm
         "--allow-strand-flips",
     )
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "1", "t1", "CG", "A"]]
+    assert read_tsv(out) == []
+    assert read_tsv(out.with_name(out.name + ".qc.tsv"))[-1][-1] == "non_snv_input"
 
 
 def test_restrict_build_compatible_requires_known_build(tmp_path):
@@ -784,6 +722,8 @@ def test_restrict_build_compatible_norm_indels_rejects_plink_splitx_input(tmp_pa
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
     assert result.returncode != 0
     assert "does not support contig_naming=plink_splitx" in result.stderr
@@ -807,6 +747,8 @@ def test_restrict_build_compatible_norm_indels_leaves_pure_snps_on_the_non_bcfto
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -818,7 +760,7 @@ def test_restrict_build_compatible_norm_indels_normalizes_one_multibase_branch(t
     env, log_path = restrict_env_with_fake_norm(
         tmp_path,
         behavior={
-            "branch2_row0": {
+            "row0": {
                 "records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}],
             }
         },
@@ -839,6 +781,8 @@ def test_restrict_build_compatible_norm_indels_normalizes_one_multibase_branch(t
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -850,7 +794,7 @@ def test_restrict_build_compatible_norm_indels_accepts_t2t_build(tmp_path):
     env, log_path = restrict_env_with_fake_norm(
         tmp_path,
         behavior={
-            "branch2_row0": {
+            "row0": {
                 "records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}],
             }
         },
@@ -872,6 +816,8 @@ def test_restrict_build_compatible_norm_indels_accepts_t2t_build(tmp_path):
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -894,7 +840,7 @@ def test_restrict_build_compatible_norm_indels_drops_rows_when_ploidy_class_chan
     behavior_path.write_text(
         json.dumps(
             {
-                "branch2_row0": {
+                "row0": {
                     "records": [{"chrom": "chrX", "pos": 60000, "ref": "A", "alt": "AT"}],
                 }
             },
@@ -920,6 +866,8 @@ def test_restrict_build_compatible_norm_indels_drops_rows_when_ploidy_class_chan
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -934,7 +882,7 @@ def test_restrict_build_compatible_norm_indels_retains_branch2_vcfs_and_clears_s
     env, _log_path = restrict_env_with_fake_norm(
         tmp_path,
         behavior={
-            "branch2_row0": {
+            "row0": {
                 "records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}],
             }
         },
@@ -959,6 +907,8 @@ def test_restrict_build_compatible_norm_indels_retains_branch2_vcfs_and_clears_s
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -967,7 +917,7 @@ def test_restrict_build_compatible_norm_indels_retains_branch2_vcfs_and_clears_s
     assert branch2_input.exists()
     assert branch2_output.exists()
     assert norm_debug_log_path(out, check_mode="e").exists()
-    assert "branch2_row0" in branch2_input.read_text(encoding="utf-8")
+    assert "row0" in branch2_input.read_text(encoding="utf-8")
     assert "stale" not in branch2_input.read_text(encoding="utf-8")
     assert "stale" not in branch2_output.read_text(encoding="utf-8")
     assert "returncode: 0" in norm_debug_log_path(out, check_mode="e").read_text(encoding="utf-8")
@@ -976,11 +926,11 @@ def test_restrict_build_compatible_norm_indels_retains_branch2_vcfs_and_clears_s
     assert not norm_debug_log_path(out, check_mode="x").exists()
 
 
-def test_restrict_build_compatible_norm_indels_composes_flip_swap_before_normalization(tmp_path):
+def test_restrict_build_compatible_norm_indels_does_not_flip_multibase_before_normalization(tmp_path):
     env, log_path = restrict_env_with_fake_norm(
         tmp_path,
         behavior={
-            "branch2_row0": {
+            "row0": {
                 "records": [{"chrom": "chr1", "pos": 1, "ref": "A", "alt": "CG"}],
             }
         },
@@ -1002,127 +952,14 @@ def test_restrict_build_compatible_norm_indels_composes_flip_swap_before_normali
         out,
         "--allow-strand-flips",
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
-    assert "-c e" in log_path.read_text(encoding="utf-8")
-    assert read_tsv(out) == [["1", "1", "t1", "CG", "A", "shardA", "7", "flip_swap"]]
-
-
-@pytest.mark.parametrize(
-    "survivor_id,expected_allele_op",
-    [
-        ("branch3_row0_identity", "identity"),
-        ("branch3_row0_swap", "swap"),
-    ],
-)
-def test_restrict_build_compatible_norm_indels_branch3_two_candidate_logic(tmp_path, survivor_id, expected_allele_op):
-    env, log_path = restrict_env_with_fake_norm(
-        tmp_path,
-        behavior={
-            "branch3_row0_identity": {"action": "drop"},
-            "branch3_row0_swap": {"action": "drop"},
-            survivor_id: {
-                "records": [{"chrom": "chr1", "pos": 3, "ref": "A", "alt": "T"}],
-            },
-        },
-    )
-    source = tmp_path / "base.vmap"
-    out = tmp_path / "restricted.vmap"
-    write_lines(source, ["1\t3\tt1\tAT\tAG\tshardA\t0\tidentity"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-
-    result = run_py_with_env(
-        "restrict_build_compatible.py",
-        env,
-        "--source",
-        source,
-        "--output",
-        out,
-        "--norm-indels",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "-c w" in log_path.read_text(encoding="utf-8")
-    assert read_tsv(out) == [["1", "3", "t1", "T", "A", "shardA", "0", expected_allele_op]]
-    assert norm_debug_vcf_path(out, check_mode="x", kind="input").exists()
-    assert norm_debug_vcf_path(out, check_mode="x", kind="output").exists()
-    assert norm_debug_log_path(out, check_mode="x").exists()
-
-
-def test_restrict_build_compatible_norm_indels_branch3_audits_ambiguous_orientation(tmp_path):
-    env, _log_path = restrict_env_with_fake_norm(
-        tmp_path,
-        behavior={
-            "branch3_row0_identity": {
-                "records": [{"chrom": "chr1", "pos": 3, "ref": "A", "alt": "T"}],
-            },
-            "branch3_row0_swap": {
-                "records": [{"chrom": "chr1", "pos": 3, "ref": "A", "alt": "G"}],
-            },
-        },
-    )
-    source = tmp_path / "base.vmap"
-    out = tmp_path / "restricted.vmap"
-    write_lines(source, ["1\t3\tt1\tAT\tAG\tshardA\t0\tidentity"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-
-    result = run_py_with_env(
-        "restrict_build_compatible.py",
-        env,
-        "--source",
-        source,
-        "--output",
-        out,
-        "--norm-indels",
-    )
-
-    assert result.returncode == 0, result.stderr
+    assert not log_path.exists()
     assert read_tsv(out) == []
-    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        ["shardA", "0", "t1", "norm_ambiguous_orientation"],
-    ]
-
-
-def test_restrict_build_compatible_norm_indels_branch3_audits_ref_mismatch(tmp_path):
-    env, _log_path = restrict_env_with_fake_norm(
-        tmp_path,
-        behavior={
-            "branch3_row0_identity": {"action": "drop"},
-            "branch3_row0_swap": {"action": "drop"},
-        },
-    )
-    source = tmp_path / "base.vmap"
-    out = tmp_path / "restricted.vmap"
-    write_lines(source, ["1\t3\tt1\tAT\tAG\tshardA\t0\tidentity"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-
-    result = run_py_with_env(
-        "restrict_build_compatible.py",
-        env,
-        "--source",
-        source,
-        "--output",
-        out,
-        "--norm-indels",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == []
-    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        ["shardA", "0", "t1", "norm_ref_mismatch"],
-    ]
+    assert read_tsv(out.with_name(out.name + ".qc.tsv"))[-1][-1] == "no_reference_match"
 
 
 @pytest.mark.parametrize(
@@ -1138,7 +975,6 @@ def test_restrict_build_compatible_norm_indels_branch3_audits_ref_mismatch(tmp_p
             "norm_multiple_output_records",
         ),
         ([{"chrom": "chr1", "pos": 2, "ref": "A", "alt": "A"}], "norm_identical_ref_alt_alleles"),
-        ([{"chrom": "chr1", "pos": 2, "ref": "AA", "alt": "GG"}], "norm_unsupported_complex_indel"),
         ([{"chrom": "chr1", "pos": 0, "ref": "A", "alt": "C"}], "norm_invalid_position"),
         ([{"chrom": "chrUn", "pos": 2, "ref": "A", "alt": "C"}], "unsupported_target_contig"),
     ],
@@ -1146,7 +982,7 @@ def test_restrict_build_compatible_norm_indels_branch3_audits_ref_mismatch(tmp_p
 def test_restrict_build_compatible_norm_indels_audits_normalization_specific_statuses(tmp_path, records, expected_status):
     env, _log_path = restrict_env_with_fake_norm(
         tmp_path,
-        behavior={"branch2_row0": {"records": records}},
+        behavior={"row0": {"records": records}},
     )
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
@@ -1164,6 +1000,8 @@ def test_restrict_build_compatible_norm_indels_audits_normalization_specific_sta
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -1178,8 +1016,8 @@ def test_restrict_build_compatible_norm_indels_drops_duplicate_targets_after_nor
     env, _log_path = restrict_env_with_fake_norm(
         tmp_path,
         behavior={
-            "branch2_row0": {"records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}]},
-            "branch2_row1": {"records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}]},
+            "row0": {"records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}]},
+            "row1": {"records": [{"chrom": "chr1", "pos": 1, "ref": "AA", "alt": "A"}]},
         },
     )
     source = tmp_path / "base.vmap"
@@ -1204,6 +1042,8 @@ def test_restrict_build_compatible_norm_indels_drops_duplicate_targets_after_nor
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode == 0, result.stderr
@@ -1238,6 +1078,8 @@ def test_restrict_build_compatible_norm_indels_fails_when_bcftools_is_missing(tm
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode != 0
@@ -1262,6 +1104,8 @@ def test_restrict_build_compatible_norm_indels_fails_when_bcftools_norm_fails(tm
         "--output",
         out,
         "--norm-indels",
+        "--include-indels",
+        "--allow-indel-swaps",
     )
 
     assert result.returncode != 0

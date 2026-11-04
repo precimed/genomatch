@@ -543,8 +543,8 @@ def test_prepare_variants_t2t_end_to_end_planning(tmp_path, source_build, dst_bu
 @pytest.mark.parametrize(
     "extra_args,expected_flags",
     [
-        ([], ["--allow-strand-flips", "--norm-indels"]),
-        (["--no-allow-strand-flips"], ["--norm-indels"]),
+        ([], ["--allow-strand-flips"]),
+        (["--no-allow-strand-flips"], []),
         (["--no-norm-indels"], ["--allow-strand-flips"]),
         (["--no-allow-strand-flips", "--no-norm-indels"], []),
     ],

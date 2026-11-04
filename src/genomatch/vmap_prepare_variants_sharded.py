@@ -72,11 +72,13 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Pass through to prepare_variants.py (default: enabled)",
     )
+    parser.add_argument("--include-indels", action="store_true", help="Admit multibase input (default: SNV-only)")
+    parser.add_argument("--allow-indel-swaps", action=argparse.BooleanOptionalAction, default=None, help="Allow multibase allele swaps (default: enabled with --include-indels)")
     parser.add_argument(
         "--norm-indels",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Pass through to prepare_variants.py (default: enabled)",
+        default=None,
+        help="Pass through to prepare_variants.py (default: enabled with --include-indels)",
     )
     parser.add_argument("--drop-strand-ambiguous", action="store_true", help="Pass through to prepare_variants.py")
     parser.add_argument("--max-allele-length", type=int, default=150, help="Pass through to prepare_variants.py")
@@ -146,7 +148,11 @@ def prepare_command(
     if args.src_build:
         cmd.extend(["--src-build", args.src_build])
     cmd.append("--allow-strand-flips" if args.allow_strand_flips else "--no-allow-strand-flips")
-    cmd.append("--norm-indels" if args.norm_indels else "--no-norm-indels")
+    if args.include_indels:
+        cmd.append("--include-indels")
+    for flag, value in (("allow-indel-swaps", args.allow_indel_swaps), ("norm-indels", args.norm_indels)):
+        if value is not None:
+            cmd.append(f"--{flag}" if value else f"--no-{flag}")
     if args.drop_strand_ambiguous:
         cmd.append("--drop-strand-ambiguous")
     if args.resume:
