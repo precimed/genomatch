@@ -29,6 +29,7 @@ Active migrated modules currently include:
 - `tests/test_apply_vmap_to_sumstats.py`
 - `tests/test_apply_vmap_to_bfile.py`
 - `tests/test_apply_vmap_to_pfile.py`
+- `tests/integration/test_apply_vmap_to_pfile_roundtrip.py`
 - `tests/test_prepare_variants.py`
 - `tests/test_prepare_variants_sharded.py`
 - `tests/test_project_payload.py`
@@ -386,6 +387,7 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_bfile.py` covers shard merge, shard split, and arbitrary cross-contig relocation between `@`-sharded source input and `@`-sharded output, validating that the emitted genotype calls land in the correct target shard and row
 - `apply_vmap_to_bfile.py` reads and writes genotype data in bounded chunks rather than loading the full genotype matrix for all variants into memory
 - bounded-chunk behavior must hold for both single-file and `@`-sharded PLINK payloads without changing output semantics, including cases where `.vmap` order interleaves rows from multiple source shards
+- a real `plink2` PFILE round trip must read source and projected `.pgen` output independently of pgenlib, compare hardcalls and fractional dosages under mixed `identity` / `swap` operations (including an indel), preserve missing values, sample order, target row order, and repeated source-row use, and assert emitted `.pvar` REF/ALT against fixed target expectations
 - `apply_vmap_to_pfile.py` applies the same shared genotype-payload `apply_vmap_*` contract to PLINK 2 `.pgen/.pvar/.psam`
 - `apply_vmap_to_pfile.py` defines output `.pvar` rows and allele columns from retained target `.vmap` rows, not from source `.pvar`
 - `apply_vmap_to_pfile.py` writes output `.pvar` IDs according to the [generated-ID contract](spec/core-objects.md#generated-variant-ids) from `.vmap` target rows by default
