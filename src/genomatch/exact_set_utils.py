@@ -93,7 +93,7 @@ def read_target_table(path: Path) -> VariantRowsTable:
     if path.name.endswith(".vtable"):
         return read_vtable_table(path)
     if path.name.endswith(".vmap"):
-        vmap_table = read_vmap_table(path)
+        vmap_table = read_vmap_table(path, check_duplicates=False)
         target_frame = vmap_table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
         return VariantRowsTable.from_frame(target_frame, copy=False)
     raise ValueError(f"unsupported variant object path: {path}")
@@ -163,7 +163,7 @@ def restrict_frame_to_membership_chunks(driver_frame: pd.DataFrame, restriction_
     if restriction_path.name.endswith(".vtable"):
         chunk_iter = iter_vtable_table_chunks(restriction_path, label="variant table row")
     elif is_vmap:
-        chunk_iter = iter_vmap_table_chunks(restriction_path)
+        chunk_iter = iter_vmap_table_chunks(restriction_path, check_duplicates=False)
     else:
         raise ValueError(f"unsupported variant object path: {restriction_path}")
 
@@ -174,9 +174,8 @@ def restrict_frame_to_membership_chunks(driver_frame: pd.DataFrame, restriction_
         row_count += len(frame)
         chunk_keys = exact_key_index(frame)
         # PERF: membership scans can stream tens of millions of .vmap rows.
-        # iter_vmap_table_chunks validates each chunk, but retaining all seen
-        # target keys solely for cross-chunk duplicate checks would scale with
-        # the restriction input instead of the usually small driver set.
+        # Repeated target keys have set semantics; retain only matching keys
+        # so memory scales with the driver set rather than the restriction.
         matched_keys = matched_keys.union(chunk_keys[chunk_keys.isin(driver_keys)])
 
     retain_mask = driver_keys.isin(matched_keys)

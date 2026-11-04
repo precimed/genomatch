@@ -137,7 +137,7 @@ def test_restrict_vmap_source_duplicate_target_keys_fail_before_restriction(tmp_
     assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
 
 
-def test_restrict_vmap_restriction_vmap_duplicate_target_keys_fail(tmp_path):
+def test_restrict_vmap_allows_duplicate_vmap_membership_keys(tmp_path):
     source = tmp_path / "source.vmap"
     restriction = tmp_path / "membership.vmap"
     out = tmp_path / "out.vmap"
@@ -152,8 +152,8 @@ def test_restrict_vmap_restriction_vmap_duplicate_target_keys_fail(tmp_path):
 
     result = run_py("restrict_vmap.py", source, restriction, "--output", out)
 
-    assert result.returncode != 0
-    assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "id1", "A", "G", ".", "0", "identity"]]
 
 
 def test_restrict_vmap_allows_duplicate_vtable_membership_keys(tmp_path):

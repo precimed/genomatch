@@ -366,7 +366,7 @@ def test_intersect_variants_first_vmap_output_metadata_is_vtable(tmp_path):
     }
 
 
-def test_intersect_variants_rejects_duplicate_first_vmap_target_keys(tmp_path):
+def test_intersect_variants_accepts_duplicate_first_vmap_target_keys(tmp_path):
     first = tmp_path / "a.vmap"
     second = tmp_path / "b.vtable"
     out = tmp_path / "out.vtable"
@@ -380,11 +380,11 @@ def test_intersect_variants_rejects_duplicate_first_vmap_target_keys(tmp_path):
 
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
-    assert result.returncode != 0
-    assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
 
 
-def test_intersect_variants_rejects_duplicate_vmap_target_keys(tmp_path):
+def test_intersect_variants_accepts_duplicate_vmap_target_keys(tmp_path):
     first = tmp_path / "a.vtable"
     second = tmp_path / "b.vmap"
     out = tmp_path / "out.vtable"
@@ -398,8 +398,8 @@ def test_intersect_variants_rejects_duplicate_vmap_target_keys(tmp_path):
 
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
-    assert result.returncode != 0
-    assert "duplicate chrom:pos:a1:a2 in vmap target rows" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
 
 
 def test_intersect_variants_rejects_template_paths(tmp_path):
