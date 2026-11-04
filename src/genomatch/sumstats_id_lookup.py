@@ -25,8 +25,9 @@ def load_id_lookup_info(path: Path) -> tuple[TargetObjectInfo, dict[str, object]
 
 
 def iter_id_lookup_target_chunks(path: Path) -> Iterator[pd.DataFrame]:
+    # ID lookup permits repeated keys when the ID resolves to the same coordinates.
     if path.name.endswith(".vmap"):
-        for table in iter_vmap_table_chunks(path, check_duplicates=False):
+        for table in iter_vmap_table_chunks(path):
             yield table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
     else:
         for table in iter_vtable_table_chunks(path):

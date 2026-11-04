@@ -874,6 +874,23 @@ def test_import_sumstats_id_lookup_rejects_needed_id_with_different_coordinate_m
     assert not out.exists()
 
 
+@pytest.mark.parametrize("suffix", ["vmap", "vtable"])
+def test_sumstats_id_lookup_accepts_repeated_keys_across_chunks(tmp_path, monkeypatch, suffix):
+    lookup = tmp_path / f"lookup.{suffix}"
+    rows = ["1\t12\trs_dup\tA\tG", "1\t13\tunused\tC\tT", "1\t12\trs_dup\tA\tG"]
+    if suffix == "vmap":
+        rows = [f"{row}\tignored\t{i}\tidentity" for i, row in enumerate(rows)]
+        write_vmap_with_meta(lookup, rows, contig_naming="ncbi")
+    else:
+        write_vtable_with_meta(lookup, rows, contig_naming="ncbi")
+    source = pd.DataFrame({"chrom": [""], "pos": [""], "id": ["rs_dup"], "a1": ["C"], "a2": ["T"],
+                           "source_shard": ["."], "source_index": [7]})
+    monkeypatch.setattr(vtable_utils, "WRITE_CHUNK_ROWS", 2)
+    augmented, dropped = augment_rows_frame_with_id_lookup(source, lookup, load_target_object_info(lookup))
+    assert augmented[["chrom", "pos", "id", "a1", "a2", "source_index"]].values.tolist() == [["1", "12", "rs_dup", "C", "T", 7]]
+    assert dropped.empty
+
+
 def test_import_sumstats_id_lookup_rejects_needed_id_with_different_coordinates_across_lookup_chunks(
     tmp_path,
     monkeypatch,

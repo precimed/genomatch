@@ -370,7 +370,7 @@ def build_union_target_sample(
     return out_path
 
 
-def existing_wrapper_outputs(args: argparse.Namespace) -> list[Path]:
+def existing_wrapper_outputs(args: argparse.Namespace, *, target_chroms: list[str] | None = None) -> list[Path]:
     existing: list[Path] = []
     if args.input_format in {"sumstats", "sumstats-clean"}:
         output_path = Path(args.output)
@@ -381,11 +381,11 @@ def existing_wrapper_outputs(args: argparse.Namespace) -> list[Path]:
             existing.append(metadata_path)
         return existing
     if args.input_format == "bfile":
-        return existing + existing_bfile_artifacts(Path(args.output), Path(args.vmap))
-    return existing + existing_pfile_artifacts(Path(args.output), Path(args.vmap))
+        return existing + existing_bfile_artifacts(Path(args.output), Path(args.vmap), target_chroms=target_chroms)
+    return existing + existing_pfile_artifacts(Path(args.output), Path(args.vmap), target_chroms=target_chroms)
 
 
-def delete_wrapper_outputs(args: argparse.Namespace) -> None:
+def delete_wrapper_outputs(args: argparse.Namespace, *, target_chroms: list[str] | None = None) -> None:
     synthesized_path = synthesized_target_sample_path(args, resolved_prefix(args))
     if synthesized_path is not None and synthesized_path.exists():
         synthesized_path.unlink()
@@ -398,9 +398,9 @@ def delete_wrapper_outputs(args: argparse.Namespace) -> None:
             metadata_path.unlink()
         return
     if args.input_format == "bfile":
-        delete_bfile_outputs(Path(args.output), Path(args.vmap))
+        delete_bfile_outputs(Path(args.output), Path(args.vmap), target_chroms=target_chroms)
         return
-    delete_pfile_outputs(Path(args.output), Path(args.vmap))
+    delete_pfile_outputs(Path(args.output), Path(args.vmap), target_chroms=target_chroms)
 
 
 def main() -> int:
@@ -408,11 +408,15 @@ def main() -> int:
     vmap_table = require_supported_args(args)
 
     prefix = resolved_prefix(args)
+    target_chroms = (
+        vmap_table.to_frame(copy=False)["chrom"].drop_duplicates().tolist()
+        if args.input_format in {"bfile", "pfile"} and "@" in args.output else None
+    )
 
     if args.force:
-        delete_wrapper_outputs(args)
+        delete_wrapper_outputs(args, target_chroms=target_chroms)
     else:
-        existing = existing_wrapper_outputs(args)
+        existing = existing_wrapper_outputs(args, target_chroms=target_chroms)
         if existing:
             rendered = "\n".join(f"- {path}" for path in sorted(existing))
             raise ValueError(

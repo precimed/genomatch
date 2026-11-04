@@ -44,12 +44,33 @@ output types.
 
 ### Duplicate-containing input
 
+Repeated input keys can associate one target variant with different IDs,
+source rows, or allele operations. Rejecting them prevents implicit selection
+of a representative. Explicit cleanup makes that choice deliberate and applies
+consistently to both object types (`.vmap` and `.vtable`).
+
 Duplicate-containing input has multiple rows with the same
-[variant key](core-objects.md#variant-keys). Unless a tool explicitly supports
-such input, its behavior for that input is unspecified. Tools may reject it. No global
-duplicate-validation pass is required. Explicit cleanup, set-membership, and
-ambiguity-check policies remain authoritative. This also applies to source
-mappings of `.vmap`-only tools.
+[variant key](core-objects.md#variant-keys). `restrict_contigs.py`,
+`drop_strand_ambiguous.py`, `restrict_build_compatible.py`, `liftover_build.py`,
+and `sort_variants.py` must fail clearly on such input, for both object types.
+The error must name `sort_variants.py --drop-duplicates` as the explicit
+keep-first cleanup route; that invocation accepts repeated keys.
+
+`normalize_contigs.py` accepts duplicate-containing input as a repair path,
+including when `contig_naming` is absent. It handles all duplicate output keys
+under its [contig-normalization QC policy](contigs-and-metadata.md#metadata-and-contigs).
+`guess_build.py` does not check input-key uniqueness: it writes metadata only
+and evaluates rows as supplied under its [build-guess policy](contigs-and-metadata.md#guess_buildpy-build-guess-policy).
+
+This rule concerns repeated keys in the input. Distinct input keys that become
+equal on output follow each tool's documented policy.
+
+Source mappings read in full by `restrict_vmap.py`, `assign_vmap_ids.py`,
+`convert_vmap_to_target.py`, `project_payload.py`, and payload-application tools
+must also reject duplicate keys with the explicit cleanup route named above.
+Streaming reads are not required to detect repeated keys across the input and
+must not retain input-sized key state solely for this check. Set-membership and
+ID-lookup inputs keep their own rules and may repeat keys as those rules allow.
 
 ### Row-level QC
 
@@ -117,7 +138,7 @@ Reference I/O implementation constraints are defined in
 - `convert_vmap_to_target.py` materializes target rows and breaks provenance intentionally
 - `sort_variants.py` reads the input object in memory, sorts target rows into declared coordinate order, and does not normalize contigs, validate against reference, liftover, or change alleles
 - `sort_variants.py` validates target rows against the declared `contig_naming` to compute declared coordinate order, but preserves stored `chrom` labels exactly and does not treat different contig spellings as equivalent variant keys
-- `sort_variants.py` must accept optional `--drop-duplicates`; when supplied, duplicate variant keys are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
+- `sort_variants.py` must accept optional `--drop-duplicates`; without it, duplicate-containing input fails under the [duplicate-input rule](#duplicate-containing-input); when supplied, duplicate variant keys are dropped after sorting by exact `(chrom, pos, a1, a2)`, ignoring `id` and any `.vmap` provenance fields
 - `sort_variants.py --drop-duplicates` drops duplicate variant keys after sorting; because exact duplicates have identical declared-coordinate sort keys, the retained duplicate representative is the first occurrence from the input
 - `sort_variants.py --drop-duplicates` does not write a QC sidecar; it is intended for explicit whole-object duplicate cleanup rather than row-level import or transform auditing
 

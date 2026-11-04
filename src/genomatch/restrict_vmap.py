@@ -120,7 +120,8 @@ def main() -> int:
         out_frame = restrict_declared_order(source_path, restriction_paths, infos)
     else:
         out_frame = restrict_count_order(source_path, restriction_paths, infos)
-    write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False))
+    # Filtering parser-validated source rows preserves schema and key uniqueness.
+    write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
     write_metadata(output_path, metadata_with_variants_count(infos[0].raw_metadata, len(out_frame)))
     logger.info("restrict_vmap.py: wrote %s with %s restricted rows", output_path, len(out_frame))
     return 0
