@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Sequence, Tuple
 
+import numpy as np
+
 from .vtable_utils import SUPPORTED_GENOME_BUILDS
 
 DEFAULT_MATCH_CONFIG = Path("/ref/config.yaml")
@@ -305,3 +307,69 @@ def fetch_reference_base(fasta_path: Path, contig: str, pos: int) -> str:
     if pos > len(sequence):
         return ""
     return sequence[pos - 1]
+
+
+def _reference_allele_matches_legacy(fasta_path: Path, contig: str, pos: int, allele: str) -> bool:
+    if pos <= 0 or not allele:
+        return False
+    path_str = str(fasta_path)
+    fasta = open_indexed_fasta(path_str)
+    if contig not in _indexed_fasta_references(path_str):
+        return False
+    try:
+        contig_length = fasta.get_reference_length(contig)
+    except Exception as exc:
+        raise ValueError(f"failed to inspect contig {contig!r} in indexed FASTA {fasta_path}: {exc}") from exc
+    end = pos - 1 + len(allele)
+    if end > contig_length:
+        return False
+    try:
+        sequence = fasta.fetch(contig, pos - 1, end)
+    except Exception as exc:
+        raise ValueError(
+            f"failed to fetch reference span from indexed FASTA {fasta_path} at {contig}:{pos} "
+            f"(length {len(allele)}): {exc}"
+        ) from exc
+    return sequence.upper() == allele
+
+
+def reference_alleles_match(
+    fasta_path: Path,
+    contigs: Sequence[str],
+    positions: Sequence[int],
+    alleles: Sequence[str],
+) -> np.ndarray:
+    """Return a boolean array aligned to the supplied allele queries.
+
+    Positions are one-based. Alleles must already be canonical uppercase A/C/G/T
+    sequences; empty alleles and non-positive positions return False. Missing
+    contigs, incomplete spans, and reference ambiguity characters cannot match.
+    """
+    # Assumes: typed, canonical allele queries; asset validation belongs to the caller.
+    # Performs: PV(equal input lengths), SV(full-allele reference compatibility).
+    # Guarantees: aligned booleans in either access mode, without reference-span copies
+    # or per-query indexed fetches in BULK mode; existing single-base APIs are unchanged.
+    count = len(contigs)
+    if len(positions) != count or len(alleles) != count:
+        raise ValueError("reference allele query contigs, positions, and alleles must have equal lengths")
+    mode = resolve_reference_access_mode()
+    if count == 0:
+        return np.empty(0, dtype=bool)
+    if mode == "LEGACY":
+        # PERF: per-query indexed access is intentional only in diagnostic LEGACY mode.
+        return np.fromiter(
+            (_reference_allele_matches_legacy(fasta_path, contig, pos, allele)
+             for contig, pos, allele in zip(contigs, positions, alleles)),
+            dtype=bool,
+            count=count,
+        )
+    # PERF: cache references by contig (small cardinality), not by variant. Stream
+    # O(rows + compared bases) matching into the bool array: startswith avoids span
+    # copies, and fromiter avoids row-index lists, tuple keys, and a result merge.
+    sequences = {contig: _fetch_contig_sequence(str(fasta_path), contig) for contig in dict.fromkeys(contigs)}
+    return np.fromiter(
+        (pos > 0 and bool(allele) and sequences[contig].startswith(allele, pos - 1)
+         for contig, pos, allele in zip(contigs, positions, alleles)),
+        dtype=bool,
+        count=count,
+    )
