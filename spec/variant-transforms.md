@@ -126,7 +126,7 @@ Reference I/O implementation constraints are defined in
 
 ## Strand-flip scope
 
-- Same-build set operations are exact `chrom:pos:a1:a2` operations over already-prepared target rows; they do not perform strand-flip or swap recovery.
+- Same-build set operations are exact `(chrom, pos, a1, a2)` operations over already-prepared target rows; they do not perform strand-flip or swap recovery.
 - Optional same-build strand-flip resolution belongs to `restrict_build_compatible.py`, which restricts same-build rows to those that are reference-compatible with the configured reference FASTA
 - Strand handling in `restrict_build_compatible.py` follows the permissions and priority in [same-build reference compatibility](#same-build-reference-compatibility).
 - `liftover_build.py` relies on the [required source reference compatibility](#required-source-reference-compatibility)

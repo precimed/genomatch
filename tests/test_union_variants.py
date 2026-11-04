@@ -37,11 +37,11 @@ def test_union_variants_deduplicates_target_keys_assigns_target_ids_and_sorts(tm
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "100", "1:100:A:C", "A", "C"],
-        ["1", "100", "1:100:A:G", "A", "G"],
-        ["1", "200", "1:200:C:T", "C", "T"],
-        ["X", "7", "X:7:A:C", "A", "C"],
-        ["MT", "3", "MT:3:A:T", "A", "T"],
+        ["1", "100", "1:100:C:A", "A", "C"],
+        ["1", "100", "1:100:G:A", "A", "G"],
+        ["1", "200", "1:200:T:C", "C", "T"],
+        ["X", "7", "X:7:C:A", "A", "C"],
+        ["MT", "3", "MT:3:T:A", "A", "T"],
     ]
     assert json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))["variants_count"] == 5
     assert f"loaded 3 variants from {first}" in result.stderr
@@ -66,8 +66,8 @@ def test_union_variants_rewrites_ids_for_non_overlapping_inputs(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "100", "1:100:A:G", "A", "G"],
-        ["1", "200", "1:200:C:T", "C", "T"],
+        ["1", "100", "1:100:G:A", "A", "G"],
+        ["1", "200", "1:200:T:C", "C", "T"],
     ]
 
 
@@ -90,9 +90,9 @@ def test_union_variants_uses_count_order_when_all_counts_are_present(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "100", "1:100:A:G", "A", "G"],
-        ["1", "200", "1:200:C:T", "C", "T"],
-        ["1", "300", "1:300:A:C", "A", "C"],
+        ["1", "100", "1:100:G:A", "A", "G"],
+        ["1", "200", "1:200:T:C", "C", "T"],
+        ["1", "300", "1:300:C:A", "A", "C"],
     ]
     assert result.stderr.index(f"loaded 1 variants from {second}") < result.stderr.index(f"loaded 2 variants from {first}")
     assert "variants_count missing from metadata" not in result.stderr

@@ -608,7 +608,23 @@ def test_import_sumstats_extracts_joined_variant_fields(tmp_path):
 
     result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "rs1", "A", "G", ".", "0", "identity"]]
+    # The third field is OtherAllele and the fourth is EffectAllele (a1).
+    assert read_tsv(out) == [["1", "100", "rs1", "G", "A", ".", "0", "identity"]]
+    assert "CHR:POS:OtherAllele:EffectAllele" in result.stderr
+
+
+def test_import_sumstats_separate_allele_columns_do_not_log_combined_order(tmp_path):
+    sumstats = tmp_path / "ss.tsv"
+    meta = tmp_path / "ss.yaml"
+    out = tmp_path / "ss.vmap"
+    write_lines(sumstats, ["VARIANT\tEA\tOA", "1_100\tA\tG"])
+    write_lines(meta, ["col_CHR: VARIANT", "col_POS: VARIANT", "col_EffectAllele: EA", "col_OtherAllele: OA"])
+
+    result = run_py("import_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--output", out)
+
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(out) == [["1", "100", ".", "A", "G", ".", "0", "identity"]]
+    assert "CHR:POS:OtherAllele:EffectAllele" not in result.stderr
 
 
 def test_import_sumstats_rejects_ambiguous_metadata_keys(tmp_path):

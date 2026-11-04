@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--retain-snp-id",
         action="store_true",
-        help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a1:a2 IDs",
+        help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a2:a1 IDs",
     )
     parser.add_argument(
         "--skip-ploidy-check",

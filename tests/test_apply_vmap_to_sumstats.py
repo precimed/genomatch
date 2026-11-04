@@ -82,8 +82,8 @@ def test_apply_vmap_to_sumstats_target_order_and_swap_effects(tmp_path):
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\tOR\tEAF\n"
-        "1\t200\t1:200:T:C\tT\tC\t-1\t0.25\t0.7\n"
-        "1\t100\t1:100:A:G\tA\tG\t0.5\t2.0\t0.1\n"
+        "1\t200\t1:200:C:T\tT\tC\t-1\t0.25\t0.7\n"
+        "1\t100\t1:100:G:A\tA\tG\t0.5\t2.0\t0.1\n"
     )
     sidecar = read_yaml(out.with_name(out.name + ".meta.yaml"))
     assert_raw_sumstats_metadata_schema_shape(sidecar)
@@ -119,7 +119,7 @@ def test_apply_vmap_to_sumstats_projection_drops_unrecognized_input_columns(tmp_
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tA\tG\t0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:G:A\tA\tG\t0.5\n"
 
 
 def test_apply_vmap_to_sumstats_projection_applies_metadata_missing_value(tmp_path):
@@ -144,7 +144,7 @@ def test_apply_vmap_to_sumstats_projection_applies_metadata_missing_value(tmp_pa
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tA\tG\t\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:G:A\tA\tG\t\n"
 
 
 def test_apply_vmap_to_sumstats_projection_normalizes_common_missing_tokens(tmp_path):
@@ -178,10 +178,10 @@ def test_apply_vmap_to_sumstats_projection_normalizes_common_missing_tokens(tmp_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
-        "1\t100\t1:100:A:G\tA\tG\t\n"
-        "1\t200\t1:200:A:G\tA\tG\t\n"
-        "1\t300\t1:300:A:G\tA\tG\t\n"
-        "1\t400\t1:400:A:G\tA\tG\t\n"
+        "1\t100\t1:100:G:A\tA\tG\t\n"
+        "1\t200\t1:200:G:A\tA\tG\t\n"
+        "1\t300\t1:300:G:A\tA\tG\t\n"
+        "1\t400\t1:400:G:A\tA\tG\t\n"
     )
 
 
@@ -243,7 +243,7 @@ def test_apply_vmap_to_sumstats_resolves_padded_headers_for_projection_output(tm
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n2\t250\t2:250:T:C\tT\tC\t-0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n2\t250\t2:250:C:T\tT\tC\t-0.5\n"
 
 
 def test_apply_vmap_to_sumstats_uses_canonical_variant_columns_even_when_source_variant_columns_are_missing(tmp_path):
@@ -258,7 +258,7 @@ def test_apply_vmap_to_sumstats_uses_canonical_variant_columns_even_when_source_
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tA\tG\t0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:G:A\tA\tG\t0.5\n"
 
 
 def test_apply_vmap_to_sumstats_rejects_missing_provenance_sentinel_rows(tmp_path):
@@ -304,7 +304,7 @@ def test_apply_vmap_to_sumstats_warns_and_writes_empty_for_invalid_swapped_numer
     assert "writing missing value" in result.stderr.lower()
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\tOR\tEAF\tORL95\tORU95\n"
-        "1\t100\t1:100:G:A\tG\tA\t\t\t\t\t\n"
+        "1\t100\t1:100:A:G\tG\tA\t\t\t\t\t\n"
     )
 
 
@@ -320,7 +320,7 @@ def test_apply_vmap_to_sumstats_flip_swap_uses_swap_numeric_effects(tmp_path):
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\tOR\tEAF\n1\t100\t1:100:G:T\tG\tT\t-0.5\t0.5\t0.9\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\tOR\tEAF\n1\t100\t1:100:T:G\tG\tT\t-0.5\t0.5\t0.9\n"
 
 
 def test_apply_vmap_to_sumstats_swap_complements_other_allele_frequency_columns(tmp_path):
@@ -349,7 +349,7 @@ def test_apply_vmap_to_sumstats_swap_complements_other_allele_frequency_columns(
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tOAF\tCaseOAF\tControlOAF\n"
-        "1\t100\t1:100:G:A\tG\tA\t0.8\t0.7\t0.6\n"
+        "1\t100\t1:100:A:G\tG\tA\t0.8\t0.7\t0.6\n"
     )
 
 
@@ -381,8 +381,8 @@ def test_apply_vmap_to_sumstats_formats_swapped_object_floats_with_float_format(
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
-        "1\t100\t1:100:A:G\tA\tG\t0.12345678901234567\n"
-        "1\t200\t1:200:T:C\tT\tC\t-0.123456789012346\n"
+        "1\t100\t1:100:G:A\tA\tG\t0.12345678901234567\n"
+        "1\t200\t1:200:C:T\tT\tC\t-0.123456789012346\n"
     )
 
 
@@ -408,7 +408,7 @@ def test_apply_vmap_to_sumstats_rewrites_target_chr_pos_and_id_when_columns_exis
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n2\t250\t2:250:T:C\tT\tC\t-0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n2\t250\t2:250:C:T\tT\tC\t-0.5\n"
 
 
 def test_apply_vmap_to_sumstats_retain_snp_id_uses_vmap_id(tmp_path):
@@ -472,7 +472,7 @@ def test_apply_vmap_to_sumstats_swap_inverts_and_swaps_or_confidence_bounds(tmp_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tORL95\tORU95\n"
-        "1\t100\t1:100:G:A\tG\tA\t0.666666666666667\t0.833333333333333\n"
+        "1\t100\t1:100:A:G\tG\tA\t0.666666666666667\t0.833333333333333\n"
     )
 
 
@@ -497,7 +497,7 @@ def test_apply_vmap_to_sumstats_reads_joined_source_variant_fields(tmp_path):
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tA\tG\t0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:G:A\tA\tG\t0.5\n"
 
 
 def test_apply_vmap_to_sumstats_does_not_rewrite_joined_chr_field_in_place(tmp_path):
@@ -512,7 +512,7 @@ def test_apply_vmap_to_sumstats_does_not_rewrite_joined_chr_field_in_place(tmp_p
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n2\t100\t2:100:A:G\tA\tG\t0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n2\t100\t2:100:G:A\tA\tG\t0.5\n"
 
 
 def test_apply_vmap_to_sumstats_writes_tab_delimited_projection_output(tmp_path):
@@ -527,7 +527,7 @@ def test_apply_vmap_to_sumstats_writes_tab_delimited_projection_output(tmp_path)
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:G:A\tG\tA\t-0.5\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tG\tA\t-0.5\n"
 
 
 def test_apply_vmap_to_sumstats_writes_gzipped_output_when_suffix_is_gz(tmp_path):
@@ -543,7 +543,7 @@ def test_apply_vmap_to_sumstats_writes_gzipped_output_when_suffix_is_gz(tmp_path
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
     with gzip.open(out, "rt", encoding="utf-8") as handle:
-        assert handle.read() == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:G:A\tG\tA\t-0.5\n"
+        assert handle.read() == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t100\t1:100:A:G\tG\tA\t-0.5\n"
 
 
 def test_apply_vmap_to_sumstats_fails_on_out_of_range_single_file_provenance(tmp_path):
@@ -668,7 +668,7 @@ def test_apply_vmap_to_sumstats_accepts_tab_header_with_whitespace_data_row(tmp_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tN\tBETA\tSE\tDirection\tEAF\n"
-        "1\t100\t1:100:A:G\tA\tG\t0.05\t2\t10\t0.2\t0.1\t++?\t0.4\n"
+        "1\t100\t1:100:G:A\tA\tG\t0.05\t2\t10\t0.2\t0.1\t++?\t0.4\n"
     )
 
 
@@ -743,8 +743,8 @@ def test_apply_vmap_to_sumstats_roundtrip_preserves_provenance_with_comment_and_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
-        "1\t100\t1:100:A:G\tA\tG\t0.5\n"
-        "1\t200\t1:200:C:T\tC\tT\t-1.0\n"
+        "1\t100\t1:100:G:A\tA\tG\t0.5\n"
+        "1\t200\t1:200:T:C\tC\tT\t-1.0\n"
     )
 
 
@@ -781,7 +781,7 @@ def test_apply_vmap_to_sumstats_source_index_ignores_comment_and_blank_lines(tmp
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t200\t1:200:C:T\tC\tT\t-1.0\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t200\t1:200:T:C\tC\tT\t-1.0\n"
 
 
 def test_sumstats_chunk_iterator_preserves_source_index_across_chunks(tmp_path):
@@ -852,8 +852,8 @@ def test_run_sumstats_apply_finds_vmap_rows_after_first_chunk(tmp_path):
     assert result == 0
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
-        "1\t300\t1:300:A:G\tA\tG\t0.3\n"
-        "1\t400\t1:400:G:A\tG\tA\t-0.4\n"
+        "1\t300\t1:300:G:A\tA\tG\t0.3\n"
+        "1\t400\t1:400:A:G\tG\tA\t-0.4\n"
     )
 
 
@@ -878,8 +878,8 @@ def test_apply_vmap_to_sumstats_reuses_one_source_row_for_multiple_vmap_rows(tmp
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n"
-        "1\t100\t1:100:A:G\tA\tG\t0.5\n"
-        "2\t250\t2:250:T:C\tT\tC\t-0.5\n"
+        "1\t100\t1:100:G:A\tA\tG\t0.5\n"
+        "2\t250\t2:250:C:T\tT\tC\t-0.5\n"
     )
 
 
@@ -911,7 +911,7 @@ def test_apply_vmap_to_sumstats_supports_hash_prefixed_chr_header(tmp_path):
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tbeta\n1\t13668\t1:13668:A:G\tA\tG\t0.2\n"
+    assert out.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tbeta\n1\t13668\t1:13668:G:A\tA\tG\t0.2\n"
 
 
 def test_apply_vmap_to_sumstats_clean_normalizes_headers_and_drops_unrecognized_columns(tmp_path):
@@ -958,7 +958,7 @@ def test_apply_vmap_to_sumstats_clean_normalizes_headers_and_drops_unrecognized_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE\n"
-        "1\t100\t1:100:T:C\tT\tC\t0.05\t1.95996398454005\t0.5\t0.255106728462327\n"
+        "1\t100\t1:100:C:T\tT\tC\t0.05\t1.95996398454005\t0.5\t0.255106728462327\n"
     )
     sidecar = read_yaml(out.with_name(out.name + ".meta.yaml"))
     assert_raw_sumstats_metadata_schema_shape(sidecar)
@@ -1150,7 +1150,7 @@ def test_apply_vmap_to_sumstats_clean_converts_log_p_variants(tmp_path):
         "--clean",
     )
     assert log_result.returncode == 0, log_result.stderr
-    assert out_log.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\n1\t100\t1:100:A:G\tA\tG\t\n"
+    assert out_log.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\n1\t100\t1:100:G:A\tA\tG\t\n"
 
 
 def test_apply_vmap_to_sumstats_clean_fill_mode_column_and_row_differ(tmp_path):
@@ -1198,8 +1198,8 @@ def test_apply_vmap_to_sumstats_clean_fill_mode_column_and_row_differ(tmp_path):
     assert column.returncode == 0, column.stderr
     assert out_column.read_text(encoding="utf-8").splitlines() == [
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE",
-        "1\t100\t1:100:A:G\tA\tG\t\t\t2\t1",
-        "1\t200\t1:200:C:T\tC\tT\t2.25717681190766e-19\t9\t4\t2",
+        "1\t100\t1:100:G:A\tA\tG\t\t\t2\t1",
+        "1\t200\t1:200:T:C\tC\tT\t2.25717681190766e-19\t9\t4\t2",
     ]
 
     row = run_py(
@@ -1219,8 +1219,8 @@ def test_apply_vmap_to_sumstats_clean_fill_mode_column_and_row_differ(tmp_path):
     assert row.returncode == 0, row.stderr
     assert out_row.read_text(encoding="utf-8").splitlines() == [
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE",
-        "1\t100\t1:100:A:G\tA\tG\t0.0455002638963584\t2\t2\t1",
-        "1\t200\t1:200:C:T\tC\tT\t2.25717681190766e-19\t9\t4\t2",
+        "1\t100\t1:100:G:A\tA\tG\t0.0455002638963584\t2\t2\t1",
+        "1\t200\t1:200:T:C\tC\tT\t2.25717681190766e-19\t9\t4\t2",
     ]
 
 
@@ -1260,7 +1260,7 @@ def test_apply_vmap_to_sumstats_clean_derives_eaf_from_oaf_and_drops_oaf_columns
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tEAF\n"
-        "1\t100\t1:100:A:G\tA\tG\t0.8\n"
+        "1\t100\t1:100:G:A\tA\tG\t0.8\n"
     )
 
 
@@ -1527,7 +1527,7 @@ def test_apply_vmap_to_sumstats_clean_fills_metadata_total_n_for_mapped_row(tmp_
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tN\tBETA\n"
-        f"{chrom}\t{pos}\t{chrom}:{pos}:AT:CGT\tAT\tCGT\t100\t0.5\n"
+        f"{chrom}\t{pos}\t{chrom}:{pos}:CGT:AT\tAT\tCGT\t100\t0.5\n"
     )
     sidecar = read_yaml(out.with_name(out.name + ".meta.yaml"))
     assert sidecar["contig_naming"] == contig_naming
@@ -1580,6 +1580,6 @@ def test_apply_vmap_to_sumstats_clean_swap_keeps_direction(tmp_path):
     assert result.returncode == 0, result.stderr
     assert out.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE\tDirection\tEAF\n"
-        "1\t100\t1:100:G:A\tG\tA\t0.05\t-1.95996398454005\t-0.5\t0.255106728462327\t+-\t0.8\n"
-        "1\t200\t1:200:T:C\tT\tC\t\t\t1.5\t\t--\t0.4\n"
+        "1\t100\t1:100:A:G\tG\tA\t0.05\t-1.95996398454005\t-0.5\t0.255106728462327\t+-\t0.8\n"
+        "1\t200\t1:200:C:T\tT\tC\t\t\t1.5\t\t--\t0.4\n"
     )

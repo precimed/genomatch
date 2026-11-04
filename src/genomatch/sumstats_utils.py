@@ -107,7 +107,8 @@ def find_metadata_value(data: Dict[str, object], key: str) -> object | None:
 
 
 JOINED_FIELD_TOKENIZER = re.compile(r"[:_]")
-JOINED_FIELD_WITH_DELIMITERS = re.compile(r"([:_])")
+JOINED_FIELD_INDEX = {"CHR": 0, "POS": 1, "OtherAllele": 2, "EffectAllele": 3}
+JOINED_FIELD_ORDER = ":".join(JOINED_FIELD_INDEX)
 
 
 def split_joined_variant_value(raw: str) -> List[str]:
@@ -121,43 +122,10 @@ def extract_variant_field(raw: str, field_name: str) -> str:
     if ":" not in value and "_" not in value:
         return value
     parts = split_joined_variant_value(value)
-    field_index = {
-        "CHR": 0,
-        "POS": 1,
-        "EffectAllele": 2,
-        "OtherAllele": 3,
-    }.get(field_name)
+    field_index = JOINED_FIELD_INDEX.get(field_name)
     if field_index is None or len(parts) <= field_index:
         return value
     return parts[field_index]
-
-
-def rewrite_variant_fields(raw: str, replacements: Dict[str, str]) -> str:
-    if not replacements:
-        return raw
-    value = raw.strip()
-    if ":" not in value and "_" not in value:
-        if len(replacements) == 1:
-            return next(iter(replacements.values()))
-        raise ValueError("shared summary-stat variant column requires joined values when rewriting multiple fields")
-    pieces = JOINED_FIELD_WITH_DELIMITERS.split(value)
-    tokens = pieces[0::2]
-    delimiters = pieces[1::2]
-    field_order = {
-        "CHR": 0,
-        "POS": 1,
-        "EffectAllele": 2,
-        "OtherAllele": 3,
-    }
-    max_index = max(field_order[field_name] for field_name in replacements)
-    if len(tokens) <= max_index:
-        raise ValueError(f"joined summary-stat variant value is missing fields required for rewrite: {raw!r}")
-    for field_name, new_value in replacements.items():
-        tokens[field_order[field_name]] = new_value
-    rebuilt = tokens[0]
-    for delimiter, token in zip(delimiters, tokens[1:]):
-        rebuilt += delimiter + token
-    return rebuilt
 
 
 @dataclass(frozen=True)

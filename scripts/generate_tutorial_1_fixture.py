@@ -838,7 +838,7 @@ def variant_keys(frame: pd.DataFrame) -> list[VariantKey]:
 
 def coordinate_order(key: VariantKey) -> tuple:
     chrom, pos, a1, a2 = key
-    return (23 if chrom == "X" else int(chrom), int(pos), a1, a2)
+    return (23 if chrom == "X" else int(chrom), int(pos), a2, a1)
 
 
 def expected_operation(raw: tuple[str, str], target: tuple[str, str], *, multibase: bool) -> str:
@@ -987,7 +987,7 @@ def validate_projection(fixture_dir: Path, work: Path, maps: dict[str, pd.DataFr
         swapped = source.allele_op in {"swap", "flip_swap"}
         key = (source.chrom, source.pos, source.a1, source.a2)
         check((str(output["CHR"]), str(output["POS"]), output["EffectAllele"], output["OtherAllele"]) == key
-              and output["SNP"] == ":".join(key), "projected study variant/order")
+              and output["SNP"] == ":".join((key[0], key[1], key[3], key[2])), "projected study variant/order")
         beta = math.log(float(raw.odds_ratio)) * (-1 if swapped else 1)
         check(math.isclose(float(output["BETA"]), beta, rel_tol=1e-7), "projected beta sign")
         check(math.isclose(float(output["OR"]), float(raw.odds_ratio) ** (-1 if swapped else 1), rel_tol=1e-7), "projected OR")
@@ -1020,7 +1020,7 @@ def validate_projection(fixture_dir: Path, work: Path, maps: dict[str, pd.DataFr
         raw_genotypes = {shard: decode_bed(fixture_dir / f"cohort.{shard}.bed", len(rows)) for shard, rows in raw_bims.items()}
         for row, output, genotypes in zip(subset.itertuples(index=False), output_rows, actual_genotypes):
             key = (row.chrom, row.pos, row.a1, row.a2)
-            check(output[0] == chrom and output[1] == ":".join(key)
+            check(output[0] == chrom and output[1] == ":".join((key[0], key[1], key[3], key[2]))
                   and output[3:] == [row.pos, row.a1, row.a2], "projected BIM/order")
             expected_genotypes = raw_genotypes[row.source_shard][int(row.source_index)]
             if row.allele_op in {"swap", "flip_swap"}:

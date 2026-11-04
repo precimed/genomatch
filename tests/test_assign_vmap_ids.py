@@ -109,7 +109,7 @@ def test_assign_vmap_ids_variant_key_policy_retains_unmatched_rows_without_qc(tm
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
         ["1", "10", "rs10", "A", "G", ".", "0", "identity"],
-        ["1", "20", "1:20:C:T", "C", "T", ".", "1", "identity"],
+        ["1", "20", "1:20:T:C", "C", "T", ".", "1", "identity"],
     ]
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
         ["source_shard", "source_index", "source_id", "status"],

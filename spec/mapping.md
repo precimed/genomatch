@@ -26,14 +26,14 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 
 ## Restricting `.vmap`
 
-- `restrict_vmap.py` restricts one source `.vmap` by exact `chrom:pos:a1:a2` membership in all supplied `.vtable` / `.vmap` restriction inputs
+- `restrict_vmap.py` restricts one source `.vmap` by exact `(chrom, pos, a1, a2)` membership in all supplied `.vtable` / `.vmap` restriction inputs
 - CLI shape is `restrict_vmap.py <source.vmap> <restriction> [<restriction> ...] --output <output.vmap>`
 - `restrict_vmap.py` requires the same `genome_build` and the same `contig_naming` across all inputs
 - `restrict_vmap.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
 - the source input must be `.vmap`
 - restriction inputs may be `.vtable` or `.vmap`
-- a source row is retained only if its exact `chrom:pos:a1:a2` key appears in every restriction input; multi-restriction semantics are intersection, not union
+- a source row is retained only if its exact `(chrom, pos, a1, a2)` key appears in every restriction input; multi-restriction semantics are intersection, not union
 - restriction input `.vmap` provenance is ignored; only target-side rows are used as membership filters
 - output IDs, row order, provenance, and `allele_op` come from the source `.vmap`
 - output is mapped-only `.vmap`
@@ -51,18 +51,18 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - optional `--duplicate-id-policy {allow,fail,drop-all}` controls duplicate non-missing IDs in retained output rows; default is `fail`
 - `assign_vmap_ids.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `assign_vmap_ids.py` performs no implicit normalization, allele flipping, liftover, or ID-based matching
-- matching is by exact `chrom:pos:a1:a2`
+- matching is by exact `(chrom, pos, a1, a2)`
 - the input named by `--vmap` must be a `.vmap`
 - the input named by `--id-source` may be `.vmap` or `.vtable`; when it is `.vmap`, only target-side rows are used and its provenance is ignored
-- duplicate `chrom:pos:a1:a2` keys in `--id-source` may be ignored when that key is absent from the source `.vmap`
-- if `--id-source` contains duplicate `chrom:pos:a1:a2` keys for any key present in the source `.vmap`, fail clearly
+- duplicate `(chrom, pos, a1, a2)` keys in `--id-source` may be ignored when that key is absent from the source `.vmap`
+- if `--id-source` contains duplicate `(chrom, pos, a1, a2)` keys for any key present in the source `.vmap`, fail clearly
 - retained output row order follows the source `.vmap`
 - retained output provenance (`source_shard`, `source_index`) and `allele_op` come from the source `.vmap`
 - retained output `chrom`, `pos`, `a1`, and `a2` come from the source `.vmap`
 - retained output `id` is copied from the matching `--id-source` row
-- with `--unmatched-id-policy drop`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are dropped and audited in `<output>.qc.tsv` with status `id_not_found`
-- with `--unmatched-id-policy variant-key`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are retained with `id=chrom:pos:a1:a2` from the source `.vmap` row and are not audited
-- with `--unmatched-id-policy missing`, rows with no exact `chrom:pos:a1:a2` match in `--id-source` are retained with `id=.` and are not audited
+- with `--unmatched-id-policy drop`, rows with no exact `(chrom, pos, a1, a2)` match in `--id-source` are dropped and audited in `<output>.qc.tsv` with status `id_not_found`
+- with `--unmatched-id-policy variant-key`, rows with no exact `(chrom, pos, a1, a2)` match in `--id-source` are retained with an ID generated from the source `.vmap` row according to the [generated-ID contract](core-objects.md#generated-variant-ids) and are not audited
+- with `--unmatched-id-policy missing`, rows with no exact `(chrom, pos, a1, a2)` match in `--id-source` are retained with `id=.` and are not audited
 - rows whose matching `--id-source` ID is empty or `.` are dropped and audited in `<output>.qc.tsv` with status `missing_id`
 - with `--duplicate-id-policy fail`, if retained output rows would contain duplicate non-missing IDs, fail clearly
 - with `--duplicate-id-policy allow`, duplicate non-missing output IDs are retained
@@ -75,13 +75,13 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 
 ## Intersections
 
-- `intersect_variants.py` intersects exact `chrom:pos:a1:a2`
+- `intersect_variants.py` intersects exact `(chrom, pos, a1, a2)`
 - CLI shape is `intersect_variants.py <input> <input> [<input> ...] --output <output.vtable>`
 - `intersect_variants.py` is the symmetric provenance-free set-intersection tool
 - `intersect_variants.py` requires the same `genome_build` and the same `contig_naming` across all inputs
 - `intersect_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- output IDs are target-derived `chrom:pos:a1:a2`, not copied from any particular input row
+- output IDs follow the [generated-ID contract](core-objects.md#generated-variant-ids), using target rows rather than copying IDs from any particular input row
 - `intersect_variants.py` sorts the intersection by declared coordinate order using the same sorting contract as `sort_variants.py`, then emits one row per variant key
 - `intersect_variants.py` always emits `.vtable`
 - input `.vmap` provenance and `allele_op` are ignored and dropped
@@ -91,14 +91,14 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 
 ## Unions
 
-- `union_variants.py` unions exact `chrom:pos:a1:a2`
+- `union_variants.py` unions exact `(chrom, pos, a1, a2)`
 - CLI shape is `union_variants.py <input> <input> [<input> ...] --output <output.vtable>`
 - `union_variants.py` requires at least two inputs
 - `union_variants.py` requires the same `genome_build` and the same `contig_naming` across all inputs
 - `union_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
 - `union_variants.py` computes the provenance-free set union of variant keys across all inputs
-- output IDs are target-derived `chrom:pos:a1:a2`, not copied from any particular input row
+- output IDs follow the [generated-ID contract](core-objects.md#generated-variant-ids), using target rows rather than copying IDs from any particular input row
 - `union_variants.py` sorts the union by declared coordinate order using the same sorting contract as `sort_variants.py`, then emits one row per variant key
 - `union_variants.py` emits `.vtable`
 - this is an accepted breaking change from older first-retained-occurrence ID behavior, chosen so provenance-free set materialization is source-agnostic

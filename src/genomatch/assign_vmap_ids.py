@@ -11,7 +11,7 @@ import pandas as pd
 from ._cli_utils import run_cli
 from .exact_set_utils import (
     exact_key_index,
-    format_target_key_ids,
+    format_target_derived_ids,
     load_target_object_info,
     require_shared_target_metadata,
     TARGET_KEY_COLUMNS,
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Assign IDs in a .vmap from a .vmap/.vtable ID source by exact chrom:pos:a1:a2 match."
+            "Assign IDs in a .vmap from a .vmap/.vtable ID source by exact (chrom, pos, a1, a2) match."
         )
     )
     parser.add_argument("--vmap", required=True, help="Source .vmap to update")
@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
         default="drop",
         help=(
             "How to handle source .vmap rows absent from --id-source: drop and audit them (default), "
-            "keep them with id=chrom:pos:a1:a2, or keep them with id='.'. "
+            "keep them with a generated chrom:pos:a2:a1 ID (variant-key), or keep them with id='.'. "
             "Rows matched to missing ID-source IDs are always dropped and audited."
         ),
     )
@@ -158,7 +158,7 @@ def assign_ids_from_id_source(
     if bool(out_unmatched_mask.any()):
         if unmatched_id_policy == "variant-key":
             unmatched_frame = out_frame.loc[out_unmatched_mask, TARGET_KEY_COLUMNS]
-            out_assigned_ids.loc[out_unmatched_mask] = format_target_key_ids(unmatched_frame)
+            out_assigned_ids.loc[out_unmatched_mask] = format_target_derived_ids(unmatched_frame)
         elif unmatched_id_policy == "missing":
             out_assigned_ids.loc[out_unmatched_mask] = "."
     out_frame["id"] = out_assigned_ids.astype(str).to_numpy()

@@ -116,8 +116,10 @@ def test_apply_vmap_to_pfile_basic_mapped_row_without_swap(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_output_pvar(out_prefix.with_suffix(".pvar")) == [
         ["CHROM", "POS", "ID", "REF", "ALT"],
-        ["1", "100", "1:100:G:A", "A", "G"],
+        ["1", "100", "1:100:A:G", "A", "G"],
     ]
+    for chrom, pos, variant_id, ref, alt in read_output_pvar(out_prefix.with_suffix(".pvar"))[1:]:
+        assert variant_id == f"{chrom}:{pos}:{ref}:{alt}"
     assert read_pfile_genotypes(out_prefix, 2, 0) == [0, 1]
     assert out_prefix.with_suffix(".psam").read_text(encoding="utf-8") == source_prefix.with_suffix(".psam").read_text(encoding="utf-8")
 

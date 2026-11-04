@@ -21,7 +21,7 @@ For a worked example, start with [tutorial-1.md](tutorial-1.md). For summary-sta
 - Use `restrict_vmap.py` to filter one payload-specific `.vmap` to a shared membership table, producing a restricted `.vmap` for that payload.
 - Use `assign_vmap_ids.py` when a restricted `.vmap` should carry preferred IDs, such as rsIDs, before projection.
 - `project_payload.py` rewrites the original payload through its own restricted `.vmap`.
-- Variant matching uses prepared `chr:bp:a1:a2` rows, not variant IDs.
+- Variant matching uses prepared `(chrom, pos, a1, a2)` rows, not variant IDs.
 - Choose the target genome build and contig naming up front; reference-aware preparation needs `MATCH_CONFIG`.
 - `@` in input and output paths denotes sharded genotype or VCF paths.
 - Summary-statistics inputs require metadata YAML; `sumstats-clean` projection writes harmonized canonical summary statistics. See [sumstats.md](sumstats.md) for the practical summary-statistics paths.
@@ -84,29 +84,29 @@ event. Review the source allele conventions and the
 
 ## Intersect variants
 
-`intersect_variants.py` accepts two or more prepared `.vmap` / `.vtable` inputs and emits a provenance-free `.vtable` containing exact `chrom:pos:a1:a2` keys present in every input. Output IDs are target-derived `chrom:pos:a1:a2`, and output rows are in declared coordinate order.
+`intersect_variants.py` accepts two or more prepared `.vmap` / `.vtable` inputs and emits a provenance-free `.vtable` containing exact `(chrom, pos, a1, a2)` keys present in every input. Output IDs follow the [generated ID format](primitives.md#generated-ids), and output rows are in declared coordinate order.
 
 ## Union variants
 
-`union_variants.py` accepts two or more prepared `.vmap` / `.vtable` inputs and emits a provenance-free `.vtable` containing the source-agnostic exact-key union. Output IDs are target-derived `chrom:pos:a1:a2`, and output rows are in declared coordinate order.
+`union_variants.py` accepts two or more prepared `.vmap` / `.vtable` inputs and emits a provenance-free `.vtable` containing the source-agnostic exact-key union. Output IDs follow the [generated ID format](primitives.md#generated-ids), and output rows are in declared coordinate order.
 
 ## Restrict vmap
 
 `restrict_vmap.py` accepts one source `.vmap` plus one or more `.vmap` / `.vtable` membership inputs and emits a restricted `.vmap`. Output order, IDs, provenance, and `allele_op` come from the source `.vmap`; restriction inputs affect membership only.
 
-Membership inputs can be either `.vtable` or `.vmap` files. When a `.vmap` is used as membership, only its `chrom:pos:a1:a2` rows are considered; its source provenance and `allele_op` are ignored.
+Membership inputs can be either `.vtable` or `.vmap` files. When a `.vmap` is used as membership, only its `(chrom, pos, a1, a2)` rows are considered; its source provenance and `allele_op` are ignored.
 
 ## Assign vmap IDs
 
-`assign_vmap_ids.py` accepts one source `.vmap` and an ID source `.vmap` / `.vtable`, matches them by exact `chrom:pos:a1:a2`, and emits a `.vmap` whose retained rows have IDs copied from the ID source. Source `.vmap` row order, provenance, `allele_op`, coordinates, and alleles are preserved for retained rows.
+`assign_vmap_ids.py` accepts one source `.vmap` and an ID source `.vmap` / `.vtable`, matches them by exact `(chrom, pos, a1, a2)`, and emits a `.vmap` whose retained rows have IDs copied from the ID source. Source `.vmap` row order, provenance, `allele_op`, coordinates, and alleles are preserved for retained rows.
 
 This is the reverse direction from summary-statistics `prepare_variants.py --id-lookup`: `--id-lookup` matches raw IDs to recover coordinates during import, while `assign_vmap_ids.py --id-source` matches prepared coordinates to assign IDs after preparation.
 
-By default, rows without an exact ID-source match are dropped and recorded in `<output>.qc.tsv` with status `id_not_found`. To retain those unmatched rows, use `--unmatched-id-policy variant-key` to write `id=chrom:pos:a1:a2`, or `--unmatched-id-policy missing` to write `id=.`; retained unmatched rows are not written to QC. Rows whose matched ID-source ID is empty or `.` are always dropped and audited with status `missing_id`.
+By default, rows without an exact ID-source match are dropped and recorded in `<output>.qc.tsv` with status `id_not_found`. To retain those unmatched rows, use `--unmatched-id-policy variant-key` to write an ID following the [generated ID format](primitives.md#generated-ids), or `--unmatched-id-policy missing` to write `id=.`; retained unmatched rows are not written to QC. Rows whose matched ID-source ID is empty or `.` are always dropped and audited with status `missing_id`.
 
 By default, retained output IDs must be unique, excluding missing IDs (`.` or empty). If two retained rows would receive the same non-missing ID, the tool fails clearly. Use `--duplicate-id-policy allow` to keep duplicate IDs, or `--duplicate-id-policy drop-all` to drop all rows carrying duplicated output IDs and audit them with status `duplicate_id`.
 
-If the ID source contains a duplicate `chrom:pos:a1:a2` key that is present in the source `.vmap`, the tool fails clearly; duplicate unused keys are ignored. The inputs must have the same `genome_build` and `contig_naming`; no contig normalization, allele flipping, or liftover is performed.
+If the ID source contains a duplicate `(chrom, pos, a1, a2)` key that is present in the source `.vmap`, the tool fails clearly; duplicate unused keys are ignored. The inputs must have the same `genome_build` and `contig_naming`; no contig normalization, allele flipping, or liftover is performed.
 
 ```bash
 assign_vmap_ids.py \
@@ -124,7 +124,7 @@ assign_vmap_ids.py \
   --output study.reference.mixed_ids.vmap
 ```
 
-When projecting a payload through an ID-assigned `.vmap`, use `project_payload.py --retain-snp-id` if the projected payload should keep those assigned IDs instead of generated `chrom:pos:a1:a2` IDs.
+When projecting a payload through an ID-assigned `.vmap`, use `project_payload.py --retain-snp-id` if the projected payload should keep those assigned IDs instead of [generated IDs](primitives.md#generated-ids).
 
 ## Project payloads
 
@@ -135,7 +135,7 @@ When projecting a payload through an ID-assigned `.vmap`, use `project_payload.p
 | `--input-format` | Required payload format: `bfile`, `pfile`, `sumstats`, or `sumstats-clean` (`bfile` maps to `bim` from `prepare_variants.py`; `pfile` maps to prepared `pvar`). See [spec/payload-application.md](../spec/payload-application.md) |
 | `--input`, `--output` | Required raw payload to project and rewritten payload destination. Genotype payload `--input` may be sharded via `@`; for `bfile` / `pfile`, `--output` is a PLINK output prefix and may also be sharded via `@` |
 | `--vmap` | Required mapped-only `.vmap` to apply; it defines output variant rows, row order, IDs, source provenance, and `allele_op` |
-| `--retain-snp-id` | Optional payload projection control. By default, `project_payload.py` writes corrected output IDs as `chrom:pos:a1:a2` from `.vmap` rows; `--retain-snp-id` writes `.vmap` IDs instead |
+| `--retain-snp-id` | Optional payload projection control. By default, `project_payload.py` writes corrected output IDs from `.vmap` rows according to the [generated ID format](primitives.md#generated-ids); `--retain-snp-id` writes `.vmap` IDs instead |
 | `--sumstats-metadata`, `--fill-mode`, `--use-af-inference` | Summary-stat controls: `--sumstats-metadata` is required for `sumstats` and `sumstats-clean`, and `--fill-mode` / `--use-af-inference` apply to `sumstats-clean`. See [sumstats.md](sumstats.md#clean-projection) and [spec/sumstats-harmonization.md](../spec/sumstats-harmonization.md) |
 | `--target-fam` / `--target-psam` / `--sample-axis {union,native}` / `--sample-id-mode {fid_iid,iid}` / `--skip-ploidy-check` | Optional genotype payload subject-axis controls for explicit target sample files, wrapper-synthesized union targets, native per-output-shard sample axes, subject keying, and ploidy-validation skipping. See [Sample-axis reconciliation for genotype payloads](../spec/payload-application.md#sample-axis-reconciliation-for-genotype-payloads) |
 | `--force` | Delete wrapper-managed outputs first, then rerun cleanly |

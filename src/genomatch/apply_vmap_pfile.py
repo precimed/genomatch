@@ -92,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--retain-snp-id",
         action="store_true",
-        help="Use retained target-side .vmap id values as output IDs instead of generated chrom:pos:a1:a2 IDs",
+        help="Use retained target-side .vmap id values as output IDs instead of generated chrom:pos:a2:a1 IDs",
     )
     parser.add_argument(
         "--skip-ploidy-check",
@@ -434,6 +434,7 @@ def write_output_pvar(path: Path, rows: Sequence[VariantRow]) -> None:
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("##fileformat=VCFv4.2\n")
         handle.write("#CHROM\tPOS\tID\tREF\tALT\n")
+        # PVAR columns are REF then ALT; reference-aligned targets store these in a2/a1.
         for row in rows:
             handle.write(f"{row.chrom}\t{row.pos}\t{row.id}\t{row.a2}\t{row.a1}\n")
 

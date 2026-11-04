@@ -25,7 +25,7 @@ The toolkit provides a set of tools for transforming tables of variants: importi
   ```
 - Transformations will update `.vmap` while still keeping its provenance pointing to the same source payload
 
-Intersection of variants is performed on exact `chr:bp:a1:a2`, ignoring variant `id`. A `prepare_variants.py` pipeline combines operations that standardize `chr:bp:a1:a2`, making it into a unique variant identifier.
+Intersection of variants is performed on exact `(chrom, pos, a1, a2)`, ignoring variant `id`. A `prepare_variants.py` pipeline combines operations that standardize `(chrom, pos, a1, a2)`, making it into a unique variant key.
 Intersection supports biallelic SNPs and non-SNPs, while reference-aware restriction and liftover are narrower and are specified in the spec docs.
 
 For exact schema and edge-case rules, see [SPEC.md](../SPEC.md), [core-objects.md](../spec/core-objects.md), [contigs-and-metadata.md](../spec/contigs-and-metadata.md), [shard-discovery.md](../spec/shard-discovery.md), [importers.md](../spec/importers.md), [variant-transforms.md](../spec/variant-transforms.md), [mapping.md](../spec/mapping.md), [payload-application.md](../spec/payload-application.md), and [workflow.md](../spec/workflow.md). End-user installation is described in [install.md](install.md), and reference-aware assets/config in [downloads.md](downloads.md).
@@ -44,6 +44,10 @@ Downstream transforms other than `normalize_contigs.py` require declared `contig
 Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` row-count metadata. Readers accept missing `variants_count` for backward compatibility. Set-operation tools may use it to choose memory-efficient scan order, but not to change documented output order, ID policy, provenance, or emitted object type.
 
 `a1` and `a2` are ordered alleles, not an unordered allele set. Importers preserve source-format allele meaning at import time, while reference-aware tools such as `restrict_build_compatible.py` and `liftover_build.py` emit reference-aligned variants with `a1=non-reference` and `a2=reference`. This keeps canonical reference-aware rows aligned with ALT/effect/counting-style semantics while still making the reference allele explicit in `a2`.
+
+### Generated IDs
+
+Variants are matched on the ordered fields `(chrom, pos, a1, a2)`, not on IDs. Generated IDs are written as `chrom:pos:a2:a1`, which is `CHROM:POS:REF:ALT` for reference-aligned rows. See the [generated-ID contract](../spec/core-objects.md#generated-variant-ids).
 
 ### Using .vmap vs .vtable as input across tools
 
@@ -67,8 +71,8 @@ Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` 
 | Normalize / metadata | `drop_strand_ambiguous.py` | `.vmap` or `.vtable` | same as input | Drops strand-ambiguous target rows |
 | Validate / liftover | `restrict_build_compatible.py` | `.vmap` or `.vtable` | same as input | Same-build filtering and optional normalization; [input filtering, reference-allele assignment, and operation controls](../spec/variant-transforms.md#same-build-reference-compatibility); preserves retained input order |
 | Validate / liftover | `liftover_build.py` | `.vmap` or `.vtable` | same as input | Explicit build conversion to `--target-build`; preserves `.vmap` provenance and re-sorts into declared coordinate order |
-| Order  | `sort_variants.py` | `.vmap` or `.vtable` | same as input | Explicit standalone target-row sorting by declared contig order, then numeric position, then `a1`/`a2` lexicographically; duplicate variant keys are an error unless `--drop-duplicates` is supplied, which keeps the first occurrence after sorting |
-| Assign IDs | `assign_vmap_ids.py` | source `.vmap` plus `.vmap` / `.vtable` ID source | `.vmap` | Copies IDs from the ID source by exact `chrom:pos:a1:a2` match, preserves source `.vmap` provenance, and by default drops rows without a non-missing assigned ID and fails on duplicate retained non-missing output IDs |
+| Order  | `sort_variants.py` | `.vmap` or `.vtable` | same as input | Explicit standalone target-row sorting by [declared coordinate order](../spec/core-objects.md#row-order-contract); duplicate variant keys are an error unless `--drop-duplicates` is supplied, which keeps the first occurrence after sorting |
+| Assign IDs | `assign_vmap_ids.py` | source `.vmap` plus `.vmap` / `.vtable` ID source | `.vmap` | Copies IDs from the ID source by exact `(chrom, pos, a1, a2)` match, preserves source `.vmap` provenance, and by default drops rows without a non-missing assigned ID and fails on duplicate retained non-missing output IDs |
 | Restrict / intersect / materialize | `intersect_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact symmetric source-agnostic target-key intersection; output has target-derived IDs in declared coordinate order |
 | Restrict / intersect / materialize | `restrict_vmap.py` | source `.vmap` plus one or more `.vmap` / `.vtable` restrictions | `.vmap` | Exact source-order restriction by intersection of all restriction inputs; output order, IDs, provenance, and `allele_op` come from the source `.vmap` |
 | Restrict / intersect / materialize | `union_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact source-agnostic target-key union; output is re-sorted into declared coordinate order |
@@ -82,12 +86,12 @@ Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` 
 - Import tools always preserve source provenance for retained rows, also when it drops unrepresentable rows or rows filtered by `--chr2use` / `--contigs`
 - import tools do not repair mixed or invalid contig labels. Use `normalize_contigs.py` for cleanup.
 - Reference-aware restriction and liftover follow the allele support and validation rules in [variant-transforms.md](../spec/variant-transforms.md).
-- `intersect_variants.py` and `union_variants.py` emit provenance-free target-key sets with target-derived IDs (`chrom:pos:a1:a2`) in declared coordinate order. `restrict_vmap.py` preserves source `.vmap` order and emits `.vmap`; if you need sorted restricted output, sort the source `.vmap` before restricting. `liftover_build.py` and `sort_variants.py` use declared coordinate order: declared contig order, then numeric position, then `a1`/`a2` lexicographically, with stable input order for exact `(chrom, pos, a1, a2)` ties.
+- `intersect_variants.py` and `union_variants.py` emit provenance-free target-key sets with IDs following the [generated ID format](#generated-ids) in declared coordinate order. `restrict_vmap.py` preserves source `.vmap` order and emits `.vmap`; if you need sorted restricted output, sort the source `.vmap` before restricting. `liftover_build.py` and `sort_variants.py` use [declared coordinate order](../spec/core-objects.md#row-order-contract).
 - `intersect_variants.py`, `restrict_vmap.py`, and `union_variants.py` may use `variants_count` to start internal set operations from smaller objects. This is a memory strategy only; the output contracts above remain unchanged.
 - `assign_vmap_ids.py` is useful after `restrict_vmap.py` and before projection when a final payload-specific `.vmap` should carry rsIDs or another preferred ID namespace. It matches prepared coordinates to IDs, not IDs to coordinates; use `import_sumstats.py --id-lookup` for preparation-time coordinate recovery from raw IDs. See [Assign vmap IDs](workflow.md#assign-vmap-ids) for policy details.
 - If any input to `intersect_variants.py` or `union_variants.py` lacks `variants_count`, the tool warns and uses the user-declared input order for its internal scan plan. `restrict_vmap.py` may use the same fallback silently because missing counts do not affect observable restriction semantics.
 - coordinate-changing transforms and genotype-payload application follow the shared expected-ploidy contract in [spec/ploidy-model.md](../spec/ploidy-model.md).
-- `apply_vmap_*` and `project_payload.py` write corrected final payload IDs as `chrom:pos:a1:a2` from `.vmap` rows by default. Use `--retain-snp-id` only when the projected payload must preserve `.vmap` IDs.
+- `apply_vmap_*` and `project_payload.py` write corrected final payload IDs from `.vmap` rows by default according to the [generated ID format](#generated-ids). Use `--retain-snp-id` only when the projected payload must preserve `.vmap` IDs.
 - genotype-payload `apply_vmap_*` tools apply `.vmap` provenance back to the original payload, support `@` source discovery and `@` target-contig output sharding, and follow the shared ploidy contract.
 - both genotype-payload `apply_vmap_*` tools support explicit target sample files plus `--sample-id-mode {fid_iid,iid}` for subject restriction, reordering, and reconciliation. Explicit target sample files define output subject order exactly and drive reconciliation-added missingness reporting.
 - both genotype-payload `apply_vmap_*` tools support `--sample-axis native` to keep each emitted output shard on its native source sample axis, provided every emitted shard has one unambiguous source sample axis.

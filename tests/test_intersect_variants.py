@@ -19,7 +19,7 @@ def test_intersect_variants_assigns_target_ids_and_sorts(tmp_path):
     write_json(second.with_name(second.name + ".meta.json"), meta)
     result = run_py("intersect_variants.py", first, second, "--output", out)
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"], ["1", "200", "1:200:C:T", "C", "T"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"], ["1", "200", "1:200:T:C", "C", "T"]]
     assert f"loaded 3 variants from {first}" in result.stderr
     assert f"loaded 2 variants from {second}" in result.stderr
     assert f"after intersecting {second}, 2 variants remain" in result.stderr
@@ -45,7 +45,7 @@ def test_intersect_variants_uses_count_order_and_emits_sorted_target_ids(tmp_pat
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
     assert result.stderr.index(f"loaded 1 variants from {second}") < result.stderr.index(f"loaded 3 variants from {first}")
     assert "variants_count missing from metadata" not in result.stderr
 
@@ -120,7 +120,7 @@ def test_intersect_variants_streams_later_input_by_full_input_membership(tmp_pat
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "1", "1:1:A:G", "A", "G"], ["1", "100001", "1:100001:C:T", "C", "T"]]
+    assert read_tsv(out) == [["1", "1", "1:1:G:A", "A", "G"], ["1", "100001", "1:100001:T:C", "C", "T"]]
     assert f"loaded 100001 variants from {second}" in result.stderr
 
 
@@ -273,7 +273,7 @@ def test_intersect_variants_accepts_vmap_and_drops_provenance(tmp_path):
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
 
 
 def test_intersect_variants_ignores_ids_and_vmap_provenance_in_membership(tmp_path):
@@ -297,7 +297,7 @@ def test_intersect_variants_ignores_ids_and_vmap_provenance_in_membership(tmp_pa
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
 
 
 def test_intersect_variants_multiple_inputs_are_intersection_not_union(tmp_path):
@@ -322,7 +322,7 @@ def test_intersect_variants_multiple_inputs_are_intersection_not_union(tmp_path)
     result = run_py("intersect_variants.py", first, second, third, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
 
 
 def test_intersect_variants_supports_non_snp_biallelic_exact_intersection(tmp_path):
@@ -338,7 +338,7 @@ def test_intersect_variants_supports_non_snp_biallelic_exact_intersection(tmp_pa
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:AC:A", "AC", "A"]]
+    assert read_tsv(out) == [["1", "100", "1:100:A:AC", "AC", "A"]]
 
 
 def test_intersect_variants_first_vmap_output_metadata_is_vtable(tmp_path):
@@ -356,7 +356,7 @@ def test_intersect_variants_first_vmap_output_metadata_is_vtable(tmp_path):
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
     metadata = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert metadata == {
         "object_type": "variant_table",
@@ -381,7 +381,7 @@ def test_intersect_variants_accepts_duplicate_first_vmap_target_keys(tmp_path):
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
 
 
 def test_intersect_variants_accepts_duplicate_vmap_target_keys(tmp_path):
@@ -399,7 +399,7 @@ def test_intersect_variants_accepts_duplicate_vmap_target_keys(tmp_path):
     result = run_py("intersect_variants.py", first, second, "--output", out)
 
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:A:G", "A", "G"]]
+    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
 
 
 def test_intersect_variants_rejects_template_paths(tmp_path):

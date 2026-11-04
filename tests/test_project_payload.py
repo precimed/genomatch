@@ -7,7 +7,18 @@ import pytest
 
 from genomatch import vmap_project_payload, workflow_wrapper_utils
 
-from utils import read_bed_matrix, read_bim, run_py, write_bfile, write_json, write_lines
+from utils import (
+    read_bed_matrix,
+    read_bim,
+    read_tsv,
+    run_py,
+    run_py_with_env,
+    write_bfile,
+    write_json,
+    write_lines,
+    write_match_config,
+    write_primary_ucsc_fasta,
+)
 
 
 def assert_wrote(result, value: Path) -> None:
@@ -183,7 +194,7 @@ def test_project_payload_sumstats_uses_explicit_vmap_and_does_not_retain_restric
     assert "apply_vmap_to_sumstats.py" in result.stderr
     assert str(vmap) in result.stderr
     assert not (tmp_path / "aligned.tsv.vmap").exists()
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:A:G\tG\tA\t0.5\n"
     assert_wrote(result, output)
 
 
@@ -258,8 +269,59 @@ def test_project_payload_sumstats_clean_dispatches_clean_apply(tmp_path):
     assert "--clean" in result.stderr
     assert output.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tBETA\tSE\n"
-        "1\t1\t1:1:G:A\tG\tA\t0.05\t1.95996398454005\t0.5\t0.255106728462327\n"
+        "1\t1\t1:1:A:G\tG\tA\t0.05\t1.95996398454005\t0.5\t0.255106728462327\n"
     )
+
+
+@pytest.mark.parametrize(
+    "reference_base,effect_allele,other_allele,beta_sign",
+    [("C", "T", "C", 1), ("T", "C", "T", -1)],
+)
+def test_combined_ref_alt_column_keeps_reported_effect_allele_through_clean_projection(
+    tmp_path, reference_base, effect_allele, other_allele, beta_sign
+):
+    # In 1:15791:C:T the reported effect allele is T. A reference of T swaps the
+    # target alleles, so the effect must be recoded rather than silently flipped.
+    source = tmp_path / "study.tsv"
+    metadata = tmp_path / "study.yaml"
+    grch37, grch38, config = tmp_path / "hg19.fa", tmp_path / "hg38.fa", tmp_path / "config.yaml"
+    sequence = "A" * 15790 + reference_base + "A" * 100
+    write_primary_ucsc_fasta(grch37, {"chr1": sequence})
+    write_primary_ucsc_fasta(grch38, {"chr1": sequence})
+    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
+    write_lines(source, ["variant\tP\tBETA", "1:15791:C:T\t0.05\t0.5"])
+    write_lines(
+        metadata,
+        [
+            "col_CHR: variant",
+            "col_POS: variant",
+            "col_EffectAllele: variant",
+            "col_OtherAllele: variant",
+            "col_P: P",
+            "col_BETA: BETA",
+            "stats_Model: linear",
+        ],
+    )
+    env = {"MATCH_CONFIG": str(config)}
+    prepared = tmp_path / "prepared"
+    result = run_py_with_env(
+        "prepare_variants.py", env, "--input", source, "--input-format", "sumstats",
+        "--sumstats-metadata", metadata, "--src-build", "GRCh37", "--dst-build", "GRCh37",
+        "--output", prepared,
+    )
+    assert result.returncode == 0, result.stderr
+    output = tmp_path / "aligned.tsv"
+    result = run_py(
+        "project_payload.py", "--input", source, "--input-format", "sumstats-clean",
+        "--sumstats-metadata", metadata, "--vmap", f"{prepared}.vmap", "--output", output,
+    )
+    assert result.returncode == 0, result.stderr
+
+    header, row = read_tsv(output)
+    fields = dict(zip(header, row))
+    assert (fields["EffectAllele"], fields["OtherAllele"]) == (effect_allele, other_allele)
+    assert float(fields["BETA"]) == pytest.approx(0.5 * beta_sign)
+    assert float(fields["Z"]) * beta_sign > 0
 
 
 def test_project_payload_sumstats_uses_metadata_path_sumstats_when_input_omitted(tmp_path):
@@ -300,7 +362,7 @@ def test_project_payload_sumstats_uses_metadata_path_sumstats_when_input_omitted
     assert result.returncode == 0, result.stderr
     apply_line = next(line for line in result.stderr.splitlines() if "apply_vmap_to_sumstats.py" in line)
     assert "--input" not in apply_line
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:A:G\tG\tA\t0.5\n"
 
 
 def test_project_payload_sumstats_clean_passes_fill_mode_and_af_inference(tmp_path):
@@ -349,7 +411,7 @@ def test_project_payload_sumstats_clean_passes_fill_mode_and_af_inference(tmp_pa
     assert "--use-af-inference" in result.stderr
     assert output.read_text(encoding="utf-8") == (
         "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tP\tZ\tN\tBETA\tSE\tEAF\n"
-        "1\t1\t1:1:G:A\tG\tA\t0.0455002638963584\t2\t29.3333333333333\t0.5\t0.25\t0.4\n"
+        "1\t1\t1:1:A:G\tG\tA\t0.0455002638963584\t2\t29.3333333333333\t0.5\t0.25\t0.4\n"
     )
 
 
@@ -384,8 +446,8 @@ def test_project_payload_bfile_uses_explicit_vmap_and_allows_sharded_output_pref
     assert not (tmp_path / "aligned.all_targets.vmap").exists()
     assert (tmp_path / "aligned.1.bim").exists()
     assert (tmp_path / "aligned.2.bim").exists()
-    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:G:A"]
-    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:C:A"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:A:G"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:A:C"]
     assert read_bed_matrix(tmp_path / "aligned.1.bed", 1, 1) == [[0]]
     assert read_bed_matrix(tmp_path / "aligned.2.bed", 1, 1) == [[3]]
     assert_wrote(result, output)
@@ -689,7 +751,7 @@ def test_project_payload_force_deletes_wrapper_managed_outputs_first_and_reruns(
     )
 
     assert result.returncode == 0, result.stderr
-    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:G:A\tG\tA\t0.5\n"
+    assert output.read_text(encoding="utf-8") == "CHR\tPOS\tSNP\tEffectAllele\tOtherAllele\tBETA\n1\t1\t1:1:A:G\tG\tA\t0.5\n"
     assert "stale" not in output.with_name(output.name + ".meta.yaml").read_text(encoding="utf-8")
 
 
@@ -730,8 +792,8 @@ def test_project_payload_sharded_bfile_force_deletes_only_target_contig_outputs(
     )
 
     assert result.returncode == 0, result.stderr
-    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:G:A"]
-    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:C:A"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.1.bim")] == ["1:1:A:G"]
+    assert [row.snp for row in read_bim(tmp_path / "aligned.2.bim")] == ["2:2:A:C"]
     assert (tmp_path / "aligned.unrelated.bim").read_text(encoding="utf-8") == "keep\n"
     assert (tmp_path / "aligned.unrelated.bed").read_text(encoding="utf-8") == "keep\n"
     assert (tmp_path / "aligned.unrelated.fam").read_text(encoding="utf-8") == "keep\n"

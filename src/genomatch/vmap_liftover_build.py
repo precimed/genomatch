@@ -22,6 +22,7 @@ from .vectorization_utils import (
 )
 from .vtable_utils import (
     CANONICAL_CONTIG_RANK,
+    COORDINATE_ALLELE_COLUMNS,
     compose_allele_ops_series,
     convert_contig_label,
     load_variant_object_tables,
@@ -400,7 +401,7 @@ def parse_lifted_vcf(
     if bool(unknown_contig.any()):
         raise ValueError("liftover_build.py output contains chrom=unknown; run normalize_contigs.py first")
     parsed_frame["contig_rank"] = canonical.map(CANONICAL_CONTIG_RANK)
-    parsed_frame = parsed_frame.sort_values(["contig_rank", "pos_int", "a1", "a2"], kind="stable")
+    parsed_frame = parsed_frame.sort_values(["contig_rank", "pos_int", *COORDINATE_ALLELE_COLUMNS], kind="stable")
 
     duplicate_mask = parsed_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep=False)
     status_by_row_id.update(dict(zip(parsed_frame.loc[duplicate_mask, "row_id"], ["duplicate_target"] * int(duplicate_mask.sum()))))
