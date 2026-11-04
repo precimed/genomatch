@@ -23,6 +23,10 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 - QC consumers must stop expecting `norm_ambiguous_orientation` and `norm_unsupported_complex_indel`. `norm_ref_mismatch` remains a row-level exclusion when an input submitted for normalization yields no output record; unexpected observed normalization REF mismatches now fail the invocation. Liftover replaces `unsupported_non_snv` with `unsupported_representation` for unrepresentable lifted outputs, including `FLIP`/`SWAP` annotations that do not map to a supported `allele_op`; these are row-level QC exclusions rather than invocation failures.
 - When upgrading to the corrected indel reference-allele assignment and normalization algorithm, delete all outputs from previous runs, including intermediate maps, retained bcftools files, membership tables, restricted maps, and projected payloads, and regenerate from the original raw inputs. Do not reuse those outputs through `--resume`. Existing maps cannot be reliably repaired by re-normalization, and the unchanged file format does not identify maps produced by the old algorithm.
 
+### Fixed
+
+- Fixed a severe `--norm-indels` performance regression introduced by reference-allele assignment changes: normalization results are assigned in bulk instead of writing each row through pandas.
+
 ### Pending verification
 
 - Revalidate Tutorial 1 and its fixtures against the revised indel preparation behavior.
