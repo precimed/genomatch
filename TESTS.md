@@ -20,6 +20,7 @@ Active migrated modules currently include:
 - `tests/test_restrict_build_compatible.py`
 - `tests/test_liftover_build.py`
 - `tests/test_sort_variants.py`
+- `tests/test_variant_rendering.py`
 - `tests/test_convert_vmap_to_target.py`
 - `tests/test_intersect_variants.py`
 - `tests/test_restrict_vmap.py`
@@ -152,7 +153,7 @@ The migrated suite must keep coverage for:
 - `intersect_variants.py` accepts two or more positional `.vmap` / `.vtable` inputs and named `--output`
 - `restrict_vmap.py` emits `.vmap` preserving source `.vmap` row order, IDs, provenance, and existing `allele_op`
 - `restrict_vmap.py` accepts positional inputs with source `.vmap` first, then one or more `.vmap` / `.vtable` restrictions, plus named `--output`
-- `restrict_vmap.py` treats restriction inputs as exact `chrom:pos:a1:a2` membership filters only
+- `restrict_vmap.py` treats restriction inputs as exact `(chrom, pos, a1, a2)` membership filters only
 - `restrict_vmap.py` accepts one or more `.vtable` / `.vmap` restriction inputs
 - with multiple restriction inputs, `restrict_vmap.py` retains only source rows present in every restriction input
 - `restrict_vmap.py` ignores restriction-input `.vmap` provenance
@@ -167,6 +168,8 @@ The migrated suite must keep coverage for:
 - `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles
 - `sort_variants.py` sorts target rows into declared coordinate order
 - declared coordinate order follows the [row-order contract](spec/core-objects.md#row-order-contract)
+- exercise the allele tie-break with a co-located SNV and deletion whose `a1`-first and `a2`-first orders differ, covering `sort_variants.py`, `intersect_variants.py`, `union_variants.py`, and `liftover_build.py`; verify numeric position and declared contig ordering independently of rendered ID strings
+- generated-ID coverage must include every generation surface in the [generated-ID contract](spec/core-objects.md#generated-variant-ids), multibase alleles, and unverified rows whose IDs remain slot-derived without reference validation; copied and explicitly retained IDs remain unchanged
 - `.vmap` rows carry `source_shard + source_index` provenance
 - `.vmap` preserves original `source_shard` and shard-local `source_index`
 - `.vmap` rows must have non-missing source provenance and non-negative `source_index`
@@ -182,7 +185,7 @@ The migrated suite must keep coverage for:
 - `liftover_build.py` drops lifted rows on unsupported target contigs with QC status `unsupported_target_contig`
 - `liftover_build.py` must drop rows with QC status `ploidy_class_changed` when lifted `chrom` or `pos` changes the expected `(male_ploidy, female_ploidy)` pair under the shared ploidy model
 - for `ploidy_class_changed`, the comparison is against the final candidate row that would otherwise be emitted, immediately before final output/QC accounting
-- `liftover_build.py` drops all lifted rows whose distinct input variant keys become equal on target `chrom:pos:a1:a2`, auditing them with status `duplicate_target`
+- `liftover_build.py` drops all lifted rows whose distinct input variant keys become equal on target `(chrom, pos, a1, a2)`, auditing them with status `duplicate_target`
 - `liftover_build.py` audits non-retained input rows under the shared row-level QC contract
 - `liftover_build.py` accepts UCSC-named input without changing declared output naming
 - `liftover_build.py` fails clearly on missing chain config, missing bcftools, and missing FASTA indexes; trusting source reference compatibility does not waive schema, metadata, contig, or reference-asset validation
@@ -226,7 +229,7 @@ The migrated suite must keep coverage for:
 - cover an input submitted for normalization that yields no output record alongside a successfully normalized row; verify `norm_ref_mismatch` QC, retention of the successful row, and successful invocation; also cover all records submitted for normalization missing from the output
 - verify malformed normalization output and output records with unknown input identifiers fail the invocation
 - with `--norm-indels`, inject unexpected REF mismatches at the normalization boundary and in normalized output to verify fatal invariant failures after successful reference-allele assignment
-- with `--norm-indels`, duplicate-target detection still applies after normalization on final canonical `chrom:pos:a1:a2`
+- with `--norm-indels`, duplicate-target detection still applies after normalization on final canonical `(chrom, pos, a1, a2)`
 - with `--norm-indels`, tests must cover indel left-normalization or trimming that changes target `pos` and allele strings while preserving canonical final `a1=non-reference`, `a2=reference`
 - with `--norm-indels`, tests must cover the case where no normalization change is needed and the retained output remains otherwise identical to the non-`--norm-indels` path
 - `restrict_build_compatible.py` drops all rows whose distinct input variant keys become equal after canonicalization and audits them with status `duplicate_target` under the row-level QC rules
@@ -242,19 +245,19 @@ The migrated suite must keep coverage for:
 
 ### Intersections
 
-- `intersect_variants.py` intersects exact `chrom:pos:a1:a2`
+- `intersect_variants.py` intersects exact `(chrom, pos, a1, a2)`
 - `intersect_variants.py` accepts positional inputs and named `--output`
 - `intersect_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `intersect_variants.py` fails cleanly when input metadata omits `contig_naming`
 - `intersect_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- output IDs are target-derived `chrom:pos:a1:a2`
+- output IDs follow the [generated-ID contract](spec/core-objects.md#generated-variant-ids)
 - output order is declared coordinate order using the same ordering contract as `sort_variants.py`
 - `intersect_variants.py` emits `.vtable`
 
 ### `.vmap` restrictions
 
-- `restrict_vmap.py` restricts exact `chrom:pos:a1:a2`
+- `restrict_vmap.py` restricts exact `(chrom, pos, a1, a2)`
 - `restrict_vmap.py` accepts positional inputs and named `--output`
 - `restrict_vmap.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `restrict_vmap.py` fails cleanly when input metadata omits `contig_naming`
@@ -270,13 +273,13 @@ The migrated suite must keep coverage for:
 - `assign_vmap_ids.py` accepts one source `.vmap`, one `.vmap` / `.vtable` ID source, and named `--output`
 - `assign_vmap_ids.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `assign_vmap_ids.py` performs no implicit normalization
-- matching is by exact `chrom:pos:a1:a2`
-- duplicate `chrom:pos:a1:a2` keys in the ID source are ignored when absent from the source `.vmap`
-- duplicate `chrom:pos:a1:a2` keys in the ID source fail clearly when present in the source `.vmap`
+- matching is by exact `(chrom, pos, a1, a2)`
+- duplicate `(chrom, pos, a1, a2)` keys in the ID source are ignored when absent from the source `.vmap`
+- duplicate `(chrom, pos, a1, a2)` keys in the ID source fail clearly when present in the source `.vmap`
 - output IDs come from the ID source
 - output row order, coordinates, provenance, and `allele_op` come from the source `.vmap`
 - by default, rows without an ID-source match are dropped and audited in `<output>.qc.tsv` with `id_not_found`
-- `--unmatched-id-policy variant-key` retains rows without an ID-source match with `id=chrom:pos:a1:a2` and no QC row
+- `--unmatched-id-policy variant-key` retains rows without an ID-source match with IDs following the [generated-ID contract](spec/core-objects.md#generated-variant-ids) and no QC row
 - `--unmatched-id-policy missing` retains rows without an ID-source match with `id=.` and no QC row
 - rows matched to a missing ID-source ID are dropped and audited with `missing_id`
 - by default, duplicate retained non-missing output IDs fail clearly
@@ -287,14 +290,14 @@ The migrated suite must keep coverage for:
 
 ### Unions
 
-- `union_variants.py` unions exact `chrom:pos:a1:a2`
+- `union_variants.py` unions exact `(chrom, pos, a1, a2)`
 - `union_variants.py` accepts positional inputs and named `--output`
 - `union_variants.py` requires at least two inputs
 - `union_variants.py` requires the same `genome_build` and the same `contig_naming` across inputs
 - `union_variants.py` fails cleanly when input metadata omits `contig_naming`
 - `union_variants.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- duplicate exact rows are deduplicated by exact target key, with output IDs target-derived as `chrom:pos:a1:a2`
+- duplicate exact rows are deduplicated by exact target key, with output IDs following the [generated-ID contract](spec/core-objects.md#generated-variant-ids)
 - `union_variants.py` re-sorts the deduplicated output into declared coordinate order using the same ordering contract as `sort_variants.py`
 - ties under declared coordinate order preserve first-occurrence order
 - `union_variants.py` emits `.vtable`
@@ -307,7 +310,7 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py` supports single-file payloads only
 - `apply_vmap_to_sumstats.py` fails cleanly on out-of-range shard-local provenance
 - `apply_vmap_to_sumstats.py` defines output variant columns, including `CHR`, from target `.vmap` rows
-- `apply_vmap_to_sumstats.py` writes output `SNP` as `chrom:pos:a1:a2` from the `.vmap` target row by default
+- `apply_vmap_to_sumstats.py` writes output `SNP` according to the [generated-ID contract](spec/core-objects.md#generated-variant-ids) from the `.vmap` target row by default
 - `apply_vmap_to_sumstats.py --retain-snp-id` writes target-side `.vmap` `id` values as output `SNP`
 - `apply_vmap_to_sumstats.py` does not require source-side POS / SNP / effect-allele / other-allele payload columns
 - `apply_vmap_to_sumstats.py` writes tab-delimited output and empty missing fields in both projection and `--clean` modes
@@ -321,7 +324,8 @@ The migrated suite must keep coverage for:
 - `apply_vmap_to_sumstats.py` non-clean projection mode fails before row processing when retained metadata payload columns have duplicate trimmed output names
 - `apply_vmap_to_sumstats.py` non-clean projection mode fails before row processing when a retained metadata payload column would collide with canonical output variant columns `CHR`, `POS`, `SNP`, `EffectAllele`, or `OtherAllele`
 - `apply_vmap_to_sumstats.py` supports joined source variant fields as input metadata but emits explicit canonical output variant columns rather than joined target fields
-- `apply_vmap_to_sumstats.py` supports inputs where the only source-side variant fields are joined fields such as `CHR:POS_A1_A2`
+- `apply_vmap_to_sumstats.py` supports inputs where the only source-side variant fields are joined fields such as `CHR:POS_OtherAllele_EffectAllele`
+- `import_sumstats.py` reads combined variant columns as `CHR`, `POS`, `OtherAllele`, `EffectAllele` and logs the assumed order when both alleles come from one column; for `1:15791:C:T`, verify `EffectAllele=T` and correct effect sign through `sumstats-clean`
 - `apply_vmap_to_sumstats.py` accepts tab-containing headers with whitespace-delimited data rows when the field count is unambiguous
 - `apply_vmap_to_sumstats.py` swaps odds-ratio confidence bounds when inverting a swapped interval
 - `apply_vmap_to_sumstats.py` applies swap-style numeric transforms for both `swap` and `flip_swap`
@@ -353,7 +357,7 @@ The migrated suite must keep coverage for:
 - for `@`-sharded PLINK payloads, lookup is by exact imported `source_shard`, not by chromosome interpretation
 - `apply_vmap_to_bfile.py` `@` shard discovery accepts PLINK split-X PAR shard filename aliases `XY` and `chrXY`
 - `apply_vmap_to_bfile.py` defines output `.bim` rows entirely from target `.vmap` rows with genetic position / cM fixed to `0`
-- `apply_vmap_to_bfile.py` writes output `.bim` SNP IDs as `chrom:pos:a1:a2` from `.vmap` target rows by default
+- `apply_vmap_to_bfile.py` writes output `.bim` SNP IDs according to the [generated-ID contract](spec/core-objects.md#generated-variant-ids) from `.vmap` target rows by default
 - `apply_vmap_to_bfile.py --retain-snp-id` writes retained target-side `.vmap` `id` values as output `.bim` SNP IDs
 - `apply_vmap_to_bfile.py` propagates the payload `.fam` to every emitted output when `--target-fam` is not supplied
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
@@ -384,7 +388,9 @@ The migrated suite must keep coverage for:
 - bounded-chunk behavior must hold for both single-file and `@`-sharded PLINK payloads without changing output semantics, including cases where `.vmap` order interleaves rows from multiple source shards
 - `apply_vmap_to_pfile.py` applies the same shared genotype-payload `apply_vmap_*` contract to PLINK 2 `.pgen/.pvar/.psam`
 - `apply_vmap_to_pfile.py` defines output `.pvar` rows and allele columns from retained target `.vmap` rows, not from source `.pvar`
-- `apply_vmap_to_pfile.py` writes output `.pvar` IDs as `chrom:pos:a1:a2` from `.vmap` target rows by default
+- `apply_vmap_to_pfile.py` writes output `.pvar` IDs according to the [generated-ID contract](spec/core-objects.md#generated-variant-ids) from `.vmap` target rows by default
+- assert each default-generated `.pvar` ID equals `CHROM:POS:REF:ALT` assembled independently from that emitted row
+- assert emitted `.pvar` `REF=a2`, `ALT=a1` and `.bim` column 5=`a1`, column 6=`a2`; for prepared reference-aligned fixtures, assert reference allele placement directly against the reference and sumstats `EffectAllele` is ALT with correctly oriented effects, rather than deriving expected orientation from emitted payloads
 - `apply_vmap_to_pfile.py --retain-snp-id` writes target-side `.vmap` `id` values as output `.pvar` IDs
 - `apply_vmap_to_pfile.py` propagates the payload `.psam` to every emitted output when `--target-psam` is not supplied
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`

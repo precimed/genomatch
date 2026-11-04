@@ -26,6 +26,7 @@ Format-specific rules:
 - `import_pvar.py` writes `ALT` to `a1` and `REF` to `a2`
 - `import_vcf.py` writes `ALT` to `a1` and `REF` to `a2`
 - `import_sumstats.py` writes `EffectAllele` to `a1` and `OtherAllele` to `a2`
+- `import_sumstats.py` reads combined variant columns in the fixed field order `CHR`, `POS`, `OtherAllele`, `EffectAllele`. When both alleles come from one column, it logs the assumed order. A combined column with the effect allele first must be split into separate allele columns before import
 
 Reference-aware canonicalization belongs to downstream tools such as `restrict_build_compatible.py` and `liftover_build.py`, which emit target rows in reference-second order with `a1=non-reference` and `a2=reference`.
 
@@ -136,4 +137,4 @@ The summary-stat metadata contract is `match/schemas/raw-sumstats-metadata.yaml`
 - if a raw summary-stat `SNP` value is missing, empty, or `.`, the source row must be dropped with auditable import QC reason `invalid_id`
 - if a raw summary-stat `SNP` value has no match in the filtered target-side lookup `id` set, the source row must be dropped with auditable import QC reason `id_not_found`
 - if `--id-lookup` is not supplied and the importer can not determine target-side `chrom` and `pos` from the raw summary-stat input, the importer must fail clearly
-- `--id-lookup` is an import-time coordinate-enrichment step only; downstream exact set semantics remain `chr:bp:a1:a2`, ignoring `id`
+- `--id-lookup` is an import-time coordinate-enrichment step only; downstream exact set semantics remain `(chrom, pos, a1, a2)`, ignoring `id`

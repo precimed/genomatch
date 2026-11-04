@@ -133,12 +133,12 @@ The following patterns are normative when applicable:
 
 1. Streaming set operations are allowed when public output semantics are preserved:
 - `intersect_variants.py` may choose its in-memory driver from the count-aware scan plan. When `variants_count` is missing from any input, the scan plan falls back to user-declared input order.
-- streaming must preserve metadata validation, exact `chrom:pos:a1:a2` intersection semantics, target-derived IDs, declared-coordinate output order, and `.vtable` output.
+- streaming must preserve metadata validation, exact `(chrom, pos, a1, a2)` intersection semantics, target-derived IDs, declared-coordinate output order, and `.vtable` output.
 - because `intersect_variants.py` emits sorted target-derived output, choosing a smaller in-memory driver does not require re-scanning the first CLI input solely to recover first-input IDs or order.
 
 1. Streaming `.vmap` restriction is allowed when source semantics are preserved:
 - `restrict_vmap.py` may hold a restriction input in memory, stream later restriction inputs to compute the intersection of restriction keys, and replay or stream the source `.vmap` as needed.
-- streaming must preserve source `.vmap` output order, IDs, provenance, `allele_op`, metadata validation, exact `chrom:pos:a1:a2` restriction-by-intersection semantics, and `.vmap` output.
+- streaming must preserve source `.vmap` output order, IDs, provenance, `allele_op`, metadata validation, exact `(chrom, pos, a1, a2)` restriction-by-intersection semantics, and `.vmap` output.
 
 1. Row-count metadata may guide set-operation planning:
 - `.vmap` and `.vtable` sidecars may provide `variants_count`, which implementations may use to start intersections, restrictions, or unions from smaller objects.

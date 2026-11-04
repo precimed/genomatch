@@ -29,6 +29,7 @@ from .sumstats_utils import (
     resolve_sumstats_input_path,
 )
 from .vtable_utils import (
+    format_variant_ids,
     load_metadata as load_variant_metadata,
     require_contig_naming,
     require_table_matches_contig_naming,
@@ -61,7 +62,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--retain-snp-id",
         action="store_true",
-        help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a1:a2 IDs",
+        help="Use retained target-side .vmap id values as output SNP IDs instead of generated chrom:pos:a2:a1 IDs",
     )
     return parser.parse_args()
 
@@ -175,15 +176,7 @@ def collect_payload_frame(
 def output_variant_ids(vmap_frame: pd.DataFrame, *, retain_snp_id: bool) -> pd.Series:
     if retain_snp_id:
         return vmap_frame["id"].astype(str).reset_index(drop=True)
-    return (
-        vmap_frame["chrom"].astype(str)
-        + ":"
-        + vmap_frame["pos"].astype(str)
-        + ":"
-        + vmap_frame["a1"].astype(str)
-        + ":"
-        + vmap_frame["a2"].astype(str)
-    ).reset_index(drop=True)
+    return format_variant_ids(vmap_frame).reset_index(drop=True)
 
 
 def build_variant_output_columns(vmap_frame: pd.DataFrame, *, retain_snp_id: bool) -> List[Tuple[str, pd.Series]]:

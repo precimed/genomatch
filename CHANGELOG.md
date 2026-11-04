@@ -21,6 +21,11 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 - Variants with two multi-base alleles, such as MNVs, are retained when possible.
 - The pipeline now always sorts variants at the very end.
 
+**All workflows**
+
+- Generated variant IDs are now `chrom:pos:a2:a1` instead of `chrom:pos:a1:a2`, and variants at the same position now sort by `a2`, then `a1`. Update anything that joins on the old IDs.
+- Combined variant columns are now read as `CHR:POS:OtherAllele:EffectAllele` (for example `chr:pos:ref:alt` with ALT as the effect allele). Previously the third field was read as the effect allele. If your combined column lists the effect allele first, split it into separate columns.
+
 **Individual tools**
 
 - Most tools now reject repeated variants in `.vtable` inputs, as they already did for `.vmap`. Run `sort_variants.py --drop-duplicates` to keep the first of each.

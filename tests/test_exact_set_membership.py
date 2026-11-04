@@ -50,7 +50,7 @@ def test_repeated_membership_keys_preserve_set_results(tmp_path, monkeypatch, to
         expected = [source_rows[1].split("\t"), source_rows[3].split("\t")]
     else:
         positions = range(100, 701, 100) if tool == "union_variants" else [100, 200]
-        expected = [["1", str(pos), f"1:{pos}:AC:A", "AC", "A"] for pos in positions]
+        expected = [["1", str(pos), f"1:{pos}:A:AC", "AC", "A"] for pos in positions]
     assert read_tsv(output) == expected
     metadata = json.loads(output.with_name(output.name + ".meta.json").read_text())
     assert metadata["variants_count"] == len(expected)

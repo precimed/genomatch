@@ -91,6 +91,8 @@ def ensure_parent_dir(path: Path) -> None:
 
 
 WRITE_CHUNK_ROWS = 100_000
+# Reference-aligned coordinate ties compare REF before ALT.
+COORDINATE_ALLELE_COLUMNS = ("a2", "a1")
 _VTABLE_COLUMNS = ["chrom", "pos", "id", "a1", "a2"]
 _VMAP_COLUMNS = ["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"]
 
@@ -739,7 +741,7 @@ def require_unique_target_rows(rows: Sequence[VariantRow], *, message: str = "du
 def sort_target_table_by_declared_coordinate(frame: pd.DataFrame, contig_naming: str, *, label: str) -> pd.DataFrame:
     # Assumes: target frame has at least chrom/pos/a1/a2 columns in declared contig naming.
     # Performs: PV/SV checks for sortable keys and deterministic stable sort.
-    # Guarantees: frame sorted by canonical contig rank, integer position, a1 lexicographically, a2 lexicographically.
+    # Guarantees: frame sorted by canonical contig rank, integer position, a2 lexicographically, a1 lexicographically.
     required = {"chrom", "pos", "a1", "a2"}
     missing = [col for col in required if col not in frame.columns]
     if missing:
@@ -761,7 +763,7 @@ def sort_target_table_by_declared_coordinate(frame: pd.DataFrame, contig_naming:
         raise ValueError(f"{label} row has invalid pos: {first_pos!r}")
     out["__rank"] = canonical.map(lambda token: CANONICAL_CONTIG_RANK[str(token)]).astype("int64")
     out["__pos"] = pos_numeric.astype("int64")
-    out.sort_values(by=["__rank", "__pos", "a1", "a2"], kind="mergesort", inplace=True)
+    out.sort_values(by=["__rank", "__pos", *COORDINATE_ALLELE_COLUMNS], kind="mergesort", inplace=True)
     out.drop(columns=["__rank", "__pos"], inplace=True)
     out.reset_index(drop=True, inplace=True)
     return out
@@ -861,6 +863,24 @@ def canonical_contig_from_row(row: object, contig_naming: str, *, label: str) ->
     return canonical
 
 
+# Public IDs render REF before ALT for reference-aligned rows, whose stored
+# slots remain a1=ALT, a2=REF. Formatting never verifies a reference.
+def format_variant_id(row: object) -> str:
+    return f"{row.chrom}:{row.pos}:{row.a2}:{row.a1}"
+
+
+def format_variant_ids(frame: pd.DataFrame) -> pd.Series:
+    return (
+        frame["chrom"].astype(str)
+        + ":"
+        + frame["pos"].astype(str)
+        + ":"
+        + frame["a2"].astype(str)
+        + ":"
+        + frame["a1"].astype(str)
+    )
+
+
 def declared_coordinate_sort_key(row: object, contig_naming: str, *, label: str) -> Tuple[int, int, str, str]:
     canonical = canonical_contig_from_row(row, contig_naming, label=label)
     try:
@@ -869,7 +889,7 @@ def declared_coordinate_sort_key(row: object, contig_naming: str, *, label: str)
         raise ValueError(f"{label} row has invalid pos: {getattr(row, 'pos', None)!r}") from exc
     if pos <= 0:
         raise ValueError(f"{label} row has invalid pos: {getattr(row, 'pos', None)!r}")
-    return (CANONICAL_CONTIG_RANK[canonical], pos, str(getattr(row, "a1", "")), str(getattr(row, "a2", "")))
+    return (CANONICAL_CONTIG_RANK[canonical], pos, *(str(getattr(row, column, "")) for column in COORDINATE_ALLELE_COLUMNS))
 
 
 def sort_target_rows_by_declared_coordinate(rows: Sequence[object], contig_naming: str, *, label: str) -> List[object]:

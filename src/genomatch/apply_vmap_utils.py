@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Set
 
+from .vtable_utils import format_variant_id
+
 
 def build_needed_source_indices(vmap_rows: Iterable[object]) -> Dict[str, Set[int]]:
     needed: Dict[str, Set[int]] = {}
@@ -14,4 +16,4 @@ def build_needed_source_indices(vmap_rows: Iterable[object]) -> Dict[str, Set[in
 def output_variant_id(vmap_row: object, *, retain_snp_id: bool) -> str:
     if retain_snp_id:
         return str(vmap_row.id)
-    return f"{vmap_row.chrom}:{vmap_row.pos}:{vmap_row.a1}:{vmap_row.a2}"
+    return format_variant_id(vmap_row)

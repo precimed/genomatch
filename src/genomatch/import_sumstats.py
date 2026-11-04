@@ -17,6 +17,7 @@ from .importer_utils import (
 )
 from .contig_utils import canonical_contig_from_any_supported_label
 from .sumstats_utils import (
+    JOINED_FIELD_ORDER,
     extract_variant_field,
     iter_sumstats_table_chunks,
     is_missing_token_series,
@@ -199,6 +200,8 @@ def main() -> int:
         variant_columns = resolve_variant_columns(header, metadata, require_pos=True)
     else:
         variant_columns = resolve_id_enrichment_columns(header, metadata)
+    if variant_columns.effect_allele == variant_columns.other_allele:
+        logger.info("import_sumstats.py: reading alleles from one combined column as %s", JOINED_FIELD_ORDER)
 
     rows_chunks: List[pd.DataFrame] = []
     qc_chunks: List[pd.DataFrame] = []

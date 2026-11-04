@@ -628,8 +628,9 @@ properties:
       Column for the effect allele.
 
       It is OK if it comes embedded in a joined position vector like 1_234:a:t.
+      Joined vectors are read as CHR, POS, OtherAllele, EffectAllele, so the effect allele here is t.
 
-      An internal algorithm will split out the correct value. Do NOT assume A1=EffectAllele.
+      An internal algorithm will split out the value in that order. Do NOT assume A1=EffectAllele.
       Check carefully.
     type: "string"
 
@@ -639,8 +640,9 @@ properties:
       Column for the non effect allele.
 
       It is OK if it comes embedded in a joined position vector like 1_234:a:t.
+      Joined vectors are read as CHR, POS, OtherAllele, EffectAllele, so the other allele here is a.
 
-      An internal algorithm will split out the correct value. Do NOT assume A1=EffectAllele.
+      An internal algorithm will split out the value in that order. Do NOT assume A1=EffectAllele.
 
       Check carefully.
     type: "string"

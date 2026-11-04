@@ -323,11 +323,11 @@ def test_sort_cleanup_keeps_first_exact_key_without_qc(tmp_path, suffix):
     result = run_py_with_env('sort_variants.py', {}, '--input', source, '--output', output, '--drop-duplicates')
     assert result.returncode == 0, result.stderr
     assert [row[:5] for row in read_tsv(output)] == [
-        ['1', '1', 'reversed', 'A', 'G'], ['1', '1', 'first', 'G', 'A'], ['1', '2', 'later', 'C', 'A'],
+        ['1', '1', 'first', 'G', 'A'], ['1', '1', 'reversed', 'A', 'G'], ['1', '2', 'later', 'C', 'A'],
     ]
     assert not qc.exists()
     if suffix == 'vmap':
-        assert read_tsv(output)[1][5:] == [*qc_locator(suffix, 1), 'flip']
+        assert read_tsv(output)[0][5:] == [*qc_locator(suffix, 1), 'flip']
 
 
 @pytest.mark.parametrize('suffix', ['vtable', 'vmap'])

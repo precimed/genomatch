@@ -34,8 +34,8 @@ def test_apply_vmap_to_bfile_preserves_target_order_for_single_file_provenance(t
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
     assert [(row.chrom, row.snp, row.cm, row.bp, row.a1, row.a2) for row in read_bim(out_prefix.with_suffix(".bim"))] == [
-        ("1", "1:200:T:C", "0", "200", "T", "C"),
-        ("1", "1:100:A:G", "0", "100", "A", "G"),
+        ("1", "1:200:C:T", "0", "200", "T", "C"),
+        ("1", "1:100:G:A", "0", "100", "A", "G"),
     ]
     assert out_prefix.with_suffix(".fam").read_text(encoding="utf-8") == source_prefix.with_suffix(".fam").read_text(encoding="utf-8")
     assert out_prefix.with_suffix(".fam").stat().st_mtime > source_prefix.with_suffix(".fam").stat().st_mtime
@@ -258,7 +258,7 @@ def test_apply_vmap_to_bfile_writes_qc_tsv_for_haploid_het_incompatible(tmp_path
     assert qc_path.exists()
     lines = qc_path.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "source_shard\tsource_index\tid\tstatus\tn_affected"
-    assert lines[1] == ".\t0\tX:100:A:G\thaploid_het_incompatible\t1"
+    assert lines[1] == ".\t0\tX:100:G:A\thaploid_het_incompatible\t1"
     assert len(lines) == 2
 
 
@@ -278,7 +278,7 @@ def test_apply_vmap_to_bfile_writes_qc_tsv_for_absent_nonmissing(tmp_path):
     assert qc_path.exists()
     lines = qc_path.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "source_shard\tsource_index\tid\tstatus\tn_affected"
-    assert lines[1] == ".\t0\tY:100:A:G\tabsent_nonmissing\t1"
+    assert lines[1] == ".\t0\tY:100:G:A\tabsent_nonmissing\t1"
     assert len(lines) == 2
 
 
@@ -326,7 +326,7 @@ def test_apply_vmap_to_bfile_uses_exact_source_shard_for_sharded_payloads(tmp_pa
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
-    assert [row.snp for row in read_bim(out_prefix.with_suffix(".bim"))] == ["1:100:A:G", "2:200:C:T"]
+    assert [row.snp for row in read_bim(out_prefix.with_suffix(".bim"))] == ["1:100:G:A", "2:200:T:C"]
 
 
 def test_apply_vmap_to_bfile_discovers_xy_shard_alias_for_chr_template(tmp_path):
@@ -341,7 +341,7 @@ def test_apply_vmap_to_bfile_discovers_xy_shard_alias_for_chr_template(tmp_path)
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
-    assert [row.snp for row in read_bim(out_prefix.with_suffix(".bim"))] == ["X:100:A:G", "X:200:C:T"]
+    assert [row.snp for row in read_bim(out_prefix.with_suffix(".bim"))] == ["X:100:G:A", "X:200:T:C"]
     assert read_bed_matrix(out_prefix.with_suffix(".bed"), 1, 2) == [[0], [3]]
 
 
@@ -443,7 +443,7 @@ def test_apply_vmap_to_bfile_supports_dotted_output_prefix(tmp_path):
     bim_path = out_prefix.parent / f"{out_prefix.name}.bim"
     fam_path = out_prefix.parent / f"{out_prefix.name}.fam"
     assert [(row.chrom, row.snp, row.cm, row.bp, row.a1, row.a2) for row in read_bim(bim_path)] == [
-        ("1", "1:100:A:G", "0", "100", "A", "G"),
+        ("1", "1:100:G:A", "0", "100", "A", "G"),
     ]
     assert read_fam_sample_count(fam_path) == 1
 
@@ -471,7 +471,7 @@ def test_apply_vmap_to_bfile_merges_source_shards_when_target_contigs_merge(tmp_
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
-    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.X.bim")] == [("X", "X:70000:A:G"), ("X", "X:60001:C:T")]
+    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.X.bim")] == [("X", "X:70000:G:A"), ("X", "X:60001:T:C")]
     assert read_bed_matrix(tmp_path / "aligned.X.bed", 2, 2) == [[0, 3], [2, 0]]
 
 
@@ -494,8 +494,8 @@ def test_apply_vmap_to_bfile_splits_source_shard_when_target_contigs_split(tmp_p
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
-    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.25.bim")] == [("25", "25:60001:C:T")]
-    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.23.bim")] == [("23", "23:70000:A:G")]
+    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.25.bim")] == [("25", "25:60001:T:C")]
+    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.23.bim")] == [("23", "23:70000:G:A")]
     assert read_bed_matrix(tmp_path / "aligned.25.bed", 2, 1) == [[3, 0]]
     assert read_bed_matrix(tmp_path / "aligned.23.bed", 2, 1) == [[0, 3]]
 
@@ -636,8 +636,8 @@ def test_apply_vmap_to_bfile_relocates_genotypes_across_output_shards_by_provena
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
-    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.2.bim")] == [("2", "2:500:A:G")]
-    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.1.bim")] == [("1", "1:600:C:T")]
+    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.2.bim")] == [("2", "2:500:G:A")]
+    assert [(row.chrom, row.snp) for row in read_bim(tmp_path / "aligned.1.bim")] == [("1", "1:600:T:C")]
     assert read_bed_matrix(tmp_path / "aligned.2.bed", 2, 1) == [[0, 3]]
     assert read_bed_matrix(tmp_path / "aligned.1.bed", 2, 1) == [[3, 0]]
     assert (tmp_path / "aligned.2.fam").read_text(encoding="utf-8") == (tmp_path / "source.1.fam").read_text(encoding="utf-8")
@@ -781,7 +781,7 @@ def test_apply_vmap_to_bfile_streams_single_file_payload_in_small_chunks(tmp_pat
     )
 
     assert result.returncode == 0, result.stderr
-    assert [(row.chrom, row.snp) for row in read_bim(out_prefix.with_suffix(".bim"))] == [("1", "1:200:T:C"), ("1", "1:100:A:G")]
+    assert [(row.chrom, row.snp) for row in read_bim(out_prefix.with_suffix(".bim"))] == [("1", "1:200:C:T"), ("1", "1:100:G:A")]
     assert read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 2) == [[3, 2], [0, 3]]
 
 
@@ -820,8 +820,8 @@ def test_apply_vmap_to_bfile_streams_interleaved_sharded_input(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert [(row.chrom, row.snp) for row in read_bim(out_prefix.with_suffix(".bim"))] == [
-        ("2", "2:500:A:G"),
-        ("1", "1:600:C:T"),
-        ("2", "2:800:T:C"),
+        ("2", "2:500:G:A"),
+        ("1", "1:600:T:C"),
+        ("2", "2:800:C:T"),
     ]
     assert read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 3) == [[0, 3], [3, 0], [2, 3]]

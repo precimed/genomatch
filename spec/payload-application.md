@@ -5,7 +5,7 @@
 This section applies to all `apply_vmap_*` tools.
 
 - payload-application tools write corrected output variant IDs by default
-- the default corrected output ID is generated from the `.vmap` target row as `chrom:pos:a1:a2`
+- the default corrected output ID is generated from the `.vmap` target row using the [generated-ID format](core-objects.md#generated-variant-ids)
 - default output IDs are generated from the `.vmap` target rows that are emitted; `.vmap` `id` values are not authoritative for the default final payload IDs
 - this rule affects only the payload output ID fields: summary-stat `SNP`, PLINK 1 `.bim` column 2, and PLINK 2 `.pvar` `ID`
 - provenance lookup, allele operations, and row ordering continue to ignore `id` and operate on target coordinates, alleles, and stored source provenance
@@ -167,6 +167,7 @@ Expected ploidy, payload-validation rules, and `.ploidy` semantics are defined i
 
 - the payload type is PLINK 1 BED/BIM/FAM
 - `apply_vmap_to_bfile.py` defines output `.bim` rows from `.vmap` rows, writes genetic-position / cM as `0`, and writes the SNP field according to the shared output-ID rule above
+- output `.bim` allele columns are column 5=`a1` and column 6=`a2` from the `.vmap` target row; for reference-aligned rows these are ALT and REF, respectively
 - `apply_vmap_to_bfile.py` accepts optional `--target-fam`
 - if `--target-fam` is not supplied, `apply_vmap_to_bfile.py` must propagate the source payload `.fam` to every emitted output `.fam`
 - if neither `--target-fam` nor `--sample-axis native` is supplied, all referenced source shards in one invocation must have identical `.fam` contents; implementations may enforce this as a single global precheck across all referenced shards
@@ -210,7 +211,7 @@ Expected ploidy and payload-validation rules are defined in [ploidy-model.md](pl
 - `apply_vmap_to_pfile.py` applies a `.vmap` to a PLINK 2 PFILE payload (`.pgen/.pvar/.psam`)
 - every emitted PFILE output must include `.pgen`, `.pvar`, and `.psam`
 - output `.pvar` rows are defined from `.vmap` rows, not copied from source `.pvar`, with `ID` written according to the shared output-ID rule above
-- output allele columns in `.pvar` must match `.vmap` target-side `a1/a2`
+- output allele columns in `.pvar` are `REF=a2` and `ALT=a1` from the `.vmap` target row; their reference-aligned meaning depends on upstream reference compatibility
 - if a mapped row uses `swap` or `flip_swap`, the genotype payload must be rewritten to stay consistent with the target-side allele order encoded in output `.pvar`
 - `apply_vmap_to_pfile.py` accepts optional `--target-psam`
 - if `--target-psam` is not supplied, `.psam` is propagated from the source payload sample axis
