@@ -1391,8 +1391,8 @@ def test_restrict_build_compatible_drop_duplicates_vmap_sorts_and_passes_through
     assert not out.with_name(out.name + ".qc.tsv").exists()
 
 
-def test_restrict_build_compatible_drop_duplicates_vtable_retains_first_and_no_qc(tmp_path):
-    # Two input rows canonicalize to the same target; --drop-duplicates retains first, no QC sidecar.
+def test_restrict_build_compatible_drop_duplicates_vtable_drops_all_collisions_to_qc(tmp_path):
+    # Distinct ordered keys canonicalize to one target, even with legacy cleanup flags.
     grch37 = tmp_path / "GRCh37.ucsc.fa"
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
@@ -1405,7 +1405,7 @@ def test_restrict_build_compatible_drop_duplicates_vtable_retains_first_and_no_q
         source,
         [
             "1\t1\tdup\tA\tG",
-            "1\t1\tkeep\tA\tG",
+            "1\t1\tkeep\tG\tA",
             "1\t2\tt2\tC\tG",
         ],
     )
@@ -1423,11 +1423,10 @@ def test_restrict_build_compatible_drop_duplicates_vtable_retains_first_and_no_q
         "--drop-duplicates",
     )
 
-    # dup and keep both canonicalize to (G, A) at pos 1 (ref=A, swap); t2: pos 2, ref=G, a2=G=ref → (C, G)
-    # --drop-duplicates retains first (dup), drops keep; no QC sidecar for vtable
     assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [
-        ["1", "1", "dup", "G", "A"],
-        ["1", "2", "t2", "C", "G"],
+    assert read_tsv(out) == [["1", "2", "t2", "C", "G"]]
+    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
+        ["row_idx", "source_id", "status"],
+        ["0", "dup", "duplicate_target"],
+        ["1", "keep", "duplicate_target"],
     ]
-    assert not out.with_name(out.name + ".qc.tsv").exists()

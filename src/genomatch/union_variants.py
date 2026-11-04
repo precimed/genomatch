@@ -89,7 +89,7 @@ def main() -> int:
         frame = table.to_frame(copy=False)
         validate_loaded_row_count(info, len(frame))
         print_loaded(info.path, len(frame))
-        accumulated = pd.concat([accumulated, frame], ignore_index=True, copy=False)
+        accumulated = pd.concat([accumulated, frame], ignore_index=True)
         print_accumulated(info.path, len(accumulated))
 
     sorted_frame = sort_target_table_by_declared_coordinate(accumulated, contig_naming, label="variant table")

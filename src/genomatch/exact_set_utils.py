@@ -90,13 +90,17 @@ def vtable_metadata_from_target_info(info: TargetObjectInfo) -> dict:
 
 
 def read_target_table(path: Path) -> VariantRowsTable:
+    # Assumes: path names a vtable or vmap payload used for exact set operations.
+    # Performs: PN/PV via object readers, target-column projection.
+    # Guarantees: validated target rows without provenance, allele history, or QC ordinals.
     if path.name.endswith(".vtable"):
-        return read_vtable_table(path)
-    if path.name.endswith(".vmap"):
-        vmap_table = read_vmap_table(path, check_duplicates=False)
-        target_frame = vmap_table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
-        return VariantRowsTable.from_frame(target_frame, copy=False)
-    raise ValueError(f"unsupported variant object path: {path}")
+        table = read_vtable_table(path)
+    elif path.name.endswith(".vmap"):
+        table = read_vmap_table(path, check_duplicates=False)
+    else:
+        raise ValueError(f"unsupported variant object path: {path}")
+    target_frame = table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
+    return VariantRowsTable.from_frame(target_frame, copy=False)
 
 
 def read_mapped_vmap_table(path: Path) -> VMapRowsTable:

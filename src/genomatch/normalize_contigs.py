@@ -17,8 +17,9 @@ from .vtable_utils import (
     duplicate_target_rows_mask_table,
     load_variant_object_tables,
     metadata_with_variants_count,
+    variant_row_qc_rows,
     write_metadata,
-    write_vmap_status_qc,
+    write_variant_status_qc,
     write_vmap_table,
     write_vtable_table,
 )
@@ -50,25 +51,18 @@ def main() -> int:
     # Guarantees: result.frame has contig-normalized target rows; result.duplicate_mask flags chrom:pos:a1:a2 duplicates.
     result = normalize_target_table(source_frame, args.to, genome_build=genome_build)
     out_frame = result.frame
-    duplicate_target_count = 0
     qc_path = output_path.with_name(output_path.name + ".qc.tsv")
-    if is_vmap:
-        duplicate_mask = duplicate_target_rows_mask_table(out_frame)
-        duplicate_target_count = int(duplicate_mask.sum())
-        if duplicate_target_count > 0:
-            dup_frame = out_frame.loc[duplicate_mask]
-            write_vmap_status_qc(
-                qc_path,
-                zip(
-                    dup_frame["source_shard"].astype(str),
-                    dup_frame["source_index"].astype(int),
-                    dup_frame["id"].astype(str),
-                    ["duplicate_target"] * duplicate_target_count,
-                ),
-            )
-            out_frame = out_frame.loc[~duplicate_mask].reset_index(drop=True)
-        elif qc_path.exists():
-            qc_path.unlink()
+    duplicate_mask = duplicate_target_rows_mask_table(out_frame)
+    duplicate_target_count = int(duplicate_mask.sum())
+    if duplicate_target_count > 0:
+        # Normalization may discard unresolved rows and reset the structural index.
+        # Match QC by stored identifiers, never by positions in the filtered frame.
+        dup_frame = out_frame.loc[duplicate_mask]
+        qc_rows = variant_row_qc_rows(dup_frame, is_vmap=is_vmap)
+        write_variant_status_qc(qc_path, qc_rows.assign(status="duplicate_target"), is_vmap=is_vmap)
+        out_frame = out_frame.loc[~duplicate_mask].reset_index(drop=True)
+    elif qc_path.exists():
+        qc_path.unlink()
     if is_vmap:
         write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
     else:

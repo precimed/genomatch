@@ -62,14 +62,18 @@ retain that policy for both input types.
 
 QC identifies a dropped row using the following QC row identifiers:
 
-- For `.vmap`, use the original `(source_shard, source_index)`.
-- For `.vtable`, use `source_shard="."` and `source_index` equal to the zero-based
+- For `.vmap`, use the original `(source_shard, source_index)`; the QC columns
+  are `source_shard`, `source_index`, `source_id`, and `status`.
+- For `.vtable`, use `row_idx` equal to the zero-based
   input row ordinal, assigned when reading the input and preserved through
-  filtering, sorting, and external-tool round trips.
+  filtering, sorting, and external-tool round trips. The QC columns are
+  `row_idx`, `source_id`, and `status`; omit `source_shard` and `source_index`.
 
 For `.vtable`, the QC row identifier refers to this invocation's input object
 only; it does not establish raw-payload provenance and is never added to the output
-`.vtable`. Other QC fields retain their tool-defined meanings.
+`.vtable`. Keep `row_idx` distinct from provenance fields throughout processing;
+do not rename it to `source_index` or synthesize `.vmap` provenance for `.vtable`
+rows. Other QC fields retain their tool-defined meanings.
 
 ## Reference access policy
 
