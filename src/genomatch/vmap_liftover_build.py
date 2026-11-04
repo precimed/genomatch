@@ -30,7 +30,8 @@ from .vtable_utils import (
     require_contig_naming,
     require_table_matches_contig_naming,
     write_metadata,
-    write_vmap_status_qc,
+    variant_row_qc_rows,
+    write_variant_status_qc,
     write_vmap_table,
     write_vtable_table,
 )
@@ -42,8 +43,6 @@ PREPARE_INPUT_COLUMNS = (
     "id",
     "a1",
     "a2",
-    "source_shard",
-    "source_index",
     "upstream_allele_op",
 )
 PREPARED_COLUMNS = (
@@ -53,8 +52,6 @@ PREPARED_COLUMNS = (
     "id",
     "a1",
     "a2",
-    "source_shard",
-    "source_index",
     "upstream_allele_op",
     "status",
     "input_allele_op",
@@ -66,11 +63,13 @@ ROW_LOOKUP_COLUMNS = (
     "chrom",
     "pos",
     "id",
-    "source_shard",
-    "source_index",
     "upstream_allele_op",
     "input_allele_op",
 )
+
+def qc_identity_columns(*, is_vmap: bool) -> tuple[str, ...]:
+    return ("source_shard", "source_index") if is_vmap else ("row_idx",)
+
 
 WRITE_CHUNK_ROWS = 100_000
 logger = logging.getLogger(__name__)
@@ -108,12 +107,13 @@ def convert_rows_to_ucsc(rows: VariantRowsTable, contig_naming: str) -> VariantR
     return VariantRowsTable.from_frame(frame, copy=False)
 
 
-def prepare_liftover_table(frame: pd.DataFrame, source_fasta: Path) -> pd.DataFrame:
+def prepare_liftover_table(frame: pd.DataFrame, source_fasta: Path, *, is_vmap: bool) -> pd.DataFrame:
     # Assumes: liftover_input columns exist and upstream loaders already canonicalized alleles.
     # Performs: SV(position/allele/reference-anchoring checks), query construction for source reference bases.
     # Guarantees: PREPARED_COLUMNS with status/ref/alt fields ready for VCF emission.
     prepared = frame.copy(deep=True)
-    require_columns(prepared, PREPARE_INPUT_COLUMNS, label="liftover_input")
+    identity_columns = qc_identity_columns(is_vmap=is_vmap)
+    require_columns(prepared, (*PREPARE_INPUT_COLUMNS, *identity_columns), label="liftover_input")
 
     pos_int, valid_pos = strict_int_series(prepared["pos"])
     if not bool(valid_pos.all()):
@@ -167,19 +167,22 @@ def prepare_liftover_table(frame: pd.DataFrame, source_fasta: Path) -> pd.DataFr
     prepared["input_allele_op"] = ready_swap.map({True: "swap", False: "identity"})
     prepared["ref"] = prepared["ref_base"].where(ready_mask, None)
     prepared["alt"] = a2_tokens.where(~ready_swap, a1_tokens).where(ready_mask, None)
-    return prepared.loc[:, list(PREPARED_COLUMNS)]
+    return prepared.loc[:, [*PREPARED_COLUMNS, *identity_columns]]
 
 
 def write_temp_vcf(
     path: Path,
     prepared: pd.DataFrame,
+    *,
+    is_vmap: bool,
 ) -> pd.DataFrame:
     # Assumes: prepared follows PREPARED_COLUMNS contract from prepare_liftover_table.
     # Performs: CV(VCF row-shape construction for ready rows), VCF text emission.
     # Guarantees: VCF file for bcftools liftover and a row_id-indexed lookup table.
-    require_columns(prepared, PREPARED_COLUMNS, label="prepared_liftover")
+    identity_columns = qc_identity_columns(is_vmap=is_vmap)
+    require_columns(prepared, (*PREPARED_COLUMNS, *identity_columns), label="prepared_liftover")
     ready_frame = prepared.loc[prepared["status"] == "ready"].copy()
-    row_lookup = ready_frame.loc[:, list(ROW_LOOKUP_COLUMNS)].set_index("row_id", drop=False)
+    row_lookup = ready_frame.loc[:, [*ROW_LOOKUP_COLUMNS, *identity_columns]].set_index("row_id", drop=False)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("##fileformat=VCFv4.2\n")
         for chrom in sorted(set(ready_frame["chrom"].tolist()), key=chrom_sort_key):
@@ -246,11 +249,16 @@ def parse_lifted_vcf(
     final_contig_naming: str,
     source_build: str,
     target_build: str,
-) -> Tuple[VMapRowsTable, Dict[str, str]]:
+    *,
+    is_vmap: bool,
+) -> Tuple[VMapRowsTable | VariantRowsTable, Dict[str, str]]:
     # Assumes: lifted VCF is produced by bcftools +liftover and row_lookup is keyed by row_id.
     # Performs: PV(lifted VCF row-shape checks), SV(liftover-specific filtering, contig/ploidy checks, allele-op composition).
-    # Guarantees: deduplicated VMapRowsTable of lifted rows plus per-row QC status map.
+    # Guarantees: deduplicated table matching the input type plus per-row QC status map.
     status_by_row_id: Dict[str, str] = {}
+    identity_columns = qc_identity_columns(is_vmap=is_vmap)
+    output_type = VMapRowsTable if is_vmap else VariantRowsTable
+    require_columns(row_lookup, (*ROW_LOOKUP_COLUMNS, *identity_columns), label="liftover_lookup")
 
     try:
         frame = pd.read_table(
@@ -269,7 +277,7 @@ def parse_lifted_vcf(
         raise ValueError(f"invalid lifted VCF content: {path}") from exc
 
     if frame.empty:
-        return VMapRowsTable.from_rows([]), status_by_row_id
+        return output_type.from_rows([]), status_by_row_id
 
     if frame.isna().any(axis=None):
         raise ValueError(f"invalid lifted VCF content: {path}")
@@ -325,12 +333,11 @@ def parse_lifted_vcf(
     row_lookup_merge = row_lookup.reset_index(drop=True)
     frame = frame.merge(
         row_lookup_merge.loc[
-            :, ["row_id", "id", "source_shard", "source_index", "upstream_allele_op", "input_allele_op"]
+            :, ["row_id", "id", *identity_columns, "upstream_allele_op", "input_allele_op"]
         ].rename(
             columns={
                 "id": "lookup_id",
-                "source_shard": "lookup_source_shard",
-                "source_index": "lookup_source_index",
+                **{column: f"lookup_{column}" for column in identity_columns},
                 "upstream_allele_op": "lookup_upstream_allele_op",
                 "input_allele_op": "lookup_input_allele_op",
             }
@@ -399,9 +406,8 @@ def parse_lifted_vcf(
                 "lookup_id",
                 "alt_token",
                 "ref_token",
-                "lookup_source_shard",
-                "lookup_source_index",
-                "allele_op",
+                *[f"lookup_{column}" for column in identity_columns],
+                *(["allele_op"] if is_vmap else []),
             ],
         ]
         .rename(
@@ -410,14 +416,13 @@ def parse_lifted_vcf(
                 "lookup_id": "id",
                 "alt_token": "a1",
                 "ref_token": "a2",
-                "lookup_source_shard": "source_shard",
-                "lookup_source_index": "source_index",
+                **{f"lookup_{column}": column for column in identity_columns},
             }
         )
         .copy()
     )
     if parsed_frame.empty:
-        return VMapRowsTable.from_rows([]), status_by_row_id
+        return output_type.from_rows([]), status_by_row_id
 
     canonical = parsed_frame["chrom"].map(lambda chrom: canonical_contig_from_label(str(chrom), final_contig_naming))
     invalid_contig = canonical.isna()
@@ -444,9 +449,9 @@ def parse_lifted_vcf(
     status_by_row_id.update(dict(zip(parsed_frame.loc[duplicate_mask, "row_id"], ["duplicate_target"] * int(duplicate_mask.sum()))))
 
     out_frame = parsed_frame.loc[
-        ~duplicate_mask, ["chrom", "pos", "id", "a1", "a2", "source_shard", "source_index", "allele_op"]
+        ~duplicate_mask, ["chrom", "pos", "id", "a1", "a2", *identity_columns, *(["allele_op"] if is_vmap else [])]
     ]
-    return VMapRowsTable.from_frame(out_frame.reset_index(drop=True), copy=False), status_by_row_id
+    return output_type.from_frame(out_frame.reset_index(drop=True), copy=False), status_by_row_id
 
 
 def parse_liftover_info_ops(info: pd.Series) -> pd.Series:
@@ -493,6 +498,7 @@ def main() -> int:
         raise ValueError(f"input not found: {input_path}")
 
     loaded = load_variant_object_tables(input_path)
+    is_vmap = loaded.base_vmap_table is not None
     source_rows_table = loaded.target_rows_table
     source_meta = dict(loaded.target_metadata)
     source_build = str(source_meta.get("genome_build"))
@@ -523,15 +529,13 @@ def main() -> int:
         input_frame["source_index"] = base_frame["source_index"].tolist()
         input_frame["upstream_allele_op"] = base_frame["allele_op"].tolist()
     else:
-        input_frame["source_shard"] = "."
-        input_frame["source_index"] = list(range(len(input_frame)))
         input_frame["upstream_allele_op"] = "identity"
 
     input_vcf = liftover_debug_vcf_path(output_path, kind="input")
     output_vcf = liftover_debug_vcf_path(output_path, kind="output")
     input_vcf.parent.mkdir(parents=True, exist_ok=True)
-    prepared = prepare_liftover_table(input_frame, source_fasta)
-    row_lookup = write_temp_vcf(input_vcf, prepared)
+    prepared = prepare_liftover_table(input_frame, source_fasta, is_vmap=is_vmap)
+    row_lookup = write_temp_vcf(input_vcf, prepared, is_vmap=is_vmap)
     if args.resume and output_vcf.exists():
         print_resume_skip(output_vcf)
     else:
@@ -542,17 +546,14 @@ def main() -> int:
         source_contig_naming,
         source_build,
         target_build,
+        is_vmap=is_vmap,
     )
 
     prepared["qc_status"] = prepared["status"].astype(str)
     ready_mask = prepared["qc_status"] == "ready"
     prepared.loc[ready_mask, "qc_status"] = prepared.loc[ready_mask, "row_id"].map(parse_status_by_row_id).fillna("unmapped")
-    qc_frame = prepared.loc[prepared["qc_status"] != "lifted", ["source_shard", "source_index", "id", "qc_status"]]
-    qc_rows = list(
-        qc_frame
-        .assign(source_index=lambda df: df["source_index"].astype(int))
-        .itertuples(index=False, name=None)
-    )
+    qc_frame = variant_row_qc_rows(prepared.loc[prepared["qc_status"] != "lifted"], is_vmap=is_vmap)
+    qc_frame["status"] = prepared.loc[qc_frame.index, "qc_status"]
 
     if loaded.base_vmap_table is not None:
         out_meta = dict(loaded.raw_metadata)
@@ -562,22 +563,18 @@ def main() -> int:
     else:
         out_meta = dict(loaded.raw_metadata)
         out_meta["genome_build"] = target_build
-        variant_table = VariantRowsTable.from_frame(
-            raw_rows_table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]],
-            copy=False,
-        )
-        write_vtable_table(output_path, variant_table, assume_validated=True)
+        write_vtable_table(output_path, raw_rows_table, assume_validated=True)
     write_metadata(output_path, metadata_with_variants_count(out_meta, len(raw_rows_table)))
     qc_path = output_path.with_name(output_path.name + ".qc.tsv")
-    if qc_rows:
-        write_vmap_status_qc(qc_path, qc_rows)
+    if not qc_frame.empty:
+        write_variant_status_qc(qc_path, qc_frame, is_vmap=is_vmap)
     elif qc_path.exists():
         qc_path.unlink()
     logger.info(
         "liftover_build.py: wrote %s with %s output rows and %s QC rows",
         output_path,
         len(raw_rows_table),
-        len(qc_rows),
+        len(qc_frame),
     )
     return 0
 

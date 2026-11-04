@@ -30,8 +30,9 @@ from .vtable_utils import (
     require_table_matches_contig_naming,
     sort_target_table_by_declared_coordinate,
     validate_allele_values,
+    variant_row_qc_rows,
     write_metadata,
-    write_vmap_status_qc,
+    write_variant_status_qc,
     write_vmap_table,
     write_vtable_table,
 )
@@ -866,118 +867,69 @@ def main() -> int:
         output_path=output_path,
     )
     keep_mask = restricted_outcomes["keep"].astype(bool)
+    # Legacy reference-only exclusions have no normalization status. Audit them
+    # for both object types using the shared reference-assignment exclusion.
+    no_match = ~keep_mask & restricted_outcomes["status"].isna()
+    restricted_outcomes.loc[no_match, "status"] = "no_reference_match"
     flip_count = int((keep_mask & restricted_outcomes["local_op"].isin(["flip", "flip_swap"])).sum())
 
+    # Both object types share target selection, duplicate handling, and QC.
+    # Only .vmap carries allele-operation history into the output object.
+    base_frame = (
+        loaded.base_vmap_table.frame if loaded.base_vmap_table is not None else source_rows_table.frame
+    )
+    base_qc = variant_row_qc_rows(base_frame, is_vmap=loaded.base_vmap_table is not None)
+    kept_idx = restricted_outcomes.index[keep_mask]
+    out_frame = restricted_outcomes.loc[
+        kept_idx, ["out_chrom", "out_pos", "out_id", "out_a1", "out_a2"]
+    ].rename(columns={
+        "out_chrom": "chrom", "out_pos": "pos", "out_id": "id",
+        "out_a1": "a1", "out_a2": "a2",
+    }).copy()
     if loaded.base_vmap_table is not None:
-        base_frame = loaded.base_vmap_table.to_frame(copy=False).reset_index(drop=True)
         if len(base_frame) != len(restricted_outcomes):
             raise ValueError("input variant_map source and target row counts are inconsistent")
-        kept_idx = restricted_outcomes.index[keep_mask]
-        out_vmap_frame = pd.DataFrame(
-            {
-                "chrom": restricted_outcomes.loc[kept_idx, "out_chrom"].reset_index(drop=True),
-                "pos": restricted_outcomes.loc[kept_idx, "out_pos"].reset_index(drop=True),
-                "id": restricted_outcomes.loc[kept_idx, "out_id"].reset_index(drop=True),
-                "a1": restricted_outcomes.loc[kept_idx, "out_a1"].reset_index(drop=True),
-                "a2": restricted_outcomes.loc[kept_idx, "out_a2"].reset_index(drop=True),
-                "source_shard": base_frame.loc[kept_idx, "source_shard"].reset_index(drop=True),
-                "source_index": pd.to_numeric(base_frame.loc[kept_idx, "source_index"], errors="raise")
-                .astype("int64")
-                .reset_index(drop=True),
-                "allele_op": compose_allele_ops_series(
-                    base_frame.loc[kept_idx, "allele_op"].reset_index(drop=True),
-                    restricted_outcomes.loc[kept_idx, "local_op"].reset_index(drop=True),
-                ),
-            }
+        out_frame["source_shard"] = base_frame.loc[kept_idx, "source_shard"]
+        out_frame["source_index"] = base_frame.loc[kept_idx, "source_index"]
+        out_frame["allele_op"] = compose_allele_ops_series(
+            base_frame.loc[kept_idx, "allele_op"],
+            restricted_outcomes.loc[kept_idx, "local_op"],
         )
-
-        qc_frames: List[pd.DataFrame] = []
-        status_mask = (~keep_mask) & restricted_outcomes["status"].notna()
-        if bool(status_mask.any()):
-            dropped_idx = restricted_outcomes.index[status_mask]
-            qc_status = pd.DataFrame(
-                {
-                    "source_shard": base_frame.loc[dropped_idx, "source_shard"].reset_index(drop=True),
-                    "source_index": pd.to_numeric(base_frame.loc[dropped_idx, "source_index"], errors="raise")
-                    .astype("int64")
-                    .reset_index(drop=True),
-                    "id": base_frame.loc[dropped_idx, "id"].reset_index(drop=True),
-                    "status": restricted_outcomes.loc[dropped_idx, "status"].reset_index(drop=True),
-                }
-            )
-            qc_frames.append(qc_status)
-
-        duplicate_mask = duplicate_target_rows_mask_table(out_vmap_frame)
-        duplicate_target_count = int(duplicate_mask.sum())
-        if bool(duplicate_mask.any()):
-            qc_duplicate = out_vmap_frame.loc[duplicate_mask, ["source_shard", "source_index", "id"]].copy()
-            qc_duplicate["status"] = "duplicate_target"
-            qc_frames.append(qc_duplicate)
-            out_vmap_frame = out_vmap_frame.loc[~duplicate_mask].reset_index(drop=True)
-
-        if args.sort and not out_vmap_frame.empty:
-            out_vmap_frame = sort_target_table_by_declared_coordinate(
-                out_vmap_frame,
-                contig_naming,
-                label="restrict_build_compatible.py output",
-            )
-
-        if args.drop_duplicates and not out_vmap_frame.empty:
-            drop_mask = out_vmap_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
-            if bool(drop_mask.any()):
-                qc_dropdup = out_vmap_frame.loc[drop_mask, ["source_shard", "source_index", "id"]].copy()
-                qc_dropdup["status"] = "duplicate_target"
-                qc_frames.append(qc_dropdup)
-                out_vmap_frame = out_vmap_frame.loc[~drop_mask].reset_index(drop=True)
-                logger.info(
-                    "restrict_build_compatible.py: --drop-duplicates dropped %s duplicate target rows",
-                    int(drop_mask.sum()),
-                )
-
-        if qc_frames:
-            qc_all = pd.concat(qc_frames, axis=0, ignore_index=True)
-            write_vmap_status_qc(
-                qc_output_path,
-                qc_all.loc[:, ["source_shard", "source_index", "id", "status"]].itertuples(index=False, name=None),
-            )
-        elif qc_output_path.exists():
-            qc_output_path.unlink()
-
-        write_vmap_table(output_path, VMapRowsTable.from_frame(out_vmap_frame, copy=False), assume_validated=True)
-        output_row_count = len(out_vmap_frame)
     else:
-        out_vtable_frame = (
-            restricted_outcomes.loc[keep_mask, ["out_chrom", "out_pos", "out_id", "out_a1", "out_a2"]]
-            .rename(
-                columns={
-                    "out_chrom": "chrom",
-                    "out_pos": "pos",
-                    "out_id": "id",
-                    "out_a1": "a1",
-                    "out_a2": "a2",
-                }
-            )
-            .reset_index(drop=True)
+        out_frame["row_idx"] = source_rows_table.frame.loc[kept_idx, "row_idx"]
+
+    qc_frames: List[pd.DataFrame] = []
+    status_mask = (~keep_mask) & restricted_outcomes["status"].notna()
+    if bool(status_mask.any()):
+        dropped_idx = restricted_outcomes.index[status_mask]
+        qc_status = base_qc.loc[dropped_idx].copy()
+        qc_status["status"] = restricted_outcomes.loc[dropped_idx, "status"]
+        qc_frames.append(qc_status)
+
+    duplicate_mask = duplicate_target_rows_mask_table(out_frame)
+    duplicate_target_count = int(duplicate_mask.sum())
+    if bool(duplicate_mask.any()):
+        qc_duplicate = base_qc.loc[out_frame.index[duplicate_mask]].copy()
+        qc_duplicate["status"] = "duplicate_target"
+        qc_frames.append(qc_duplicate)
+        out_frame = out_frame.loc[~duplicate_mask]
+
+    if args.sort and not out_frame.empty:
+        out_frame = sort_target_table_by_declared_coordinate(
+            out_frame, contig_naming, label="restrict_build_compatible.py output",
         )
-        if args.sort and not out_vtable_frame.empty:
-            out_vtable_frame = sort_target_table_by_declared_coordinate(
-                out_vtable_frame,
-                contig_naming,
-                label="restrict_build_compatible.py output",
-            )
-        if args.drop_duplicates and not out_vtable_frame.empty:
-            drop_mask = out_vtable_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
-            if bool(drop_mask.any()):
-                dropped_count = int(drop_mask.sum())
-                out_vtable_frame = out_vtable_frame.loc[~drop_mask].reset_index(drop=True)
-                logger.info(
-                    "restrict_build_compatible.py: --drop-duplicates dropped %s duplicate target rows",
-                    dropped_count,
-                )
-        if qc_output_path.exists():
-            qc_output_path.unlink()
-        write_vtable_table(output_path, VariantRowsTable.from_frame(out_vtable_frame, copy=False), assume_validated=True)
-        output_row_count = len(out_vtable_frame)
+    if qc_frames:
+        qc_all = pd.concat(qc_frames, axis=0, ignore_index=True)
+        write_variant_status_qc(qc_output_path, qc_all, is_vmap=loaded.base_vmap_table is not None)
+    elif qc_output_path.exists():
+        qc_output_path.unlink()
+
+    out_frame = out_frame.reset_index(drop=True)
+    if loaded.base_vmap_table is not None:
+        write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
+    else:
+        write_vtable_table(output_path, VariantRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
+    output_row_count = len(out_frame)
     write_metadata(output_path, metadata_with_variants_count(loaded.raw_metadata, output_row_count))
     summary = {
         "input": str(source_path),

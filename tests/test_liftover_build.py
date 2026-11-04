@@ -170,8 +170,8 @@ def test_liftover_build_vtable_emits_vtable_and_qc(tmp_path):
     assert out.with_name(out.name + ".bcftools_input.vcf").exists()
     assert out.with_name(out.name + ".bcftools_output.vcf").exists()
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "2", "rs4", "unmapped"],
+        ["row_idx", "source_id", "status"],
+        ["2", "rs4", "unmapped"],
     ]
 
 
@@ -522,8 +522,8 @@ def test_liftover_build_drops_rows_when_lifted_ploidy_class_changes(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == []
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "ploidy_class_changed"],
+        ["row_idx", "source_id", "status"],
+        ["0", "rs1", "ploidy_class_changed"],
     ]
 
 
@@ -673,8 +673,8 @@ def test_liftover_build_drops_multiallelic_liftover_output_with_qc(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == []
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "unsupported_non_snv"],
+        ["row_idx", "source_id", "status"],
+        ["0", "rs1", "unsupported_non_snv"],
     ]
 
 
@@ -720,8 +720,8 @@ def test_liftover_build_drops_both_multibase_liftover_output_with_qc(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == []
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "unsupported_non_snv"],
+        ["row_idx", "source_id", "status"],
+        ["0", "rs1", "unsupported_non_snv"],
     ]
 
 
@@ -767,8 +767,8 @@ def test_liftover_build_drops_non_primary_target_contig_with_qc(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == []
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "unsupported_target_contig"],
+        ["row_idx", "source_id", "status"],
+        ["0", "rs1", "unsupported_target_contig"],
     ]
 
 
@@ -1260,8 +1260,8 @@ def test_liftover_build_drops_all_unsupported_non_snv_rows_with_qc(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == []
     assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["source_shard", "source_index", "source_id", "status"],
-        [".", "0", "rs1", "unsupported_non_snv"],
+        ["row_idx", "source_id", "status"],
+        ["0", "rs1", "unsupported_non_snv"],
     ]
 
 

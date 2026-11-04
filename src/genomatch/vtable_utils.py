@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+import numpy as np
 import pandas as pd
 
 from .tabular_rows import VMapRow, VMapRowsTable, VariantRow, VariantRowsTable
@@ -324,6 +325,10 @@ def iter_vmap_rows(path: Path) -> Iterator[VMapRow]:
 
 
 def iter_vtable_table_chunks(path: Path, *, label: str = "vtable row") -> Iterator[VariantRowsTable]:
+    # Assumes: path contains a vtable payload.
+    # Performs: PN(alleles), PV(rows), assignment of invocation-local QC ordinals.
+    # Guarantees: validated chunks with continuous row_idx independent of frame indexes.
+    row_offset = 0
     for chunk in _iter_tabular_chunks(path, _VTABLE_COLUMNS, label=label):
         if chunk.isna().any(axis=None):
             raise ValueError(f"invalid {label} in {path}")
@@ -332,6 +337,8 @@ def iter_vtable_table_chunks(path: Path, *, label: str = "vtable row") -> Iterat
         frame["a1"] = frame["a1"].str.strip().str.upper()
         frame["a2"] = frame["a2"].str.strip().str.upper()
         _validate_vtable_frame(frame, label, assume_normalized_alleles=True)
+        frame["row_idx"] = np.arange(row_offset, row_offset + len(frame), dtype=np.int64)
+        row_offset += len(frame)
         yield table
 
 
@@ -357,7 +364,7 @@ def iter_vmap_table_chunks(path: Path, *, check_duplicates: bool = True) -> Iter
 def read_vtable_table(path: Path) -> VariantRowsTable:
     # Assumes: path points to a tab-delimited vtable payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
-    # Guarantees: VariantRowsTable with canonical uppercase a1/a2 and validated vtable invariants.
+    # Guarantees: validated VariantRowsTable with uppercase alleles and stored input QC ordinals.
     frame = _read_exact_width_frame(path, _VTABLE_COLUMNS, label="vtable row")
     if frame.isna().any(axis=None):
         raise ValueError(f"invalid vtable row in {path}")
@@ -366,6 +373,7 @@ def read_vtable_table(path: Path) -> VariantRowsTable:
     frame["a1"] = frame["a1"].str.strip().str.upper()
     frame["a2"] = frame["a2"].str.strip().str.upper()
     _validate_vtable_frame(frame, label=str(path), assume_normalized_alleles=True)
+    frame["row_idx"] = np.arange(len(frame), dtype=np.int64)
     return table
 
 
@@ -631,6 +639,31 @@ def load_variant_object_tables(path: Path) -> LoadedVariantObjectTables:
             base_vmap_table=vmap_table,
         )
     raise ValueError(f"unsupported variant object path: {path}")
+
+
+def variant_row_qc_rows(frame: pd.DataFrame, *, is_vmap: bool) -> pd.DataFrame:
+    # Assumes: canonical rows carry original provenance or loader-assigned row_idx.
+    # Performs: projection of provenance or invocation-local QC identifiers.
+    # Guarantees: type-specific QC identifiers aligned to rows without creating provenance.
+    if is_vmap:
+        return frame.loc[:, ["source_shard", "source_index", "id"]].copy()
+    if "source_shard" in frame.columns or "source_index" in frame.columns:
+        raise ValueError(".vtable QC rows must not contain .vmap provenance fields")
+    return frame.loc[:, ["row_idx", "id"]].copy()
+
+
+def write_variant_status_qc(path: Path, frame: pd.DataFrame, *, is_vmap: bool) -> None:
+    # Assumes: frame contains stored row identifiers, id, and exclusion status.
+    # Performs: CV(type-specific QC schema), file emission.
+    # Guarantees: QC preserves provenance for .vmap and row_idx for .vtable.
+    rows = variant_row_qc_rows(frame, is_vmap=is_vmap)
+    rows["status"] = frame["status"]
+    columns = ["source_shard", "source_index", "source_id", "status"] if is_vmap else ["row_idx", "source_id", "status"]
+    ensure_parent_dir(path)
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\t".join(columns) + "\n")
+        for row in rows.itertuples(index=False, name=None):
+            handle.write("\t".join(map(str, row)) + "\n")
 
 
 def compose_allele_ops(first: str, second: str) -> str:
