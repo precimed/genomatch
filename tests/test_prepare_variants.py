@@ -220,14 +220,14 @@ def test_prepare_variants_output_is_stem_and_defaults_prefix_to_output(tmp_path)
 
     assert result.returncode == 0, result.stderr
     assert "import_bim.py" in result.stderr
-    assert "sort_variants.py" not in result.stderr
+    assert "sort_variants.py" in result.stderr
     restrict_line = next(line for line in result.stderr.splitlines() if "restrict_build_compatible.py" in line)
-    assert "--sort" in restrict_line
+    assert "--sort" not in restrict_line
     assert_wrote(result, tmp_path / "prepared.vmap")
     assert (tmp_path / "prepared.imported.vmap").exists()
     assert (tmp_path / "prepared.build_compatible.vmap").exists()
-    assert not (tmp_path / "prepared.sorted.vmap").exists()
-    assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.build_compatible.vmap")
+    assert (tmp_path / "prepared.sorted.vmap").exists()
+    assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.sorted.vmap")
 
 
 def test_prepare_variants_explicit_prefix_separates_intermediates_from_final_output(tmp_path):
@@ -258,7 +258,7 @@ def test_prepare_variants_explicit_prefix_separates_intermediates_from_final_out
     assert_wrote(result, tmp_path / "final_output.vmap")
     assert (tmp_path / "work" / "prepared.imported.vmap").exists()
     assert (tmp_path / "work" / "prepared.build_compatible.vmap").exists()
-    assert not (tmp_path / "work" / "prepared.sorted.vmap").exists()
+    assert (tmp_path / "work" / "prepared.sorted.vmap").exists()
     assert (tmp_path / "final_output.vmap").exists()
 
 
@@ -287,11 +287,11 @@ def test_prepare_variants_runs_liftover_when_build_differs(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "liftover_build.py" in result.stderr
-    assert "sort_variants.py" not in result.stderr
+    assert "sort_variants.py" in result.stderr
     restrict_line = next(line for line in result.stderr.splitlines() if "restrict_build_compatible.py" in line)
     assert "--sort" not in restrict_line
     assert (tmp_path / "prepared.lifted.vmap").exists()
-    assert not (tmp_path / "prepared.sorted.vmap").exists()
+    assert (tmp_path / "prepared.sorted.vmap").exists()
     assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.lifted.vmap")
 
 
@@ -543,10 +543,10 @@ def test_prepare_variants_t2t_end_to_end_planning(tmp_path, source_build, dst_bu
 @pytest.mark.parametrize(
     "extra_args,expected_flags",
     [
-        ([], ["--allow-strand-flips", "--norm-indels", "--sort"]),
-        (["--no-allow-strand-flips"], ["--norm-indels", "--sort"]),
-        (["--no-norm-indels"], ["--allow-strand-flips", "--sort"]),
-        (["--no-allow-strand-flips", "--no-norm-indels"], ["--sort"]),
+        ([], ["--allow-strand-flips", "--norm-indels"]),
+        (["--no-allow-strand-flips"], ["--norm-indels"]),
+        (["--no-norm-indels"], ["--allow-strand-flips"]),
+        (["--no-allow-strand-flips", "--no-norm-indels"], []),
     ],
 )
 def test_prepare_variants_passes_restrict_build_compatible_flags_through_exactly(tmp_path, extra_args, expected_flags):
@@ -575,11 +575,11 @@ def test_prepare_variants_passes_restrict_build_compatible_flags_through_exactly
 
     assert result.returncode == 0, result.stderr
     restrict_line = next(line for line in result.stderr.splitlines() if "restrict_build_compatible.py" in line)
-    for flag in ("--allow-strand-flips", "--norm-indels", "--sort"):
+    for flag in ("--allow-strand-flips", "--norm-indels", "--sort", "--drop-duplicates"):
         assert (flag in restrict_line) is (flag in expected_flags)
     assert (tmp_path / "prepared.build_compatible.vmap").exists()
-    assert not (tmp_path / "prepared.sorted.vmap").exists()
-    assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.build_compatible.vmap")
+    assert (tmp_path / "prepared.sorted.vmap").exists()
+    assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.sorted.vmap")
 
 
 def test_prepare_variants_sumstats_requires_metadata_and_rejects_otherwise(tmp_path):
@@ -721,8 +721,8 @@ def test_prepare_variants_sumstats_passes_id_lookup_through_to_importer(tmp_path
     assert "--id-lookup" in import_line
     assert str(id_vtable) in import_line
     restrict_line = next(line for line in result.stderr.splitlines() if "restrict_build_compatible.py" in line)
-    assert "--sort" in restrict_line
-    assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.build_compatible.vmap")
+    assert "--sort" not in restrict_line
+    assert read_tsv(tmp_path / "prepared.vmap") == read_tsv(tmp_path / "prepared.sorted.vmap")
 
 
 def test_prepare_variants_passes_shards_through_to_genotype_importer(tmp_path):
@@ -1115,6 +1115,9 @@ def test_prepare_variants_resume_propagates_to_liftover_reparse(tmp_path):
         tmp_path / "prepared.lifted.vmap",
         tmp_path / "prepared.lifted.vmap.meta.json",
         tmp_path / "prepared.lifted.vmap.qc.tsv",
+        tmp_path / "prepared.sorted.vmap",
+        tmp_path / "prepared.sorted.vmap.meta.json",
+        tmp_path / "prepared.sorted.vmap.qc.tsv",
         tmp_path / "prepared.vmap",
         tmp_path / "prepared.vmap.meta.json",
         tmp_path / "prepared.vmap.qc.tsv",
@@ -1142,3 +1145,91 @@ def test_prepare_variants_resume_propagates_to_liftover_reparse(tmp_path):
     assert "--target-build GRCh38 --resume" in second.stderr
     assert "liftover_build.py: skipping bcftools +liftover" in second.stderr
     assert_wrote(second, tmp_path / "prepared.vmap")
+
+
+@pytest.mark.parametrize("case", ["same-build", "lifted", "empty"])
+def test_prepare_variants_final_sort_stage_lifecycle(tmp_path, case):
+    env = base_env(
+        tmp_path,
+        grch37_sequences={"chr1": "CCCCCC" if case == "empty" else "AAAAAA"},
+        grch38_sequences={"chr1": "AAAAAA"},
+    )
+    source = tmp_path / "source.bim"
+    write_bim(source, ["1\trs2\t0\t2\tG\tA", "1\trs1\t0\t1\tG\tA"])
+    output = tmp_path / "prepared"
+    sorted_path = tmp_path / "prepared.sorted.vmap"
+    final_path = tmp_path / "prepared.vmap"
+    args = [
+        "--input", source, "--input-format", "bim", "--output", output,
+        "--src-build", "GRCh37", "--dst-build", "GRCh38" if case == "lifted" else "GRCh37",
+        "--no-norm-indels", "--no-allow-strand-flips",
+        "--drop-strand-ambiguous", "--contigs", "1",
+    ]
+
+    # A retained sorted stage must trigger preflight before any tool executes.
+    write_lines(sorted_path, ["stale"])
+    blocked = run_py_with_env("prepare_variants.py", env, *args)
+    assert blocked.returncode != 0
+    assert str(sorted_path) in blocked.stderr
+    assert not (tmp_path / "prepared.imported.vmap").exists()
+
+    first = run_py_with_env("prepare_variants.py", env, *args, "--force")
+    assert first.returncode == 0, first.stderr
+    commands = [line for line in first.stderr.splitlines() if "+ " in line]
+    assert "sort_variants.py" in commands[-1]
+    sort_command = commands[-1]
+    assert "--drop-duplicates" not in sort_command
+    assert str(tmp_path / "prepared.contigs.vmap") in sort_command
+    rows = read_tsv(sorted_path)
+    assert read_tsv(final_path) == rows
+    assert [row[1] for row in rows] == ([] if case == "empty" else ["3", "4"] if case == "lifted" else ["1", "2"])
+    if rows:
+        assert [row[6] for row in rows] == ["1", "0"]  # Preserve original provenance through sorting.
+    meta_path = sorted_path.with_name(sorted_path.name + ".meta.json")
+    meta = json.loads(meta_path.read_text())
+    assert meta["variants_count"] == len(rows)
+    assert meta["target"]["genome_build"] == ("GRCh38" if case == "lifted" else "GRCh37")
+    assert meta["target"]["contig_naming"] == "ncbi"
+    assert meta["derived_from"] == str(source)
+    assert not sorted_path.with_name(sorted_path.name + ".qc.tsv").exists()
+
+    # Reuse the sorted stage without overwriting it when rebuilding only the final copy.
+    final_path.unlink()
+    final_path.with_name(final_path.name + ".meta.json").unlink()
+    sorted_mtime = sorted_path.stat().st_mtime_ns
+    resumed = run_py_with_env("prepare_variants.py", env, *args, "--resume")
+    assert resumed.returncode == 0, resumed.stderr
+    assert "skipping sort_variants.py" in resumed.stderr
+    assert sorted_path.stat().st_mtime_ns == sorted_mtime
+    assert read_tsv(final_path) == rows
+
+    # The sorted output is a later stage for hole detection after a missing filter.
+    final_path.unlink()
+    final_path.with_name(final_path.name + ".meta.json").unlink()
+    contigs_path = tmp_path / "prepared.contigs.vmap"
+    contigs_path.unlink()
+    contigs_path.with_name(contigs_path.name + ".meta.json").unlink()
+    hole = run_py_with_env("prepare_variants.py", env, *args, "--resume")
+    assert hole.returncode != 0
+    assert "hole in retained stage outputs" in hole.stderr
+    assert str(sorted_path) in hole.stderr
+
+    # Force removes corrupt sorted data, metadata, and stale QC before rebuilding.
+    write_lines(sorted_path, ["corrupt"])
+    write_json(meta_path, {"stale": True})
+    qc_path = sorted_path.with_name(sorted_path.name + ".qc.tsv")
+    write_lines(qc_path, ["stale"])
+    forced = run_py_with_env("prepare_variants.py", env, *args, "--force")
+    assert forced.returncode == 0, forced.stderr
+    assert read_tsv(sorted_path) == read_tsv(final_path) == rows
+    assert json.loads(meta_path.read_text()) == meta
+    assert not qc_path.exists()
+
+    # Resume can recreate a missing sorted stage after all earlier stages exist.
+    for path in (final_path, sorted_path):
+        path.unlink()
+        path.with_name(path.name + ".meta.json").unlink()
+    rebuilt = run_py_with_env("prepare_variants.py", env, *args, "--resume")
+    assert rebuilt.returncode == 0, rebuilt.stderr
+    assert "skipping sort_variants.py" not in rebuilt.stderr
+    assert read_tsv(sorted_path) == read_tsv(final_path) == rows

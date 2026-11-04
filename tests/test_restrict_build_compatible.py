@@ -268,7 +268,7 @@ def test_restrict_build_compatible_t2t_fails_when_fasta_is_absent(tmp_path):
     assert "config has no builds.T2T-CHM13v2.0.ucsc_fasta entry" in result.stderr
 
 
-def test_restrict_build_compatible_sort_sorts_retained_rows_into_declared_coordinate_order(tmp_path):
+def test_restrict_build_compatible_preserves_retained_input_order(tmp_path):
     grch37 = tmp_path / "GRCh37.ucsc.fa"
     grch38 = tmp_path / "GRCh38.ucsc.fa"
     config = tmp_path / "config.yaml"
@@ -296,13 +296,12 @@ def test_restrict_build_compatible_sort_sorts_retained_rows_into_declared_coordi
         source,
         "--output",
         out,
-        "--sort",
     )
 
     assert result.returncode == 0, result.stderr
     assert read_tsv(out) == [
-        ["1", "1", "t1", "G", "T", "shardA", "0", "identity"],
         ["1", "2", "t2", "C", "A", "shardA", "1", "identity"],
+        ["1", "1", "t1", "G", "T", "shardA", "0", "identity"],
     ]
 
 
@@ -1324,109 +1323,13 @@ def test_restrict_build_compatible_reference_access_modes_are_consistent_and_def
     assert default_summary == bulk_summary == legacy_summary
 
 
-def test_restrict_build_compatible_drop_duplicates_requires_sort(tmp_path):
-    grch37 = tmp_path / "GRCh37.ucsc.fa"
-    grch38 = tmp_path / "GRCh38.ucsc.fa"
-    config = tmp_path / "config.yaml"
-    source = tmp_path / "base.vmap"
-    out = tmp_path / "restricted.vmap"
-    write_primary_ucsc_fasta(grch37, {"chr1": "A"})
-    write_primary_ucsc_fasta(grch38, {"chr1": "C"})
-    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
-    write_lines(source, ["1\t1\tt1\tA\tG\tsh\t0\tidentity"])
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-
+@pytest.mark.parametrize("flag", ["--sort", "--drop-duplicates"])
+@pytest.mark.parametrize("suffix", ["vmap", "vtable"])
+def test_restrict_build_compatible_rejects_removed_flags(tmp_path, flag, suffix):
     result = run_py_with_env(
-        "restrict_build_compatible.py",
-        {"MATCH_CONFIG": str(config)},
-        "--source", source,
-        "--output", out,
-        "--drop-duplicates",
+        "restrict_build_compatible.py", {},
+        "--source", tmp_path / f"source.{suffix}",
+        "--output", tmp_path / f"output.{suffix}", flag,
     )
-
     assert result.returncode != 0
-    assert "--drop-duplicates requires --sort" in result.stderr
-
-
-def test_restrict_build_compatible_drop_duplicates_vmap_sorts_and_passes_through_without_error(tmp_path):
-    # Verifies --sort --drop-duplicates combination works for vmap with no duplicates.
-    grch37 = tmp_path / "GRCh37.ucsc.fa"
-    grch38 = tmp_path / "GRCh38.ucsc.fa"
-    config = tmp_path / "config.yaml"
-    source = tmp_path / "base.vmap"
-    out = tmp_path / "restricted.vmap"
-    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
-    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
-    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
-    write_lines(
-        source,
-        [
-            "1\t2\tt2\tC\tG\tsh\t1\tidentity",
-            "1\t1\tt1\tA\tG\tsh\t0\tidentity",
-        ],
-    )
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-
-    result = run_py_with_env(
-        "restrict_build_compatible.py",
-        {"MATCH_CONFIG": str(config)},
-        "--source", source,
-        "--output", out,
-        "--sort",
-        "--drop-duplicates",
-    )
-
-    # t1: pos 1, ref=A, a1=A=ref → swap to (G, A); t2: pos 2, ref=G, a2=G=ref → identity (C, G)
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [
-        ["1", "1", "t1", "G", "A", "sh", "0", "swap"],
-        ["1", "2", "t2", "C", "G", "sh", "1", "identity"],
-    ]
-    assert not out.with_name(out.name + ".qc.tsv").exists()
-
-
-def test_restrict_build_compatible_drop_duplicates_vtable_drops_all_collisions_to_qc(tmp_path):
-    # Distinct ordered keys canonicalize to one target, even with legacy cleanup flags.
-    grch37 = tmp_path / "GRCh37.ucsc.fa"
-    grch38 = tmp_path / "GRCh38.ucsc.fa"
-    config = tmp_path / "config.yaml"
-    source = tmp_path / "base.vtable"
-    out = tmp_path / "restricted.vtable"
-    write_primary_ucsc_fasta(grch37, {"chr1": "AG"})
-    write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
-    write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
-    write_lines(
-        source,
-        [
-            "1\t1\tdup\tA\tG",
-            "1\t1\tkeep\tG\tA",
-            "1\t2\tt2\tC\tG",
-        ],
-    )
-    write_json(
-        source.with_name(source.name + ".meta.json"),
-        {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
-    )
-
-    result = run_py_with_env(
-        "restrict_build_compatible.py",
-        {"MATCH_CONFIG": str(config)},
-        "--source", source,
-        "--output", out,
-        "--sort",
-        "--drop-duplicates",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "2", "t2", "C", "G"]]
-    assert read_tsv(out.with_name(out.name + ".qc.tsv")) == [
-        ["row_idx", "source_id", "status"],
-        ["0", "dup", "duplicate_target"],
-        ["1", "keep", "duplicate_target"],
-    ]
+    assert f"unrecognized arguments: {flag}" in result.stderr

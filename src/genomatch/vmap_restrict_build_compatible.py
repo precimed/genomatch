@@ -28,7 +28,6 @@ from .vtable_utils import (
     normalize_contig_for_reference,
     require_contig_naming,
     require_table_matches_contig_naming,
-    sort_target_table_by_declared_coordinate,
     validate_allele_values,
     variant_row_qc_rows,
     write_metadata,
@@ -188,16 +187,6 @@ def parse_args() -> argparse.Namespace:
         "--norm-indels",
         action="store_true",
         help="Normalize retained indels with bcftools norm while keeping canonical target ordering",
-    )
-    parser.add_argument(
-        "--sort",
-        action="store_true",
-        help="Sort retained output rows into declared coordinate order",
-    )
-    parser.add_argument(
-        "--drop-duplicates",
-        action="store_true",
-        help="Drop duplicate target identities (chrom,pos,a1,a2) after sorting, retaining first occurrence; requires --sort",
     )
     return parser.parse_args()
 
@@ -835,8 +824,6 @@ def main() -> int:
             f"(declared genome_build={genome_build!r}, declared contig_naming={contig_naming!r}, "
             "internal_reference_naming='ucsc')"
         )
-    if args.drop_duplicates and not args.sort:
-        raise ValueError("restrict_build_compatible.py --drop-duplicates requires --sort")
     if args.norm_indels and contig_naming == "plink_splitx":
         raise ValueError(
             "restrict_build_compatible.py --norm-indels does not support contig_naming=plink_splitx; "
@@ -914,10 +901,6 @@ def main() -> int:
         qc_frames.append(qc_duplicate)
         out_frame = out_frame.loc[~duplicate_mask]
 
-    if args.sort and not out_frame.empty:
-        out_frame = sort_target_table_by_declared_coordinate(
-            out_frame, contig_naming, label="restrict_build_compatible.py output",
-        )
     if qc_frames:
         qc_all = pd.concat(qc_frames, axis=0, ignore_index=True)
         write_variant_status_qc(qc_output_path, qc_all, is_vmap=loaded.base_vmap_table is not None)
