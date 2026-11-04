@@ -70,9 +70,6 @@ therefore be retained under an interpretation that differs from the source
 event. Review the source allele conventions and the
 [reference-compatibility policy](../spec/variant-transforms.md#same-build-reference-compatibility).
 
-Implementation/release status for the revised controls is recorded in the
-[changelog](../CHANGELOG.md#unreleased).
-
 ## Prepare sharded variants
 
 `prepare_variants_sharded.py` is the memory-bounded sharded-input variant of `prepare_variants.py`. It accepts `bim`, `pvar`, and `vcf` inputs whose `--input` contains `@`, groups selected input shards by unambiguous target contig, runs the full `prepare_variants.py` stage graph once per target-contig group, and concatenates the per-contig-group final `.vmap` files into one final `<output>.vmap`. Its stage semantics are inherited from `prepare_variants.py`; see [spec/workflow.md](../spec/workflow.md).

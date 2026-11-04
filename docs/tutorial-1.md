@@ -4,9 +4,6 @@ This tutorial uses the checked-in fixture under `examples/tutorial-1/` to show t
 
 The reference VCF defines the target variant universe. The study summary statistics and the cohort BFILE are payloads: each keeps its own source-row provenance and is projected independently through its own restricted `.vmap`.
 
-The preparation commands below require the pending indel changes described in
-the [changelog](../CHANGELOG.md#unreleased).
-
 ## Inputs
 
 Release users can download `genomatch-tutorial-1-fixtures-<version>.zip` from the matching GitHub Release and unzip it in a working directory. The archive expands to `examples/tutorial-1/`, so the commands below work unchanged.
@@ -21,7 +18,7 @@ examples/tutorial-1/
   cohort.X.{bed,bim,fam}
 ```
 
-Warnings are expected. The fixture includes allele swaps, strand flips, ambiguous SNPs, indels, duplicate IDs, invalid alleles, long alleles, a multiallelic VCF row, liftover collisions, invalid summary-statistic values, and missing genotype calls. See `examples/tutorial-1/manifest.tsv` for row-level intent.
+Warnings are expected. The fixture includes allele swaps, strand flips, ambiguous SNPs, insertions, a deletion with a multibase REF, a both-multibase substitution, duplicate IDs, invalid alleles, long alleles, a multiallelic VCF row, reference-canonicalization collisions, invalid summary-statistic values, and missing genotype calls. See `examples/tutorial-1/manifest.tsv` for raw participation and expected prepared keys, and the [fixture README](../examples/tutorial-1/README.md#prepared-membership-counts) for verified membership counts.
 
 ## Setup
 
@@ -82,8 +79,8 @@ Of the two opposite-strand cohort indel examples, only `rsTUT100029` is dropped
 at the build-compatible stage and appears in its per-group QC.
 `rsTUT100032` is retained by a swap, selecting an event that differs from the
 reference-universe event. It is excluded later by `restrict_vmap.py` without a
-QC entry. The fixture manifest and README describe intended membership; use the
-prepared maps and QC to determine observed membership.
+QC entry. These differences are reflected in the manifest's prepared-key columns
+and the fixture README's exact membership counts.
 
 ## 4. Restrict Each Payload to the Reference Universe
 
@@ -136,4 +133,6 @@ MATCH_CONFIG=/path/to/ref/config.yaml \
 python scripts/generate_tutorial_1_fixture.py
 ```
 
-The generator rewrites every file under `examples/tutorial-1/`, including `README.md` and `manifest.tsv`, and validates the tutorial command path before completing.
+The generator rewrites every file under `examples/tutorial-1/`, including `README.md` and `manifest.tsv`. It predicts prepared keys from raw scenarios, full FASTA matches, and direct `bcftools norm`, then validates the tutorial command path, membership through both `.vmap` and intersection `.vtable` inputs, provenance, QC, and projected genotype and summary-statistic values. Validation uses indexed reference access (`LEGACY`) to avoid loading whole production FASTAs. Scratch files live beside the fixture directory and are removed on completion.
+
+Run `pytest -q tests/integration/test_tutorial_1.py` in `match-liftover` to check deterministic regeneration, the documented command arguments, and validation's detection of corrupted results. This requires the local GRCh37/GRCh38 assets described in [downloads.md](downloads.md); it does not download references.
