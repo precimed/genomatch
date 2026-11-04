@@ -28,7 +28,7 @@ def expected_lifted_vmap_rows(entries):
             *canonical_alleles_for_build(entry, build_name="GRCh38"),
             f"orig{entry.chrom}",
             str(100 + idx),
-            "identity",
+            "swap" if (idx % 2 == 1) != (canonical_alleles_for_build(entry, build_name="GRCh37") != canonical_alleles_for_build(entry, build_name="GRCh38")) else "identity",
         ]
         for idx, entry in sorted(enumerate(entries), key=lambda item: (int(item[1].chrom), int(item[1].bp38)))
     ]
@@ -47,7 +47,7 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
     source = tmp_path / "source.vtable"
     lifted = tmp_path / "lifted.vtable"
     validated = tmp_path / "validated.vtable"
-    write_lines(source, [f"{entry.chrom}\t{entry.bp37}\t{entry.rsid}\t{entry.a1}\t{entry.a2}" for entry in entries])
+    write_lines(source, [f"{entry.chrom}\t{entry.bp37}\t{entry.rsid}\t" + "\t".join(canonical_alleles_for_build(entry, build_name="GRCh37")) for entry in entries])
     write_json(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
@@ -98,7 +98,7 @@ def test_real_liftover_composes_existing_vmap_provenance(tmp_path: Path) -> None
         canonical_a1, canonical_a2 = canonical_alleles_for_build(entry, build_name="GRCh37")
         if idx % 2 == 1:
             rows.append(
-                f"{entry.chrom}\t{entry.bp37}\t{entry.rsid}\t{canonical_a2}\t{canonical_a1}\torig{entry.chrom}\t{100 + idx}\tswap"
+                f"{entry.chrom}\t{entry.bp37}\t{entry.rsid}\t{canonical_a1}\t{canonical_a2}\torig{entry.chrom}\t{100 + idx}\tswap"
             )
         else:
             rows.append(

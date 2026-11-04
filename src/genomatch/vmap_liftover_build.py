@@ -11,7 +11,7 @@ import pandas as pd
 
 from ._cli_utils import run_cli
 from .contig_utils import UNKNOWN_CONTIG, canonical_contig_from_label
-from .reference_utils import fetch_reference_bases, resolve_bcftools_binary, resolve_liftover_assets
+from .reference_utils import resolve_bcftools_binary, resolve_liftover_assets
 from .haploid_utils import expected_ploidy_pair
 from .tabular_rows import VMapRowsTable, VariantRowsTable
 from .vectorization_utils import (
@@ -54,7 +54,6 @@ PREPARED_COLUMNS = (
     "a2",
     "upstream_allele_op",
     "status",
-    "input_allele_op",
     "ref",
     "alt",
 )
@@ -64,7 +63,6 @@ ROW_LOOKUP_COLUMNS = (
     "pos",
     "id",
     "upstream_allele_op",
-    "input_allele_op",
 )
 
 def qc_identity_columns(*, is_vmap: bool) -> tuple[str, ...]:
@@ -107,9 +105,9 @@ def convert_rows_to_ucsc(rows: VariantRowsTable, contig_naming: str) -> VariantR
     return VariantRowsTable.from_frame(frame, copy=False)
 
 
-def prepare_liftover_table(frame: pd.DataFrame, source_fasta: Path, *, is_vmap: bool) -> pd.DataFrame:
+def prepare_liftover_table(frame: pd.DataFrame, *, is_vmap: bool) -> pd.DataFrame:
     # Assumes: liftover_input columns exist and upstream loaders already canonicalized alleles.
-    # Performs: SV(position/allele/reference-anchoring checks), query construction for source reference bases.
+    # Performs: SV(position/allele checks); trust caller-owned source REF compatibility.
     # Guarantees: PREPARED_COLUMNS with status/ref/alt fields ready for VCF emission.
     prepared = frame.copy(deep=True)
     identity_columns = qc_identity_columns(is_vmap=is_vmap)
@@ -133,40 +131,9 @@ def prepare_liftover_table(frame: pd.DataFrame, source_fasta: Path, *, is_vmap: 
         bad_value = prepared.at[first_idx, "a1"] if bool(invalid_a1.iloc[first_idx]) else prepared.at[first_idx, "a2"]
         raise ValueError(f"invalid allele code in liftover_build.py input: {bad_value!r}")
 
-    query_frame = prepared.loc[:, ["chrom", "pos_int"]].drop_duplicates(ignore_index=True)
-    query_pairs = list(query_frame.itertuples(index=False, name=None))
-    reference_bases = fetch_reference_bases(source_fasta, query_pairs)
-    ref_frame = pd.DataFrame(
-        [{"chrom": chrom, "pos_int": pos, "ref_base": ref_base} for (chrom, pos), ref_base in reference_bases.items()]
-    )
-    if ref_frame.empty:
-        prepared["ref_base"] = ""
-    else:
-        prepared = prepared.merge(ref_frame, on=["chrom", "pos_int"], how="left")
-        prepared["ref_base"] = prepared["ref_base"].fillna("")
-    valid_ref_mask = prepared["ref_base"].isin({"A", "C", "G", "T"})
-    if not bool(valid_ref_mask.all()):
-        first_bad_idx = first_true_index(~valid_ref_mask)
-        raise ValueError(
-            f"source reference base not found for liftover input: {prepared.at[first_bad_idx, 'chrom']}:{prepared.at[first_bad_idx, 'pos']}"
-        )
-
-    is_snv = (a1_tokens.str.len() == 1) & (a2_tokens.str.len() == 1)
-    ready_swap = (a2_tokens == prepared["ref_base"]) & (a1_tokens != prepared["ref_base"])
-    ready_identity = (a1_tokens == prepared["ref_base"]) & (a2_tokens != prepared["ref_base"])
-    ready_mask = ready_swap | ready_identity
-    bad_snv_mask = (~ready_mask) & is_snv
-    if bool(bad_snv_mask.any()):
-        first_bad_idx = first_true_index(bad_snv_mask)
-        raise ValueError(
-            f"source alleles do not match reference for liftover input: {prepared.at[first_bad_idx, 'chrom']}:{prepared.at[first_bad_idx, 'pos']} "
-            f"({prepared.at[first_bad_idx, 'a1']}/{prepared.at[first_bad_idx, 'a2']}, ref={prepared.at[first_bad_idx, 'ref_base']})"
-        )
-
-    prepared["status"] = ready_mask.map({True: "ready", False: "unsupported_non_snv"})
-    prepared["input_allele_op"] = ready_swap.map({True: "swap", False: "identity"})
-    prepared["ref"] = prepared["ref_base"].where(ready_mask, None)
-    prepared["alt"] = a2_tokens.where(~ready_swap, a1_tokens).where(ready_mask, None)
+    prepared["status"] = "ready"
+    prepared["ref"] = a2_tokens
+    prepared["alt"] = a1_tokens
     return prepared.loc[:, [*PREPARED_COLUMNS, *identity_columns]]
 
 
@@ -294,7 +261,7 @@ def parse_lifted_vcf(
 
     active_mask = frame["pass_filter"]
     multiallelic_mask = active_mask & frame["alt"].str.contains(",", regex=False)
-    frame.loc[multiallelic_mask, "status"] = "unsupported_non_snv"
+    frame.loc[multiallelic_mask, "status"] = "unsupported_representation"
 
     token_valid_mask = (
         frame["ref_token"].ne("")
@@ -303,15 +270,19 @@ def parse_lifted_vcf(
         & frame["alt_token"].str.fullmatch(r"[ACGT]+")
     )
     invalid_token_mask = active_mask & frame["status"].isna() & ~token_valid_mask
-    frame.loc[invalid_token_mask, "status"] = "unsupported_non_snv"
+    frame.loc[invalid_token_mask, "status"] = "unsupported_representation"
 
-    both_multibase_mask = (
-        active_mask
-        & frame["status"].isna()
-        & (frame["ref_token"].str.len() > 1)
-        & (frame["alt_token"].str.len() > 1)
-    )
-    frame.loc[both_multibase_mask, "status"] = "unsupported_non_snv"
+    repeated = frame["row_id"].duplicated(keep=False)
+    frame.loc[repeated, "status"] = "unsupported_representation"
+    pos_int, valid_pos = strict_int_series(frame["pos"])
+    frame["pos_int"] = pos_int
+    invalid_position = active_mask & frame["status"].isna() & (~valid_pos | pos_int.le(0))
+    frame.loc[invalid_position, "status"] = "unsupported_representation"
+    identical = active_mask & frame["status"].isna() & frame["ref_token"].eq(frame["alt_token"])
+    frame.loc[identical, "status"] = "unsupported_representation"
+    frame["liftover_op"] = parse_liftover_info_ops(frame["info"])
+    unsupported_op = active_mask & frame["status"].isna() & frame["liftover_op"].isna()
+    frame.loc[unsupported_op, "status"] = "unsupported_representation"
 
     frame["final_chrom"] = None
     contig_candidates = frame.loc[active_mask & frame["status"].isna(), "chrom"]
@@ -333,13 +304,12 @@ def parse_lifted_vcf(
     row_lookup_merge = row_lookup.reset_index(drop=True)
     frame = frame.merge(
         row_lookup_merge.loc[
-            :, ["row_id", "id", *identity_columns, "upstream_allele_op", "input_allele_op"]
+            :, ["row_id", "id", *identity_columns, "upstream_allele_op"]
         ].rename(
             columns={
                 "id": "lookup_id",
                 **{column: f"lookup_{column}" for column in identity_columns},
                 "upstream_allele_op": "lookup_upstream_allele_op",
-                "input_allele_op": "lookup_input_allele_op",
             }
         ),
         on="row_id",
@@ -348,7 +318,9 @@ def parse_lifted_vcf(
 
     ploidy_candidate_mask = active_mask & frame["status"].isna()
     canonical_target = frame["final_chrom"].map(lambda chrom: normalize_chrom_label(str(chrom)))
-    non_autosome_mask = ~canonical_target.isin({str(i) for i in range(1, 23)})
+    source_chrom = frame["row_id"].map(row_lookup["chrom"]).map(normalize_chrom_label)
+    autosomes = {str(i) for i in range(1, 23)}
+    non_autosome_mask = ~canonical_target.isin(autosomes) | ~source_chrom.isin(autosomes)
     ploidy_check_mask = ploidy_candidate_mask & non_autosome_mask
     if bool(ploidy_check_mask.any()):
         ploidy_frame = frame.loc[ploidy_check_mask, ["row_id", "final_chrom", "pos"]].copy()
@@ -378,18 +350,8 @@ def parse_lifted_vcf(
     success_frame = frame.loc[success_mask].copy()
     success_frame["allele_op"] = pd.Series(index=success_frame.index, dtype="object")
     if not success_frame.empty:
-        success_frame["liftover_op"] = parse_liftover_info_ops(success_frame["info"])
-        success_frame["op_after_output"] = compose_allele_ops_series(
-            success_frame["liftover_op"],
-            pd.Series(["swap"] * len(success_frame), index=success_frame.index, dtype="object"),
-        )
-        success_frame["op_after_input"] = compose_allele_ops_series(
-            success_frame["lookup_input_allele_op"],
-            success_frame["op_after_output"],
-        )
         success_frame["allele_op"] = compose_allele_ops_series(
-            success_frame["lookup_upstream_allele_op"],
-            success_frame["op_after_input"],
+            success_frame["lookup_upstream_allele_op"], success_frame["liftover_op"],
         )
 
     rejected_rows = frame.loc[frame["status"].notna(), ["row_id", "status"]]
@@ -403,6 +365,7 @@ def parse_lifted_vcf(
                 "row_id",
                 "final_chrom",
                 "pos",
+                "pos_int",
                 "lookup_id",
                 "alt_token",
                 "ref_token",
@@ -437,12 +400,6 @@ def parse_lifted_vcf(
     if bool(unknown_contig.any()):
         raise ValueError("liftover_build.py output contains chrom=unknown; run normalize_contigs.py first")
     parsed_frame["contig_rank"] = canonical.map(CANONICAL_CONTIG_RANK)
-    pos_int, valid_pos = strict_int_series(parsed_frame["pos"])
-    invalid_pos = (~valid_pos) | (pos_int <= 0)
-    if bool(invalid_pos.any()):
-        first_bad_idx = first_true_index(invalid_pos)
-        raise ValueError(f"liftover_build.py output row has invalid pos: {parsed_frame.at[first_bad_idx, 'pos']!r}")
-    parsed_frame["pos_int"] = pos_int.astype("int64")
     parsed_frame = parsed_frame.sort_values(["contig_rank", "pos_int", "a1", "a2"], kind="stable")
 
     duplicate_mask = parsed_frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep=False)
@@ -457,24 +414,21 @@ def parse_lifted_vcf(
 def parse_liftover_info_ops(info: pd.Series) -> pd.Series:
     # Assumes: `info` holds VCF INFO tokens from bcftools +liftover.
     # Performs: vectorized FLIP/SWAP token parsing with strict SWAP-value validation.
-    # Guarantees: allele-op series aligned to input index with canonical v1 operation tokens.
+    # Guarantees: allele-op series aligned to input index with canonical v1 operation tokens or missing for unsupported annotations.
     info_tokens = info.fillna("").astype(str)
-    has_flip = info_tokens.str.contains(r"(?:^|;)FLIP(?:;|$)", regex=True)
+    has_flip = info_tokens.str.contains(r"(?:^|;)FLIP(?=;|$)", regex=True)
     swap_value = info_tokens.str.extract(r"(?:^|;)SWAP=([^;]*)(?:;|$)", expand=False)
     invalid_swap = swap_value.notna() & swap_value.ne("1")
-    if bool(invalid_swap.any()):
-        first_bad_idx = first_true_index(invalid_swap)
-        bad_value = swap_value.at[first_bad_idx]
-        raise ValueError(
-            f"liftover output contains unsupported SWAP annotation {bad_value!r}; "
-            "cannot represent this variant in canonical v1 allele_op"
-        )
     has_swap = swap_value.eq("1").fillna(False)
 
     out = pd.Series("identity", index=info_tokens.index, dtype="object")
     out.loc[has_swap] = "swap"
     out.loc[has_flip] = "flip"
     out.loc[has_flip & has_swap] = "flip_swap"
+    malformed_swap = info_tokens.str.contains(r"(?:^|;)SWAP(?:;|$)", regex=True)
+    malformed_flip = info_tokens.str.contains(r"(?:^|;)FLIP=", regex=True)
+    repeated_tags = info_tokens.str.count(r"(?:^|;)SWAP=").gt(1) | info_tokens.str.count(r"(?:^|;)FLIP(?=;|$)").gt(1)
+    out.loc[invalid_swap | malformed_swap | malformed_flip | repeated_tags] = None
     return out
 
 
@@ -534,10 +488,12 @@ def main() -> int:
     input_vcf = liftover_debug_vcf_path(output_path, kind="input")
     output_vcf = liftover_debug_vcf_path(output_path, kind="output")
     input_vcf.parent.mkdir(parents=True, exist_ok=True)
-    prepared = prepare_liftover_table(input_frame, source_fasta, is_vmap=is_vmap)
+    prepared = prepare_liftover_table(input_frame, is_vmap=is_vmap)
     row_lookup = write_temp_vcf(input_vcf, prepared, is_vmap=is_vmap)
     if args.resume and output_vcf.exists():
         print_resume_skip(output_vcf)
+    elif row_lookup.empty:
+        output_vcf.write_text(input_vcf.read_text(encoding="utf-8"), encoding="utf-8")
     else:
         run_bcftools_liftover(input_vcf, output_vcf, source_fasta, target_fasta, chain_path)
     raw_rows_table, parse_status_by_row_id = parse_lifted_vcf(

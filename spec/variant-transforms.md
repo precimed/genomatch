@@ -216,7 +216,7 @@ source REF/ALT roles have been recovered.
 - with `--norm-indels`, the tool may change `chrom`, `pos`, `a1`, and `a2` through reference-guided indel normalization, but those representation changes are not additional `allele_op` states
 - with `--norm-indels`, if normalization changes `chrom` or `pos`, the tool must compare expected source and normalized target `(male_ploidy, female_ploidy)` pairs using the shared ploidy model and must drop rows with auditable QC status `ploidy_class_changed` when that pair changes
 - with `--norm-indels`, the `bcftools norm` call must use the configured reference FASTA for the declared build
-- with `--norm-indels`, the `bcftools norm` call must be normalization-only: do not use multiallelic split or join modes, do not use atomization, and do not use `-c s`
+- with `--norm-indels`, the `bcftools norm` call must be normalization-only: use `-c e`; do not use multiallelic split or join modes, do not use atomization, and do not use `-c x`, `-c w`, or `-c s`
 - with `--norm-indels`, each invocation runs normalization from scratch rather than supporting `--resume`
 - with `--norm-indels`, if no records require normalization, skip `bcftools norm`
 - with `--norm-indels`, the same internal contig-normalization model used by `liftover_build.py` applies here as well: convert declared input contigs to UCSC labels before calling `bcftools`, and convert normalized UCSC output contigs back to the declared naming afterward

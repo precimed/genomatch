@@ -219,7 +219,7 @@ The migrated suite must keep coverage for:
 - with `--norm-indels`, `restrict_build_compatible.py` uses `bcftools norm` only for normalization against the configured same-build reference FASTA
 - with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` multiallelic split or join modes
 - with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` atomization
-- with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm -c s`
+- with `--norm-indels`, `restrict_build_compatible.py` invokes `bcftools norm` with `-c e` and does not use `-c x`, `-c w`, or `-c s`
 - with `--norm-indels`, normalized representation changes introduce no additional allele operation; reference-allele assignment for multibase input contributes only local `identity` or `swap`, composed with the existing `allele_op`
 - cover every failure in the [normalization output-validation table](spec/variant-transforms.md#normalization), verifying exclusion with the specified status and shared QC row identifiers; retained output must remain one canonical biallelic row per retained input row
 - cover an input submitted for normalization that yields no output record alongside a successfully normalized row; verify `norm_ref_mismatch` QC, retention of the successful row, and successful invocation; also cover all records submitted for normalization missing from the output

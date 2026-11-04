@@ -82,11 +82,13 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Pass through to restrict_build_compatible.py (default: enabled)",
     )
+    parser.add_argument("--include-indels", action="store_true", help="Admit multibase input (default: SNV-only)")
+    parser.add_argument("--allow-indel-swaps", action=argparse.BooleanOptionalAction, default=None, help="Allow multibase allele swaps (default: enabled with --include-indels)")
     parser.add_argument(
         "--norm-indels",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Pass through to restrict_build_compatible.py (default: enabled)",
+        default=None,
+        help="Pass through to restrict_build_compatible.py (default: enabled with --include-indels)",
     )
     parser.add_argument("--drop-strand-ambiguous", action="store_true", help="Run drop_strand_ambiguous.py")
     parser.add_argument("--chr2use", "--contigs", dest="chr2use", help="If set, run restrict_contigs.py with this value")
@@ -262,7 +264,12 @@ def main() -> int:
     if read_target_build(current_path) != "unknown":
         print_skip_resolved_build(WRAPPER_NAME, current_path)
     else:
-        run_command(tool_command("guess_build.py", "--input", str(current_path), "--write"))
+        try:
+            run_command(tool_command("guess_build.py", "--input", str(current_path), "--write"))
+        except ValueError as exc:
+            raise ValueError("unable to resolve source build; supply the known source build with --src-build") from exc
+        if read_target_build(current_path) == "unknown":
+            raise ValueError("unable to resolve source build; supply the known source build with --src-build")
 
     restricted_later_outputs = [
         lifted_path,
@@ -277,7 +284,13 @@ def main() -> int:
     restrict_extra_args: list[str] = []
     if args.allow_strand_flips:
         restrict_extra_args.append("--allow-strand-flips")
-    if args.norm_indels:
+    if args.include_indels:
+        restrict_extra_args.append("--include-indels")
+    allow_indel_swaps = args.include_indels if args.allow_indel_swaps is None else args.allow_indel_swaps
+    norm_indels = args.include_indels if args.norm_indels is None else args.norm_indels
+    if allow_indel_swaps:
+        restrict_extra_args.append("--allow-indel-swaps")
+    if norm_indels:
         restrict_extra_args.append("--norm-indels")
     run_command_if_needed(
         transform_command("restrict_build_compatible.py", current_path, restricted_path, restrict_extra_args),

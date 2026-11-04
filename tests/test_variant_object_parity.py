@@ -193,14 +193,14 @@ def test_vtable_loader_ordinals_continue_across_chunks_and_survive_reindexing(tm
 @pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
 def test_normalization_round_trip_preserves_qc_locators(tmp_path, suffix):
     env, _ = restrict_env_with_fake_norm(tmp_path, behavior={
-        'branch2_row0': {'records': [{'pos': 1, 'ref': 'AA', 'alt': 'A'}]},
-        'branch2_row1': {'records': [{'pos': 1, 'ref': 'AA', 'alt': 'A'}]},
+        'row1': {'records': [{'pos': 1, 'ref': 'AA', 'alt': 'A'}]},
+        'row2': {'records': [{'pos': 1, 'ref': 'AA', 'alt': 'A'}]},
     })
     source = write_input(tmp_path, suffix, [
         '1\t6\tretained\tC\tA', '1\t2\tfirst\tA\tAT', '1\t4\tsecond\tA\tAC',
     ])
     output = tmp_path / f'out.{suffix}'
-    result = run_py_with_env('restrict_build_compatible.py', env, '--source', source, '--output', output, '--norm-indels')
+    result = run_py_with_env('restrict_build_compatible.py', env, '--source', source, '--output', output, '--norm-indels', '--include-indels', '--allow-indel-swaps')
     assert result.returncode == 0, result.stderr
     assert [row[:5] for row in read_tsv(output)] == [['1', '6', 'retained', 'C', 'A']]
     assert read_tsv(output.with_name(output.name + '.qc.tsv'))[1:] == [
@@ -231,11 +231,11 @@ def test_sort_cleanup_keeps_first_exact_key_without_qc(tmp_path, suffix):
 @pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
 def test_normalized_row_colliding_with_unchanged_row_drops_both(tmp_path, suffix):
     env, _ = restrict_env_with_fake_norm(tmp_path, behavior={
-        'branch2_row0': {'records': [{'pos': 1, 'ref': 'A', 'alt': 'C'}]},
+        'row1': {'records': [{'pos': 1, 'ref': 'A', 'alt': 'C'}]},
     })
     source = write_input(tmp_path, suffix, ['1\t1\tunchanged\tC\tA', '1\t4\tnormalized\tA\tAC'])
     output = tmp_path / f'out.{suffix}'
-    result = run_py_with_env('restrict_build_compatible.py', env, '--source', source, '--output', output, '--norm-indels')
+    result = run_py_with_env('restrict_build_compatible.py', env, '--source', source, '--output', output, '--norm-indels', '--include-indels', '--allow-indel-swaps')
     assert result.returncode == 0, result.stderr
     assert read_tsv(output) == []
     assert read_tsv(output.with_name(output.name + '.qc.tsv'))[1:] == [
@@ -269,10 +269,10 @@ def test_liftover_vtable_keeps_row_idx_through_all_stages(tmp_path, reference_en
         assert 'source_index' not in frame.columns
         assert 'source_shard' not in frame.columns
 
-    def prepare(frame, fasta, *, is_vmap):
+    def prepare(frame, *, is_vmap):
         assert not is_vmap
         check_identifiers(frame)
-        result = original_prepare(frame, fasta, is_vmap=is_vmap)
+        result = original_prepare(frame, is_vmap=is_vmap)
         check_identifiers(result)
         return result
 
