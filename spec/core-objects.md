@@ -75,12 +75,8 @@ Importer-emitted rows may use source-format-specific allele ordering before refe
 
 `source_index` is zero-based within that `source_shard`.
 
-Allowed `allele_op` values in v1:
-
-- `identity`
-- `swap`
-- `flip`
-- `flip_swap`
+Allowed `allele_op` values and their meanings are defined in
+[allele operations](#allele-operations).
 
 Required sidecar metadata:
 
@@ -101,6 +97,29 @@ Importer-emitted `.vmap` is the normal starting artifact for provenance-preservi
 
 Canonical `.vmap` is mapped-only: every row must correspond to one source payload row. Missing or unmatched target rows are represented by absence from `.vmap`, not by sentinel provenance rows.
 
+## Variant keys
+
+A **variant key** is the ordered tuple `(chrom, pos, a1, a2)` stored in a
+`.vmap` or `.vtable` row. `id`, provenance, and `allele_op` are not part of it.
+Compare keys exactly as stored, using input values before a transform and
+output values after it. Key comparison does not itself normalize contig labels,
+reorder alleles, or reconcile equivalent variant representations.
+
+## Allele operations
+
+For an ordered allele pair `(a1, a2)`, the four v1 operations are:
+
+| Operation | Resulting ordered alleles |
+| --- | --- |
+| `identity` | `(a1, a2)` |
+| `swap` | `(a2, a1)` |
+| `flip` | `(reverse_complement(a1), reverse_complement(a2))` |
+| `flip_swap` | `(reverse_complement(a2), reverse_complement(a1))` |
+
+Reverse complement means complement each base (`A <-> T`, `C <-> G`) and
+reverse the resulting sequence. These definitions apply to both single-base
+and multibase alleles. Each transform defines which operations it permits.
+
 ## Invariants
 
 - Metadata is authoritative for `genome_build` and `contig_naming` once those fields are present.
@@ -115,9 +134,8 @@ Canonical `.vmap` is mapped-only: every row must correspond to one source payloa
 - FASTA-consuming tools use bulk reference access by default. The reference access mode is controlled by `MATCH_REFERENCE_ACCESS_MODE`, which accepts `BULK` and `LEGACY` case-insensitively (`BULK` is the default when unset).
 - The legacy per-lookup FASTA fetch path is available only in `LEGACY` mode, primarily for tests and profiling.
 - `liftover_build.py` is the only cross-build conversion entrypoint.
-- `.vmap` target duplicates by `chrom:pos:a1:a2` are not allowed.
-- Source duplicates are tolerated; first occurrence wins.
-- `source_index` must be a non-negative shard-local row index.
+- Canonical outputs have unique [variant keys](#variant-keys) in both `.vmap` and `.vtable`. Distinct input variant keys may become equal after transformation; tools that create these duplicate output variant keys must handle them under their documented policy.
+- In `.vmap` provenance, `source_index` must be a non-negative shard-local row index.
 - `source_shard` must be present for every `.vmap` row; `.` means a single-file source.
 - `.vmap` must not contain unmatched target rows or missing-provenance sentinels.
 - If metadata declares `contig_naming`, every target row must be valid under that convention. This is an object invariant; downstream tools are not required to re-validate it at every boundary.
@@ -127,7 +145,7 @@ Canonical `.vmap` is mapped-only: every row must correspond to one source payloa
 - payload-application tools consume that stored provenance exactly; for `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py`, `source_shard` lookup is exact and is not chromosome interpretation
 - only `import_*` tools originate new provenance in v1
 - non-importer tools may preserve existing provenance on `.vmap` input, but they must not originate a new `.vmap` from a standalone `.vtable`
-- When any object (`.vmap`, `.vtable`, or any payload format such as sumstats, pfile/bfile/vcf) is represented in-memory as a DataFrame, `source_index` is a semantic provenance value assigned once by the parser/loader and stored in the corresponding table object (for example `SumstatsTable.source_index`, `VMapRowsTable`, `VariantRowsTable`). Downstream code must propagate provenance by reading from that stored field. Deriving provenance from the pandas structural index (`.index`, `RangeIndex`, `.iloc` position) is prohibited even when values are numerically identical — structural index is implementation-internal and carries no provenance guarantee. Resetting the structural DataFrame index (`reset_index`) is safe because it does not affect the provenance data column.
+- Source provenance and invocation-local QC row identifiers must continue to identify their original input rows throughout processing, independent of the internal representation.
 
 The exact meaning of `source_shard` depends on the first provenance-bearing step:
 

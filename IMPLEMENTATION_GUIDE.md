@@ -43,6 +43,16 @@ When behavior requires "first invalid row" semantics:
 - Small-cardinality control loops (for example unique contig labels).
 - External-tool orchestration where loop removal does not materially change runtime.
 
+### Row identity and external-tool batching
+
+- Preserve row identity explicitly. Carry source provenance and QC row identifiers
+  through stored fields rather than reconstructing them from DataFrame indexes
+  or positions after filtering, sorting, or index resets. Resetting a structural
+  index is safe when the stored locator remains unchanged.
+- Batch external-tool work. Prefer bulk or bounded-batch subprocess calls over
+  one invocation per variant. Use stable record identifiers to associate
+  external-tool output with input rows across batches.
+
 ### dtype discipline
 
 - Readers and loaders own dtype canonicalization. They produce `dtype="object"` for all string columns.

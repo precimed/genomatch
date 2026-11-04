@@ -48,7 +48,7 @@ Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` 
 ### Using .vmap vs .vtable as input across tools
 
 - `import_*` tools are the only tools that originate new provenance, so they emit `.vmap`.
-- For tools that accept both `.vmap` and `.vtable`, the default rule is to act on target rows and emit the same artifact type as the input, unless the tool explicitly defines a provenance-free `.vtable` output.
+- The applicable primitives and their shared transformation, duplicate-handling, and QC rules are defined in [tools accepting `.vmap` or `.vtable`](../spec/variant-transforms.md#tools-accepting-vmap-or-vtable).
 - `intersect_variants.py` always emits provenance-free `.vtable`.
 - `restrict_vmap.py` is the provenance-preserving exact restriction tool for `.vmap`; restriction inputs are membership filters only and multiple restriction inputs are combined by intersection.
 - `apply_vmap_*` consumes `.vmap` as a mapping object, not as a table. The payload must still match the `.vmap` source provenance exactly.
@@ -65,9 +65,9 @@ Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` 
 | Normalize / metadata | `normalize_contigs.py` | `.vmap` or `.vtable` | same as input | Repairs or standardizes target contigs; target naming is selected with `--to` |
 | Normalize / metadata | `restrict_contigs.py` | `.vmap` or `.vtable` | same as input | Contig filter via `--chr2use` / `--contigs` |
 | Normalize / metadata | `drop_strand_ambiguous.py` | `.vmap` or `.vtable` | same as input | Drops strand-ambiguous target rows |
-| Validate / liftover | `restrict_build_compatible.py` | `.vmap` or `.vtable` | same as input | Same-build, reference-aware filtering; key flags are `--allow-strand-flips`, `--norm-indels`, and `--sort` |
+| Validate / liftover | `restrict_build_compatible.py` | `.vmap` or `.vtable` | same as input | Same-build filtering and optional normalization; [input filtering, reference-allele assignment, and operation controls](../spec/variant-transforms.md#same-build-reference-compatibility); preserves retained input order |
 | Validate / liftover | `liftover_build.py` | `.vmap` or `.vtable` | same as input | Explicit build conversion to `--target-build`; preserves `.vmap` provenance and re-sorts into declared coordinate order |
-| Order  | `sort_variants.py` | `.vmap` or `.vtable` | same as input | Explicit standalone target-row sorting by declared contig order, then numeric position, then `a1`/`a2` lexicographically; optional `--drop-duplicates` drops duplicate target identities after sorting |
+| Order  | `sort_variants.py` | `.vmap` or `.vtable` | same as input | Explicit standalone target-row sorting by declared contig order, then numeric position, then `a1`/`a2` lexicographically; optional `--drop-duplicates` drops duplicate variant keys after sorting |
 | Assign IDs | `assign_vmap_ids.py` | source `.vmap` plus `.vmap` / `.vtable` ID source | `.vmap` | Copies IDs from the ID source by exact `chrom:pos:a1:a2` match, preserves source `.vmap` provenance, and by default drops rows without a non-missing assigned ID and fails on duplicate retained non-missing output IDs |
 | Restrict / intersect / materialize | `intersect_variants.py` | two or more `.vmap` / `.vtable` inputs | `.vtable` | Exact symmetric source-agnostic target-key intersection; output has target-derived IDs in declared coordinate order |
 | Restrict / intersect / materialize | `restrict_vmap.py` | source `.vmap` plus one or more `.vmap` / `.vtable` restrictions | `.vmap` | Exact source-order restriction by intersection of all restriction inputs; output order, IDs, provenance, and `allele_op` come from the source `.vmap` |
@@ -81,8 +81,7 @@ Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` 
 
 - Import tools always preserve source provenance for retained rows, also when it drops unrepresentable rows or rows filtered by `--chr2use` / `--contigs`
 - import tools do not repair mixed or invalid contig labels. Use `normalize_contigs.py` for cleanup.
-- `restrict_build_compatible.py` is the same-build, reference-aware canonicalization step: it filters to reference-compatible rows, can optionally re-sort into declared coordinate order, and can optionally normalize supported indels via retained `bcftools norm` intermediates while still emitting canonical biallelic `a1=non-reference`, `a2=reference` rows; it does not liftover.
-- `liftover_build.py` supports SNVs and one-side-multibase reference-anchored rows, but not lifted outputs where both final alleles remain multi-base.
+- Reference-aware restriction and liftover follow the allele support and validation rules in [variant-transforms.md](../spec/variant-transforms.md).
 - `intersect_variants.py` and `union_variants.py` emit provenance-free target-key sets with target-derived IDs (`chrom:pos:a1:a2`) in declared coordinate order. `restrict_vmap.py` preserves source `.vmap` order and emits `.vmap`; if you need sorted restricted output, sort the source `.vmap` before restricting. `liftover_build.py` and `sort_variants.py` use declared coordinate order: declared contig order, then numeric position, then `a1`/`a2` lexicographically, with stable input order for exact `(chrom, pos, a1, a2)` ties.
 - `intersect_variants.py`, `restrict_vmap.py`, and `union_variants.py` may use `variants_count` to start internal set operations from smaller objects. This is a memory strategy only; the output contracts above remain unchanged.
 - `assign_vmap_ids.py` is useful after `restrict_vmap.py` and before projection when a final payload-specific `.vmap` should carry rsIDs or another preferred ID namespace. It matches prepared coordinates to IDs, not IDs to coordinates; use `import_sumstats.py --id-lookup` for preparation-time coordinate recovery from raw IDs. See [Assign vmap IDs](workflow.md#assign-vmap-ids) for policy details.
@@ -119,6 +118,7 @@ guess_build.py \
 restrict_build_compatible.py \
   --source study.clean.vmap \
   --allow-strand-flips \
+  --include-indels \
   --norm-indels \
   --output study.validated.vmap
 
@@ -148,6 +148,7 @@ normalize_contigs.py --to ncbi \
 restrict_build_compatible.py \
   --source kgp.clean.vmap \
   --allow-strand-flips \
+  --include-indels \
   --norm-indels \
   --output kgp.validated.vmap
 

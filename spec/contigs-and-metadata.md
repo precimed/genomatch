@@ -39,11 +39,16 @@ If imported rows are mixed or invalid:
 
 `normalize_contigs.py` is the only repair path. It may normalize target rows from mixed or inconsistent inputs, drops any row that cannot be mapped to the chosen target convention, preserves retained row order, emits the same artifact type as the input, and reports how many rows were normalized and how many were dropped as unresolved.
 
-For `.vmap` input, if contig normalization collapses multiple retained rows to the same target `chrom:pos:a1:a2`, `normalize_contigs.py` must drop all colliding rows and emit `<output>.qc.tsv` with status `duplicate_target`.
+If contig normalization makes distinct input [variant keys](core-objects.md#variant-keys)
+equal on output, `normalize_contigs.py` must drop all affected rows with status
+`duplicate_target`, following the [shared row-level QC contract](variant-transforms.md#row-level-qc).
 
 `normalize_contigs.py` operates on the target side only. It must not rewrite `source_shard`.
 
-`restrict_contigs.py` is the explicit target-filtering step after normalization. It accepts either a `.vtable` or a `.vmap`, filters target rows by explicit contig selection such as `--chr2use` / `--contigs`, preserves retained target order, and emits the same artifact type as the input. For `.vmap` input it preserves original source provenance. For `.vtable` input it remains provenance-free and emits `.vtable`.
+`restrict_contigs.py` is the explicit target-filtering step after normalization.
+It filters target rows by explicit contig selection such as `--chr2use` /
+`--contigs` and preserves retained target order, following the
+[rules for `.vmap` and `.vtable` inputs](variant-transforms.md#tools-accepting-vmap-or-vtable).
 
 All downstream tools fail if metadata omits `contig_naming`. Valid row labels under the declared `contig_naming` remain an object invariant, but downstream tools are not required to re-validate that invariant at every boundary; tools may fail if they encounter inconsistent stored contig labels while performing their own required work.
 
@@ -61,7 +66,8 @@ Reference-aware tools such as `restrict_build_compatible.py` and `liftover_build
 
 ## `guess_build.py` build-guess policy
 
-`guess_build.py` accepts either a `.vtable` or a `.vmap` and emits the same type as the input. When the input is `.vmap`, build guessing applies to its target side only and updates target-side metadata only; it does not change source provenance.
+`guess_build.py` updates target-side build metadata only, following the
+[rules for `.vmap` and `.vtable` inputs](variant-transforms.md#tools-accepting-vmap-or-vtable).
 
 In v1, `guess_build.py` evaluates only `GRCh37` and `GRCh38`.
 

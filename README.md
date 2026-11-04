@@ -1,6 +1,6 @@
 # Variant Table Toolkit
 
-This toolkit harmonizes genetic variant data across common research formats and reference assemblies. It supports `GRCh37`, `GRCh38`, and `T2T-CHM13v2.0`, chromosomes `1-22`, `X`, `Y`, and `MT`, common contig naming modes (`ncbi`, `ucsc`, `plink`), and biallelic variants, including SNPs and supported indels.
+This toolkit harmonizes genetic variant data across common research formats and reference assemblies. It supports `GRCh37`, `GRCh38`, and `T2T-CHM13v2.0`, chromosomes `1-22`, `X`, `Y`, and `MT`, common contig naming modes (`ncbi`, `ucsc`, `plink`), and biallelic variants, including SNPs and supported indels. Preparation is SNV-only by default; add `--include-indels` to admit multibase input under the [reference-compatibility policy](spec/variant-transforms.md#same-build-reference-compatibility).
 
 The common workflow rewrites `chr` / `bp` / `a1` / `a2` / `snp` fields in BFILE, PFILE, VCF, or summary-statistics inputs into a standardized variant key while adjusting the attached data, such as genotypes or summary-statistic columns, accordingly. Users request the target build, contig naming, and optional filtering or normalization flags; the pipeline handles build guessing in the source data, liftover between builds (if needed), allele swaps, reference-anchored allele ordering, sorting, and duplicate removal. The workflow is split into preparation and projection phases, so users can save and reuse a prepared variant set, or project only a user-defined subset of source variants.
 

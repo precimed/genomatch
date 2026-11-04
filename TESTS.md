@@ -47,7 +47,7 @@ The migrated suite must keep coverage for:
 - exact source-agnostic intersection with declared-coordinate output
 - allele swap handling
 - mapped-only `.vmap` rows with non-missing source provenance
-- duplicate target exact rows failing
+- importer first-occurrence cleanup, explicit sort/dedup cleanup, and handling distinct input variant keys that become equal after transformation
 - rsID ignored for exact set operations
 - importer `--chr2use` / `--contigs` filtering and `restrict_contigs.py` target-row filtering
 - summary-stat effect inversion for swapped alleles
@@ -59,6 +59,7 @@ The migrated suite must keep coverage for:
 
 - `import_bim.py`, `import_pvar.py`, `import_vcf.py`, and `import_sumstats.py` write `.vmap` and metadata
 - importer-emitted `.vmap` target rows are the retained canonical imported rows
+- importer exact-identity duplicates keep the first otherwise-retained occurrence in resolved shard and row order, ignoring `id`; subsequent duplicates have original source locators and reason `duplicate_target` in import QC
 - importer-emitted `.vmap` source provenance is exact `(source_shard, source_index)`
 - importer-emitted `.vmap` uses `source_shard=.` for single-file imports
 - `import_bim.py`, `import_pvar.py`, and `import_vcf.py` support raw-input `@` discovery
@@ -91,7 +92,6 @@ The migrated suite must keep coverage for:
 - metadata sidecars are required by transformation tools
 - metadata is authoritative once present; valid target rows under declared `contig_naming` are an object invariant, but downstream tools are not required to re-validate every row-level contig label at every boundary
 - `guess_build.py` accepts `.vtable` and `.vmap`
-- `guess_build.py` emits the same type as the input
 - for `.vmap` input, `guess_build.py` updates target-side metadata only and does not change source provenance
 - `guess_build.py` requires declared `contig_naming`
 - `guess_build.py` writes inferred metadata only when `genome_build` is `unknown` or `--force` is used
@@ -111,10 +111,8 @@ The migrated suite must keep coverage for:
 - `normalize_contigs.py` may repair mixed or inconsistent target rows and must preserve row order
 - `normalize_contigs.py` must not rewrite `source_shard`
 - `normalize_contigs.py` drops unresolved target rows and reports normalized vs unresolved-drop counts
-- for `.vmap` input, `normalize_contigs.py` drops rows that collapse to duplicate target `chrom:pos:a1:a2` after normalization and audits them in `<output>.qc.tsv` with status `duplicate_target`
+- `normalize_contigs.py` drops all rows whose distinct input variant keys become equal after contig normalization and audits them with status `duplicate_target` under the row-level QC rules
 - `restrict_contigs.py` filters retained target rows and preserves retained target order
-- `restrict_contigs.py` emits the same type as the input
-- `restrict_contigs.py` emits target-side-only metadata and preserves original provenance only when restricting an input `.vmap`
 - reference-aware tools must accept UCSC-named input rows
 - reference-aware tools must accept NCBI-style (`ncbi`) input rows
 - reference-aware tools must accept PLINK-style (`plink`) input rows
@@ -123,9 +121,26 @@ The migrated suite must keep coverage for:
 - `liftover_build.py` must reject PLINK split-X (`plink_splitx`) input rows clearly
 - tests for `guess_build.py` and `restrict_build_compatible.py` must verify internal normalization to UCSC reference naming for each supported non-UCSC declared input naming mode (`ncbi`, `plink`, and `plink_splitx`) within their supported modes
 - tests for `liftover_build.py` must verify internal normalization to UCSC reference naming for supported non-UCSC declared input naming modes (`ncbi` and `plink`)
-- FASTA-consuming tools (`guess_build.py`, `restrict_build_compatible.py`, `liftover_build.py`) must honor `MATCH_REFERENCE_ACCESS_MODE` with accepted values `BULK` and `LEGACY`, parsed case-insensitively
-- when `MATCH_REFERENCE_ACCESS_MODE` is unset, FASTA-consuming tools must run in default `BULK` mode
-- for identical inputs and reference assets, `BULK` and `LEGACY` modes must produce consistent outputs and equivalent QC/error semantics for `guess_build.py`, `restrict_build_compatible.py`, and `liftover_build.py`
+
+### Reference access
+
+- Toolkit FASTA lookup consumers (`guess_build.py` and `restrict_build_compatible.py`) must honor `MATCH_REFERENCE_ACCESS_MODE` with accepted values `BULK` and `LEGACY`, parsed case-insensitively
+- when `MATCH_REFERENCE_ACCESS_MODE` is unset, these lookup consumers must run in default `BULK` mode
+- for identical inputs and reference assets, `BULK` and `LEGACY` modes must produce consistent outputs and equivalent QC/error semantics for `guess_build.py` and `restrict_build_compatible.py`
+- cover single-base and variable-length span queries under the [reference access policy](spec/variant-transforms.md#reference-access-policy), including distinct lengths at the same contig and position, first-base-only matches, contig boundaries, missing contigs, reference characters outside `A/C/G/T`, lowercase FASTA sequence, and empty query batches
+- verify `BULK` avoids repeated per-variant indexed FASTA fetches and keeps results isolated by reference FASTA path, without prescribing cache layout, helper calls, or vectorization; preserve existing single-base lookup and build-guess behavior
+
+### Tools accepting `.vmap` or `.vtable`
+
+- for every primitive listed in [tools accepting `.vmap` or `.vtable`](spec/variant-transforms.md#tools-accepting-vmap-or-vtable), run equivalent ordered canonical target rows and metadata as `.vmap` and `.vtable` with the same options and reference assets; compare target rows, IDs, order, target metadata, retained/dropped counts, exclusion statuses, warnings, and failure behavior; also compare documented cleanup modes, with unsupported duplicate-containing input governed by the [duplicate-input rules](spec/variant-transforms.md#duplicate-containing-input)
+- verify output type and metadata layout follow the input type; `.vmap` preserves original provenance and composes allele operations, while `.vtable` contains no provenance or `allele_op` columns
+- exercise missing and malformed target metadata, reference mismatches, all-filtered input, duplicate cleanup, and distinct input variant keys becoming equal after transformation for both types within each primitive's supported behavior
+- verify [variant keys](spec/core-objects.md#variant-keys) use the exact stored values before and after each transform and ignore IDs and provenance; include distinct contig spellings and allele orders that become equal only after the relevant transform
+- for operations requiring row-level QC, check the same sidecar path and statuses for both types using the [shared QC row identifiers](spec/variant-transforms.md#row-level-qc); include filtering, sorting, and external-tool round trips to detect accidental reindexing of QC row identifiers
+- on successful runs with no rows dropped, including supported empty input, verify that no QC sidecar is emitted and any stale sidecar is removed for both types
+- verify all affected rows are dropped when distinct input variant keys become equal after contig normalization, reference canonicalization, or liftover for both types, including normalized rows matching unchanged rows; separately verify keep-first cleanup in `sort_variants.py --drop-duplicates`
+- verify explicit no-sidecar policies, including `sort_variants.py --drop-duplicates`, apply equally to both types
+- preserve rejection of `.vtable` as the source mapping for `restrict_vmap.py`, `assign_vmap_ids.py`, and payload-application tools
 
 ### Mapping
 
@@ -145,12 +160,11 @@ The migrated suite must keep coverage for:
 - `intersect_variants.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-intersection contract
 - `restrict_vmap.py` rejects `@` template paths and has no `--chr2use` surface
 - `restrict_vmap.py` fails cleanly when required metadata omits `contig_naming`; row-level contig-label validation is not part of its exact-restriction contract
-- duplicate target-side rows in `.vmap` input are invalid before intersection
+- repeated membership keys produce the same intersection, union, and restriction-filter results as unique keys for either object type, including repetitions within and across chunk boundaries
 - `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
 - `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles
-- `drop_strand_ambiguous.py` emits the same type as the input and preserves original provenance only when filtering an input `.vmap`
-- `sort_variants.py` sorts target rows into declared coordinate order, emits the same type as the input, and preserves provenance on `.vmap` input
-- declared coordinate order is declared contig order, then numeric position, with stable input order for ties
+- `sort_variants.py` sorts target rows into declared coordinate order
+- declared coordinate order follows the [row-order contract](spec/core-objects.md#row-order-contract)
 - `.vmap` rows carry `source_shard + source_index` provenance
 - `.vmap` preserves original `source_shard` and shard-local `source_index`
 - `.vmap` rows must have non-missing source provenance and non-negative `source_index`
@@ -160,95 +174,68 @@ The migrated suite must keep coverage for:
 - `liftover_build.py` accepts declared `ncbi`, `ucsc`, and `plink` input contig naming while using UCSC internal reference assets
 - `liftover_build.py` rejects declared `plink_splitx` input clearly
 - `liftover_build.py` supports `--resume` for reparsing retained bcftools liftover output without rerunning bcftools
-- `liftover_build.py` supports SNVs and source-build reference-anchored non-SNV rows where exactly one allele is the single-base source reference allele and the other allele is any non-empty `A` / `C` / `G` / `T` string
-- `liftover_build.py` may drop unsupported non-SNV rows with auditable QC
-- `liftover_build.py` may drop lifted rows that land on unsupported non-primary target contigs with auditable QC
+- `liftover_build.py` fixtures must cover prepared deletions, MNVs, and delins with multibase source `a2`, and inspect source VCF records for `REF=a2, ALT=a1` under the [required source reference compatibility](spec/variant-transforms.md#required-source-reference-compatibility)
+- with a stubbed liftover plugin, verify structurally valid source rows are forwarded without source-FASTA sequence checks or source allele reselection, including `a1`-only and partial-REF matches; do not require biological correctness or mismatch detection for inputs violating the source reference compatibility requirement
+- `liftover_build.py` audits unrepresentable lifted outputs under the [liftover acceptance contract](spec/variant-transforms.md#liftover), covering multiallelic, missing/symbolic/non-sequence, identical-allele, invalid-position, and multiple-result cases, plus unsupported allele-operation annotations such as `SWAP=-1` and `SWAP=2`; row-level exclusions do not fail the invocation
+- `liftover_build.py` drops lifted rows on unsupported target contigs with QC status `unsupported_target_contig`
 - `liftover_build.py` must drop rows with QC status `ploidy_class_changed` when lifted `chrom` or `pos` changes the expected `(male_ploidy, female_ploidy)` pair under the shared ploidy model
 - for `ploidy_class_changed`, the comparison is against the final candidate row that would otherwise be emitted, immediately before final output/QC accounting
-- `liftover_build.py` may drop lifted rows that collapse to duplicate target `chrom:pos:a1:a2` rows with auditable QC
-- `liftover_build.py` writes QC rows only for non-retained source variants using original `(source_shard, source_index)` provenance; successfully lifted rows are represented by the output object and are not written to QC
-- `liftover_build.py` emits the same type as the input and preserves original source provenance only when the input is `.vmap`
+- `liftover_build.py` drops all lifted rows whose distinct input variant keys become equal on target `chrom:pos:a1:a2`, auditing them with status `duplicate_target`
+- `liftover_build.py` audits non-retained input rows under the shared row-level QC contract
 - `liftover_build.py` accepts UCSC-named input without changing declared output naming
-- `liftover_build.py` fails clearly on missing chain config, missing bcftools, missing FASTA indexes, and wrong-strand input that was not repaired before liftover
-- `liftover_build.py` fails clearly on unsupported chain swap annotations and unsupported contig labels
-- `liftover_build.py` covers the degenerate all-dropped unsupported non-SNV case with QC output
+- `liftover_build.py` fails clearly on missing chain config, missing bcftools, and missing FASTA indexes; trusting source reference compatibility does not waive schema, metadata, contig, or reference-asset validation
+- `liftover_build.py` fails clearly on unsupported input contig labels, external-tool failure, unparseable output, and output that cannot be associated unambiguously with input rows
+- cover lifted records with an unsupported allele-operation annotation and an independent contig or ploidy exclusion; require an applicable QC status without invocation failure, without pinning an internal check order
+- verify lifted output uses the plugin's representation and annotation-derived allele operation without independent allele reassignment, normalization, or strand-ambiguity filtering
+- `liftover_build.py` covers the degenerate all-dropped unrepresentable-output case with QC output
 - tests for `liftover_build.py` must cover lifted one-side-multibase rows being retained as canonical `a1=non-reference`, `a2=reference`
-- tests for `liftover_build.py` must still cover unsupported non-SNV rows that are not reference-anchored and lifted outputs where both final alleles remain multi-base
+- use a small real-plugin integration fixture set for both-multibase output and a reverse-strand multibase mapping, checking source VCF `REF=a2, ALT=a1` and composed allele operations
 - `restrict_build_compatible.py` resolves reference FASTA from config + metadata only
 - `restrict_build_compatible.py` accepts declared `ncbi`, `ucsc`, `plink`, and `plink_splitx` input contig naming while using UCSC internal reference FASTA
 - `restrict_build_compatible.py --norm-indels` rejects declared `plink_splitx` input clearly
-- `restrict_build_compatible.py` supports SNP and reference-anchored non-SNV rows when at least one allele is a single-base `A` / `C` / `G` / `T` allele matching the reference base and the other allele is any non-empty `A` / `C` / `G` / `T` string
-- `restrict_build_compatible.py --allow-strand-flips` applies that same rule after strand complementation as well
+- regression coverage for [same-build reference compatibility](spec/variant-transforms.md#same-build-reference-compatibility) must include both-allele matches, `a1`-only matches, neither-allele matches, and partial-REF matches where only the first base agrees
+- verify the specified exclusion status and original-provenance QC for no permitted reference match, including a match requiring a disabled operation
+- cover all three input classes over inclusion enabled/disabled, primitive option defaults, and every combination of swap, strand-flip, and normalization permission in that contract
+- cover primitive input exclusions and counts, checking the specified QC path/status and shared QC row identifiers
+- cover identical single-base and multibase inputs, including mixed-case equivalents, with inclusion and normalization independently enabled/disabled; verify the specified identical-input status before length filtering or reference-allele assignment, using the shared row-level QC contract
+- check warnings for either or both multibase-operation flags without input inclusion, including class 1-only input; the flags must not bypass exclusion or suppress class 1 reference-allele assignment
+- include `a1=A, a2=AG` on reference `AGC`: the deletion must remain unchanged with normalization enabled and disabled
+- include the same allele pair on `ATC` to exercise a mismatching supplied REF with and without swap permission
+- cover operation composition with an existing `swap`, and effect/genotype projection, verifying that reference-allele assignment and normalization do not introduce an extra payload recode
+- strand fixtures must exercise class 1 `flip` and `flip_swap`, and verify that enabling strand flips does not introduce either operation for classes 2 and 3, including equal-length multibase alleles
+- include `a1=A, a2=TT` on reference `AAG` with strand flips enabled: without indel-swap permission it is dropped; with permission the forward swap is selected
 - `restrict_build_compatible.py` keeps only same-build reference-compatible rows
 - `restrict_build_compatible.py` canonicalizes retained rows to reference-second target ordering with `a1=non-reference` and `a2=reference`
-- `restrict_build_compatible.py` accepts optional `--sort`
-- `restrict_build_compatible.py --sort` sorts retained output rows into declared coordinate order using the same contract as `sort_variants.py`
-- `restrict_build_compatible.py` swaps rows when the reference allele is originally in `a1`
-- `restrict_build_compatible.py --allow-strand-flips` may emit local `flip_swap` when strand complementation and allele swap are both required
-- `restrict_build_compatible.py` accepts optional `--norm-indels`
-- without `--norm-indels`, `restrict_build_compatible.py` remains a same-build reference-aware filter and canonicalizer only
-- with `--norm-indels`, `restrict_build_compatible.py` partitions rows into three allele-length branches after input validation
-- with `--norm-indels`, pure SNVs with both alleles length 1 do not go through `bcftools norm`
-- with `--norm-indels`, rows with exactly one allele longer than one base still use the toolkit's same-build compatibility decision, optional strand-flip handling, and explicit `allele_op` swap or flip tracking before invoking one bulk `bcftools norm` call for that branch
-- with `--norm-indels`, rows with both alleles longer than one base are handled in a separate conservative branch
-- with `--norm-indels`, `restrict_build_compatible.py` must not rely on `bcftools norm` to detect strand flips, to repair REF/ALT orientation, or to decide `.vmap allele_op`
-- with `--norm-indels`, in the both-multi-base branch, `--allow-strand-flips` does not apply
-- with `--norm-indels`, in the both-multi-base branch, `restrict_build_compatible.py` must construct exactly two temporary VCF candidates per input row, unswapped and swapped
-- with `--norm-indels`, branch 2 uses one bulk `bcftools norm -c e` call
-- with `--norm-indels`, branch 3 implements strict `bcftools norm -c x` filtering semantics
-- with `--norm-indels`, branch 3 may realize those semantics via the documented workaround for upstream `bcftools` issue #2427: first `bcftools norm -c w`, then exclude exactly the warned `REF_MISMATCH` records and rerun
+- `restrict_build_compatible.py` rejects removed flags `--sort` and `--drop-duplicates`
+- cover class 3 inputs for which both REF/ALT assignments would pass REF validation: valid `a2` must be selected rather than dropping the row as ambiguous
+- include padded SNVs, padded deletions, MNVs, and delins in class 3 fixtures, with input inclusion enabled and normalization enabled/disabled
+- cover output validation failures of the selected REF/ALT allele assignment with an alternative assignment that would otherwise pass, to detect fallback after choosing an allele assignment
+- verify that normalization receives only the selected REF/ALT allele assignment and that class 1 input bypasses `bcftools norm`
 - with `--norm-indels`, rows whose normalized `chrom` or `pos` changes the expected `(male_ploidy, female_ploidy)` pair under the shared ploidy model are dropped with QC status `ploidy_class_changed`
-- with `--norm-indels`, `restrict_build_compatible.py` retains normalization VCFs beside `--output` using deterministic names `<output>.bcftools_norm_input_e.vcf`, `<output>.bcftools_norm_output_e.vcf`, `<output>.bcftools_norm_input_x.vcf`, and `<output>.bcftools_norm_output_x.vcf`
-- with `--norm-indels`, `restrict_build_compatible.py` retains deterministic `bcftools norm` logs beside `--output` as `<output>.bcftools_norm_output_e.log` and `<output>.bcftools_norm_output_x.log`
-- with `--norm-indels`, `restrict_build_compatible.py` always reruns normalization from scratch and deletes any pre-existing retained normalization VCFs before invoking `bcftools norm`
-- with `--norm-indels`, `restrict_build_compatible.py` deletes any pre-existing retained normalization log files before invoking `bcftools norm`
-- with `--norm-indels`, in the both-multi-base branch, exactly one candidate must survive as one valid normalized biallelic row; zero-survivor and two-survivor cases are dropped with auditable QC
-- with `--norm-indels`, in the both-multi-base branch, unswapped-candidate survival maps to local `identity` and swapped-candidate survival maps to local `swap`
-- with `--norm-indels`, `restrict_build_compatible.py` internally round-trips through temporary VCF rows with `REF=reference` and `ALT=non-reference`, then converts normalized rows back to canonical target ordering `a1=non-reference` and `a2=reference`
+- with `--norm-indels`, verify retained diagnostic VCFs and logs in the [normalization diagnostic namespace](spec/variant-transforms.md#normalization-diagnostics), including record coverage across actual calls or batches and selected `REF=a2` / `ALT=a1` assignments; require the namespace but not fixed suffixes, a fixed file count, or aggregation
+- prepopulate `<output>.bcftools_norm*` with stale diagnostics, including legacy `_e`/`_x` files and higher-numbered batch files; verify complete cleanup on every restriction run with normalization enabled or disabled, including reruns producing fewer batches, while files outside the namespace remain untouched
+- when no normalization runs, including when `--norm-indels` is omitted or no records require normalization, verify that no normalization subprocess runs and `<output>.bcftools_norm*` is empty after the restriction run
 - with `--norm-indels`, `restrict_build_compatible.py` uses `bcftools norm` only for normalization against the configured same-build reference FASTA
 - with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` multiallelic split or join modes
 - with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` atomization
 - with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm -c s`
-- with `--norm-indels`, unresolved REF mismatch after the toolkit's own compatibility repair must fail clearly rather than being silently fixed by `bcftools`
-- with `--norm-indels`, normalized representation changes to `chrom`, `pos`, `a1`, or `a2` do not create new `allele_op` values beyond the toolkit's own pre-normalization `identity` / `swap` / `flip` / `flip_swap`
-- with `--norm-indels`, retained output must remain one canonical biallelic row per retained input row; normalized rows must not be split into multiple output rows
-- with `--norm-indels`, if `bcftools norm` emits multiallelic output for a row, that row must be filtered out from canonical output with status `norm_multiallelic`
-- with `--norm-indels`, if normalized output contains missing, symbolic, empty, or non-`A/C/G/T` alleles, that row must be filtered out with status `norm_not_atcg_alleles`
-- with `--norm-indels`, if one input row yields multiple normalized output records, that row must be filtered out with status `norm_multiple_output_records`
-- with `--norm-indels`, if normalized `REF` and `ALT` are identical, that row must be filtered out with status `norm_identical_ref_alt_alleles`
-- with `--norm-indels`, if normalized output remains biallelic but both final canonical alleles are longer than one base, that row must be filtered out with status `norm_unsupported_complex_indel`
-- with `--norm-indels`, if both both-multi-base candidates survive, that row must be filtered out with status `norm_ambiguous_orientation`
-- with `--norm-indels`, if no valid normalized candidate survives because normalization-only reference anchoring fails, that row must be filtered out with status `norm_ref_mismatch`
-- with `--norm-indels`, if normalized output has unsupported output contig labels, that row must be filtered out with status `unsupported_target_contig`
-- with `--norm-indels`, if normalized output has invalid position values, that row must be filtered out with status `norm_invalid_position`
+- with `--norm-indels`, normalized representation changes introduce no additional allele operation; reference-allele assignment for multibase input contributes only local `identity` or `swap`, composed with the existing `allele_op`
+- cover every failure in the [normalization output-validation table](spec/variant-transforms.md#normalization), verifying exclusion with the specified status and shared QC row identifiers; retained output must remain one canonical biallelic row per retained input row
+- cover an input submitted for normalization that yields no output record alongside a successfully normalized row; verify `norm_ref_mismatch` QC, retention of the successful row, and successful invocation; also cover all records submitted for normalization missing from the output
+- verify malformed normalization output and output records with unknown input identifiers fail the invocation
+- with `--norm-indels`, inject unexpected REF mismatches at the normalization boundary and in normalized output to verify fatal invariant failures after successful reference-allele assignment
 - with `--norm-indels`, duplicate-target detection still applies after normalization on final canonical `chrom:pos:a1:a2`
 - with `--norm-indels`, tests must cover indel left-normalization or trimming that changes target `pos` and allele strings while preserving canonical final `a1=non-reference`, `a2=reference`
 - with `--norm-indels`, tests must cover the case where no normalization change is needed and the retained output remains otherwise identical to the non-`--norm-indels` path
-- with `--norm-indels`, tests must cover pure SNP rows remaining on the non-`bcftools norm` path
-- with `--norm-indels`, tests must cover one-side multi-base rows going through the branch-2 `bcftools norm -c e` path
-- with `--norm-indels`, tests must cover retained branch-2 normalization VCFs under the output prefix
-- with `--norm-indels`, tests must cover retained branch-3 normalization VCFs under the output prefix
-- with `--norm-indels`, tests must cover retained branch-specific normalization log files under the output prefix
-- with `--norm-indels`, tests must cover stale retained normalization VCFs being deleted before rerun
-- with `--norm-indels`, tests must cover stale retained normalization log files being deleted before rerun
-- tests must include a sentinel reproduction of upstream `bcftools` issue #2427 where `bcftools norm -c x` segfaults on a tiny fixture; that sentinel should fail once the upstream bug is fixed so the workaround can be removed
-- tests must cover the `#2427` workaround path producing output equivalent to strict `check-ref x` filtering on the same class of fixture
-- with `--norm-indels`, tests must cover `--allow-strand-flips` together with normalization, where strand complementation is resolved before normalization
-- with `--norm-indels`, tests must cover the both-multi-base branch where only the unswapped candidate survives and local `identity` is emitted
-- with `--norm-indels`, tests must cover the both-multi-base branch where only the swapped candidate survives and local `swap` is emitted
-- with `--norm-indels`, tests must cover the both-multi-base branch where neither candidate survives and `norm_ref_mismatch` is audited
-- with `--norm-indels`, tests must cover the both-multi-base branch where both candidates survive and `norm_ambiguous_orientation` is audited
-- with `--norm-indels`, tests must cover the unsupported normalized complex-indel case where both final canonical alleles remain longer than one base and `norm_unsupported_complex_indel` is audited
-- with `--norm-indels`, tests must cover `.vmap` provenance preservation and correct composition of pre-normalization local `allele_op`
-- `restrict_build_compatible.py` drops `.vmap` rows that collapse to duplicate target `chrom:pos:a1:a2` after canonicalization and audits them in `<output>.qc.tsv` with status `duplicate_target`
-- `restrict_build_compatible.py` emits filtered output of the same type as the input and preserves original source provenance only when the input is `.vmap`
+- `restrict_build_compatible.py` drops all rows whose distinct input variant keys become equal after canonicalization and audits them with status `duplicate_target` under the row-level QC rules
+- include a padded SNV that normalizes to the same target as an input SNV, verifying that both rows are dropped with `duplicate_target`
+- for restriction and liftover, cover an excluded result sharing an output variant key with an otherwise valid candidate; the excluded result must not cause the valid candidate to be dropped as `duplicate_target`
 - `restrict_build_compatible.py` emits JSON telemetry to stdout with input/output paths, declared metadata, normalization path, and retained/dropped row counts
 - `restrict_build_compatible.py` accepts UCSC-named input without extra normalization
 - `restrict_build_compatible.py` rejects unknown target contigs and rows inconsistent with declared `contig_naming`
 - `restrict_build_compatible.py` fails clearly on missing reference config sections and missing FASTA indexes
 - `restrict_build_compatible.py` fails clearly on bad relative reference paths and on explicit non-ACGT alleles
-- without `--sort`, output order follows the first input and is not re-sorted by declared coordinate order
-- with `--sort`, output order is declared contig order, then numeric position, with stable input order for ties
+- restriction output preserves retained input order
 - with `--norm-indels`, tests should verify clear failure on missing `bcftools`, failed `bcftools norm`, and missing FASTA indexes
 
 ### Intersections
@@ -271,7 +258,6 @@ The migrated suite must keep coverage for:
 - `restrict_vmap.py` fails cleanly when input metadata omits `contig_naming`
 - `restrict_vmap.py` performs no implicit normalization
 - mismatched build or contig naming fails clearly
-- duplicate target-side rows in the source `.vmap` are invalid before restriction
 - output IDs, order, provenance, and `allele_op` come from the source `.vmap`
 - restriction inputs affect membership only
 - multiple restriction inputs are combined by intersection, not union
@@ -440,24 +426,23 @@ The migrated suite must keep coverage for:
 - `prepare_variants.py` accepts optional `--max-allele-length` (default `150`) and passes it through unchanged to the selected importer
 - `prepare_variants.py` defaults `--dst-build` to `GRCh38`
 - `prepare_variants.py` defaults `--dst-contig-naming` to `ncbi`
-- `prepare_variants.py` accepts `--allow-strand-flips` / `--no-allow-strand-flips` and defaults strand-flip allowance to on
-- `prepare_variants.py` accepts `--norm-indels` / `--no-norm-indels` and defaults indel normalization to on
+- cover the [preparation input/option policy](spec/workflow.md#input-variant-filtering-and-indel-options) for both wrappers, including default invocations, `--include-indels`, independent positive/negative overrides, and actual subcommand forwarding
+- use mixed-length input fixtures to check QC and provenance for input filtering, plus multibase lifted output originating from class 1 input to detect unintended output filtering
+- check input-filter placement against retained imported/normalized stages and build-guess input, and warning behavior for explicit operation flags without input opt-in
+- verify that both wrappers forward input inclusion to the restriction primitive, whose exclusions use the build-compatible stage QC and existing resume/force lifecycle; sharded forwarding must preserve omitted versus explicit indel-operation controls
+- cover all-filtered input in both wrappers with resolved source metadata, including an empty group alongside a non-empty group, all groups empty, and a destination build different from the source; check empty retained stages, final metadata, counts, and exclusion audits
+- cover a clear source-build error for empty or inconclusive input before filtering without a known build, without borrowing metadata from another shard group
 - `prepare_variants.py` skips `normalize_contigs.py` only when the current object already declares the requested `--dst-contig-naming`
 - `prepare_variants.py` runs `normalize_contigs.py` when importer-declared `contig_naming` differs from the requested `--dst-contig-naming`
 - if `prepare_variants.py --dst-contig-naming=plink_splitx` encounters `genome_build=unknown`, it defers final `plink_splitx` normalization until build is known
 - in that deferred `plink_splitx` case, if the current retained stage also omits `contig_naming`, `prepare_variants.py` first normalizes to interim build-independent `plink`
 - `prepare_variants.py` skips `liftover_build.py` when the source already matches `--dst-build`
 - `prepare_variants.py` runs `restrict_build_compatible.py` before any optional liftover
-- `prepare_variants.py` passes both `--allow-strand-flips` and `--norm-indels` through to `restrict_build_compatible.py` by default
-- `prepare_variants.py --no-allow-strand-flips` omits only `--allow-strand-flips` from the `restrict_build_compatible.py` invocation
-- `prepare_variants.py --no-norm-indels` omits only `--norm-indels` from the `restrict_build_compatible.py` invocation
-- `prepare_variants.py --no-allow-strand-flips --no-norm-indels` still runs `restrict_build_compatible.py` in its default same-build reference-compatible mode
-- `prepare_variants.py` passes `--sort` to `restrict_build_compatible.py` when the current retained stage already matches `--dst-build`
-- `prepare_variants.py` final output is in declared coordinate order, coming from same-build `restrict_build_compatible.py --sort` or from `liftover_build.py` when liftover runs
+- `prepare_variants.py` never passes the removed sorting/duplicate-cleanup flags to restriction; it always invokes `sort_variants.py` as the final transform, after optional liftover, deferred split-X normalization, and filtering, then copies the sorted stage to final output
 - in the deferred `plink_splitx` case, `prepare_variants.py` runs one final `normalize_contigs.py --to plink_splitx` stage only after build is known and after any required liftover
 - in the deferred `plink_splitx` case, that final normalization happens before any optional `drop_strand_ambiguous.py` or `restrict_contigs.py`
-- `prepare_variants.py` retains the same `<prefix>.build_compatible.vmap` stage name regardless of whether `restrict_build_compatible.py` ran with neither flag, either flag, both flags, or `--sort`
-- under `--norm-indels`, `prepare_variants.py` still exposes one build-compatible retained stage even if `restrict_build_compatible.py` internally makes at most one `bcftools norm` call for branch 2 and at most one `bcftools norm` call for branch 3
+- cover retained stage naming across all input-filter and operation controls
+- under `--norm-indels`, `prepare_variants.py` retains one build-compatible stage
 - `prepare_variants.py` retains `<prefix>.splitx.vmap` only for the deferred final `plink_splitx` normalization case
 - `prepare_variants.py` copies the last retained `current_path` to `<output>.vmap`
 - without `--resume` or `--force`, `prepare_variants.py` fails if any planned output or retained intermediate already exists
@@ -472,8 +457,9 @@ The migrated suite must keep coverage for:
 - with `--resume`, `prepare_variants.py` fails on a retained stage-graph hole where a later planned stage output exists but an earlier required stage output is missing
 - with `--resume`, `prepare_variants.py` does nothing if final `<output>.vmap` already exists
 - with `--force`, `prepare_variants.py` deletes the full retained `<prefix>.*.vmap` stage namespace plus final `<output>.vmap` before rerunning cleanly from scratch
+- for both preparation wrappers, run with `--include-indels`, then rerun with `--force` without indel inclusion or normalization; verify the build-compatible stage's `<stage-output>.bcftools_norm*` namespace is empty for every processed group
 - with `--resume`, `prepare_variants.py` propagates liftover resume so a missing final lifted object can be rebuilt from retained bcftools liftover output without rerunning bcftools
-- retained intermediate filenames are deterministic and derived from the chosen prefix, where omitted `--prefix` means `--output`, plus clear step-specific suffixes; same-build wrapper runs do not retain a separate `.sorted.vmap`
+- retained intermediate filenames are deterministic and derived from the chosen prefix, where omitted `--prefix` means `--output`, plus clear step-specific suffixes, including final `<prefix>.sorted.vmap`
 - test that deferred `plink_splitx` normalization first uses interim `plink` when both contig naming and build are unresolved
 - test that deferred `plink_splitx` normalization runs after build resolution and after any required liftover
 - test that deferred `plink_splitx` normalization retains `<prefix>.splitx.vmap`
@@ -487,16 +473,10 @@ The migrated suite must keep coverage for:
 - test that `--resume` never overwrites outputs
 - test that if final `<output>.vmap` already exists in `--resume` mode, the wrapper performs no further work
 - test that `--force` deletes wrapper-managed outputs first and then reruns cleanly from scratch
-- test that `prepare_variants.py` invokes `restrict_build_compatible.py` with both `--allow-strand-flips` and `--norm-indels` by default
-- test that `prepare_variants.py --no-allow-strand-flips` omits only `--allow-strand-flips`
-- test that `prepare_variants.py --no-norm-indels` omits only `--norm-indels`
-- test that `prepare_variants.py --no-allow-strand-flips --no-norm-indels` omits both flags
-- test that `prepare_variants.py` passes `--sort` to `restrict_build_compatible.py` when liftover is skipped
 - test that `prepare_variants.py --input-format sumstats --id-lookup` passes `--id-lookup` through to `import_sumstats.py`
 - test that `prepare_variants.py --input-format sumstats --max-allele-length` passes `--max-allele-length` through to `import_sumstats.py`
-- test that `prepare_variants.py` does not invoke `sort_variants.py` and does not retain `.sorted.vmap`
-- test that `prepare_variants.py` keeps the retained stage path `<prefix>.build_compatible.vmap` for all four flag combinations
-- test that `prepare_variants.py --norm-indels` still completes the wrapper with the single retained build-compatible stage when the retained rows are pure SNPs
+- test that the final sort stage uses no `--drop-duplicates` and participates in preflight, resume-hole detection, `--resume`, and `--force`, including same-build, lifted, and empty preparation results
+- test that `prepare_variants.py --norm-indels` completes with a single retained build-compatible stage when all retained input rows have single-base alleles
 
 - `project_payload.py` requires raw `--input`
 - `project_payload.py` requires `--input-format`
@@ -552,4 +532,4 @@ The migrated suite must keep coverage for:
 - Prefer small hand-written `.vtable`, `.vmap`, and sumstats fixtures.
 - Keep external-tool integration out of the default unit suite unless the canonical tool requires it.
 - Canonical tests must not depend on `.match`, source-side `.vmap` metadata, dual-build BIM, or hidden cross-build behavior.
-- The canonical cleanup workflow is import -> normalize or repair target contigs -> `restrict_build_compatible.py` with optional `--allow-strand-flips`, optional `--norm-indels`, and optional `--sort` -> optional liftover -> optional explicit standalone `sort_variants.py` -> optional `restrict_contigs.py` -> downstream restriction/intersection, materialize, and apply.
+- Follow the canonical cleanup workflow and operation controls in [workflow.md](spec/workflow.md) and [variant-transforms.md](spec/variant-transforms.md).
