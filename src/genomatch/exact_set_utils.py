@@ -72,6 +72,10 @@ def format_metadata_summary(infos: Sequence[TargetObjectInfo]) -> str:
 def require_shared_target_metadata(infos: Sequence[TargetObjectInfo]) -> None:
     builds = {str(info.target_metadata["genome_build"]) for info in infos}
     metadata_summary = format_metadata_summary(infos)
+    if "unknown" in builds:
+        raise ValueError(
+            f"all inputs must have a known genome_build; run guess_build.py before matching\n{metadata_summary}"
+        )
     contig_namings = set()
     for info in infos:
         try:

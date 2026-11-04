@@ -168,6 +168,7 @@ The migrated suite must keep coverage for:
 - `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
 - `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles
 - `sort_variants.py` sorts target rows into declared coordinate order
+- exact matching tools (`intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, `assign_vmap_ids.py`) reject any `genome_build: unknown` before reading rows or emitting output, including all-unknown inputs and an unknown input in either role, for both `.vmap` and `.vtable` membership inputs
 - declared coordinate order follows the [row-order contract](spec/core-objects.md#row-order-contract)
 - exercise the allele tie-break with a co-located SNV and deletion whose `a1`-first and `a2`-first orders differ, covering `sort_variants.py`, `intersect_variants.py`, `union_variants.py`, and `liftover_build.py`; verify numeric position and declared contig ordering independently of rendered ID strings
 - generated-ID coverage must include every generation surface in the [generated-ID contract](spec/core-objects.md#generated-variant-ids), multibase alleles, and unverified rows whose IDs remain slot-derived without reference validation; copied and explicitly retained IDs remain unchanged
