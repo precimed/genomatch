@@ -176,3 +176,35 @@ def test_real_normalization_trimming_collisions_and_mnv(tmp_path):
     assert result.returncode == 0, result.stderr
     assert read_tsv(output) == [['1', '4', 'mnv', 'CCT', 'AGC']]
     assert read_tsv(output.with_name(output.name+'.qc.tsv'))[1:] == [['0', 'padded', 'duplicate_target'], ['1', 'snv', 'duplicate_target']]
+
+
+def test_bulk_normalization_results_preserve_interleaved_rows_and_long_alleles(tmp_path, monkeypatch):
+    """Filtered middle candidates must not shift later normalized values to SNVs."""
+    restrict_env_with_fake_norm(tmp_path, behavior={}, grch37_sequence='AGC' * 10)
+    long_alt = 'C' * 1000
+    source = pd.DataFrame([
+        ('1', '1', 'snv', 'C', 'A'),
+        ('1', '4', 'normalized', 'A', 'AG'),
+        ('1', '7', 'snv2', 'G', 'A'),
+        ('1', '10', 'missing', 'A', 'AG'),
+        ('1', '13', 'long', 'CC', 'AG'),
+    ], columns=['chrom', 'pos', 'id', 'a1', 'a2'], dtype=object)
+    def normalize(candidates, **kwargs):
+        return {
+            candidates[0].candidate_id: restriction.NormalizationOutcome(
+                restriction.VariantRow('1', '5', 'normalized', 'T', 'G'), 'identity'),
+            candidates[1].candidate_id: restriction.NormalizationOutcome(None, 'identity', 'norm_ref_mismatch'),
+            candidates[2].candidate_id: restriction.NormalizationOutcome(
+                restriction.VariantRow('1', '14', 'long', long_alt, 'G'), 'identity'),
+        }
+    monkeypatch.setattr(restriction, 'normalize_candidates', normalize)
+    outcomes = restriction.build_restriction_outcomes_table(
+        VariantRowsTable.from_frame(source), fasta_path=tmp_path/'GRCh37.ucsc.fa',
+        contig_naming='ncbi', allow_strand_flips=False, norm_indels=True,
+        genome_build='GRCh37', output_path=tmp_path/'out.vtable', include_indels=True,
+    )
+    assert outcomes['keep'].tolist() == [True, True, True, False, True]
+    assert outcomes['out_pos'].tolist() == ['1', '5', '7', '10', '14']
+    assert outcomes['out_a1'].tolist() == ['C', 'T', 'G', 'A', long_alt]
+    assert outcomes['status'].tolist() == [None, None, None, 'norm_ref_mismatch', None]
+    assert outcomes['out_a1'].dtype == object

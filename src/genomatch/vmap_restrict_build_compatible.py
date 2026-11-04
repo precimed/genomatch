@@ -409,14 +409,24 @@ def build_restriction_outcomes_table(
             ))
     if selected_candidates:
         normalized = normalize_candidates(selected_candidates, fasta_path=fasta_path, contig_naming=contig_naming, output_path=output_path)
-        # PERF: normalization bookkeeping is multibase-only and bounded by candidate batches.
-        for candidate in selected_candidates:
-            idx = candidate.input_index
-            result = apply_normalization_ploidy_filter(candidate.row, normalized[candidate.candidate_id], genome_build=genome_build)
-            outcomes.at[idx, "keep"] = result.row is not None
-            outcomes.at[idx, "status"] = result.status
-            if result.row is not None:
-                outcomes.loc[idx, ["out_chrom", "out_pos", "out_a1", "out_a2"]] = [result.row.chrom, result.row.pos, result.row.a1, result.row.a2]
+        # PERF: keep row-local ploidy checks on the multibase subset, but collect
+        # results before assigning columns; per-row pandas writes scale poorly.
+        results = [
+            apply_normalization_ploidy_filter(
+                candidate.row, normalized[candidate.candidate_id], genome_build=genome_build,
+            )
+            for candidate in selected_candidates
+        ]
+        indexes = [candidate.input_index for candidate in selected_candidates]
+        outcomes.loc[indexes, "keep"] = [result.row is not None for result in results]
+        outcomes.loc[indexes, "status"] = pd.array([result.status for result in results], dtype=object)
+        retained = [(idx, result.row) for idx, result in zip(indexes, results) if result.row is not None]
+        if retained:
+            outcomes.loc[
+                [idx for idx, _ in retained], ["out_chrom", "out_pos", "out_a1", "out_a2"]
+            ] = pd.DataFrame(
+                [(row.chrom, row.pos, row.a1, row.a2) for _, row in retained], dtype=object,
+            ).to_numpy(dtype=object)
     unmatched = ~outcomes["keep"] & outcomes["status"].isna()
     outcomes.loc[unmatched, "status"] = "no_reference_match"
     return outcomes
