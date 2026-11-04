@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from genomatch import reference_utils
@@ -197,3 +198,133 @@ def test_resolve_reference_access_mode_rejects_unknown_value(monkeypatch):
     monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", "fast")
     with pytest.raises(ValueError, match="unsupported MATCH_REFERENCE_ACCESS_MODE"):
         reference_utils.resolve_reference_access_mode()
+
+
+@pytest.mark.parametrize("mode", [None, "bulk", "LeGaCy"])
+def test_reference_alleles_match_full_alleles_and_bounds(tmp_path, monkeypatch, mode):
+    fasta = tmp_path / "reference.fa"
+    write_fasta(fasta, {"chr1": "agcNryta", "chr2": "t"})
+    if mode is None:
+        monkeypatch.delenv("MATCH_REFERENCE_ACCESS_MODE", raising=False)
+    else:
+        monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", mode)
+    queries = [
+        ("chr1", 1, "A", True),
+        ("chr1", 1, "AG", True),
+        ("chr1", 1, "AGC", True),
+        ("chr1", 1, "AT", False),  # First base alone agrees.
+        ("chr1", 2, "GC", True),
+        ("chr1", 3, "CAAA", False),  # Reference ambiguity characters.
+        ("chr1", 7, "TA", True),
+        ("chr1", 8, "A", True),
+        ("chr1", 8, "AG", False),
+        ("chr1", 9, "A", False),
+        ("chr1", 1, "AGCAAAAAA", False),
+        ("chr1", 0, "A", False),  # Negative startswith offset would match the end.
+        ("chr1", -1, "TA", False),
+        ("chr1", 1, "", False),
+        ("chr1", 9, "", False),
+        ("chr2", 1, "T", True),
+        ("chr2", 1, "TA", False),
+        ("missing", 1, "A", False),
+        ("missing", 1, "", False),
+        ("chr1", 1, "AG", True),  # Preserve duplicates and original order.
+    ]
+    contigs, positions, alleles, expected = zip(*queries)
+    result = reference_utils.reference_alleles_match(fasta, contigs, positions, alleles)
+    assert result.dtype == np.dtype(bool)
+    np.testing.assert_array_equal(result, expected)
+    # Also accept arrays directly, as future table-based callers will supply them.
+    np.testing.assert_array_equal(
+        reference_utils.reference_alleles_match(
+            fasta, np.array(contigs, dtype=object), np.array(positions), np.array(alleles, dtype=object)
+        ),
+        expected,
+    )
+    # Existing one-base APIs retain their results, including ambiguity characters.
+    base_queries = [("chr1", 1), ("chr1", 4), ("chr1", 9), ("missing", 1)]
+    bases = reference_utils.fetch_reference_bases(fasta, base_queries)
+    assert bases == {("chr1", 1): "A", ("chr1", 4): "N", ("chr1", 9): "", ("missing", 1): ""}
+    for (contig, pos), base in bases.items():
+        assert reference_utils.fetch_reference_base(fasta, contig, pos) == base
+
+
+@pytest.mark.parametrize("mode", ["BULK", "LEGACY"])
+def test_reference_alleles_match_empty_batch_does_not_open_fasta(tmp_path, monkeypatch, mode):
+    monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", mode)
+    result = reference_utils.reference_alleles_match(tmp_path / "absent.fa", [], [], [])
+    assert result.shape == (0,)
+    assert result.dtype == np.dtype(bool)
+
+
+@pytest.mark.parametrize("contigs,positions,alleles", [(["chr1"], [], ["A"]), ([], [], ["A"])])
+def test_reference_alleles_match_rejects_misaligned_queries(tmp_path, contigs, positions, alleles):
+    with pytest.raises(ValueError, match="must have equal lengths"):
+        reference_utils.reference_alleles_match(tmp_path / "absent.fa", contigs, positions, alleles)
+
+
+def test_reference_alleles_match_bulk_batches_distinct_queries_and_isolates_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", "BULK")
+    fasta_a = tmp_path / "a.fa"
+    fasta_b = tmp_path / "b.fa"
+    write_fasta(fasta_a, {"chr1": "AGC" * 1000, "chr2": "TAC" * 1000})
+    write_fasta(fasta_b, {"chr1": "TTC" * 1000, "chr2": "GAC" * 1000})
+    open_fasta = reference_utils.open_indexed_fasta
+    fetches = []
+
+    class TrackedFasta:
+        def __init__(self, path):
+            self.path = path
+            self.fasta = open_fasta(path)
+            self.references = self.fasta.references
+
+        def fetch(self, contig, start=None, end=None):
+            fetches.append((self.path, contig, start, end))
+            return self.fasta.fetch(contig, start, end)
+
+        def __getattr__(self, name):
+            return getattr(self.fasta, name)
+
+    monkeypatch.setattr(reference_utils, "open_indexed_fasta", TrackedFasta)
+    # Interleave contigs to exercise positional alignment, using distinct positions
+    # so a per-unique-variant indexed fetch implementation cannot pass this test.
+    contigs = ["chr1", "chr2"] * 1000
+    positions = [3 * (index // 2) + 1 for index in range(len(contigs))]
+    alleles = ["AG", "TAC"] * 1000
+    result_a = reference_utils.reference_alleles_match(fasta_a, contigs, positions, alleles)
+    result_b = reference_utils.reference_alleles_match(fasta_b, contigs, positions, alleles)
+    assert result_a.all()
+    assert not result_b.any()
+    np.testing.assert_array_equal(
+        reference_utils.reference_alleles_match(fasta_a, contigs, positions, alleles), result_a
+    )
+    assert reference_utils.fetch_reference_bases(fasta_a, [("chr1", 1)]) == {("chr1", 1): "A"}
+    assert fetches
+    assert len(fetches) < len(positions) // 10
+
+
+@pytest.mark.parametrize("mode", ["BULK", "LEGACY"])
+def test_reference_alleles_match_missing_index_fails_clearly(tmp_path, monkeypatch, mode):
+    monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", mode)
+    fasta = tmp_path / "unindexed.fa"
+    fasta.write_text(">chr1\nAGC\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="FASTA index not found"):
+        reference_utils.reference_alleles_match(fasta, ["chr1"], [1], ["AG"])
+
+
+@pytest.mark.parametrize("mode", ["BULK", "LEGACY"])
+def test_reference_alleles_match_fetch_failure_is_not_a_mismatch(tmp_path, monkeypatch, mode):
+    monkeypatch.setenv("MATCH_REFERENCE_ACCESS_MODE", mode)
+
+    class BrokenFasta:
+        references = ("chr1",)
+
+        def get_reference_length(self, contig):
+            return 3
+
+        def fetch(self, *args):
+            raise OSError("unreadable reference")
+
+    monkeypatch.setattr(reference_utils, "open_indexed_fasta", lambda path: BrokenFasta())
+    with pytest.raises(ValueError, match="unreadable reference"):
+        reference_utils.reference_alleles_match(tmp_path / "broken.fa", ["chr1"], [1], ["AG"])
