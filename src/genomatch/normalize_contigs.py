@@ -41,7 +41,8 @@ def main() -> int:
     logger.info("normalize_contigs.py: normalizing %s -> %s (to=%s)", input_path, output_path, args.to)
     if not input_path.exists():
         raise ValueError(f"input file not found: {input_path}")
-    loaded = load_variant_object_tables(input_path)
+    # Repair accepts exact repeats; the output-key check below audits all collisions.
+    loaded = load_variant_object_tables(input_path, check_duplicates=False)
     genome_build = str(loaded.target_metadata.get("genome_build"))
     is_vmap = loaded.base_vmap_table is not None
     source_frame = (

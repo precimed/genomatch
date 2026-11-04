@@ -51,18 +51,18 @@ def object_type_for_path(path: Path) -> str:
     raise ValueError(f"unsupported input: {path}")
 
 
-def load_sort_input(path: Path, *, allow_vmap_duplicates: bool) -> tuple[str, dict, str, pd.DataFrame]:
+def load_sort_input(path: Path, *, allow_duplicates: bool) -> tuple[str, dict, str, pd.DataFrame]:
     object_type = object_type_for_path(path)
     metadata = load_metadata(path)
     if object_type == "variant_table":
         validate_vtable_metadata(metadata)
         contig_naming = require_contig_naming(metadata, label="variant object")
-        frame = read_vtable_table(path).to_frame(copy=False)
+        frame = read_vtable_table(path, check_duplicates=not allow_duplicates).to_frame(copy=False)
     else:
         validate_vmap_metadata(metadata)
         target_metadata = dict(metadata["target"])
         contig_naming = require_contig_naming(target_metadata, label="variant object")
-        frame = read_vmap_table(path, check_duplicates=not allow_vmap_duplicates).to_frame(copy=False)
+        frame = read_vmap_table(path, check_duplicates=not allow_duplicates).to_frame(copy=False)
     return object_type, metadata, contig_naming, frame
 
 
@@ -93,7 +93,7 @@ def main() -> int:
 
     object_type, metadata, contig_naming, frame = load_sort_input(
         input_path,
-        allow_vmap_duplicates=args.drop_duplicates,
+        allow_duplicates=args.drop_duplicates,
     )
     sorted_frame = sort_target_table_by_declared_coordinate(frame, contig_naming, label="variant object")
     if args.drop_duplicates:

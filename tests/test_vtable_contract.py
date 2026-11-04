@@ -1,5 +1,6 @@
 import pytest
 
+from genomatch import vtable_utils
 from genomatch.vtable_utils import (
     VariantRow,
     read_vmap,
@@ -56,6 +57,25 @@ def test_read_vmap_rejects_missing_provenance_sentinel(tmp_path):
 
     with pytest.raises(ValueError, match="source_index out of range"):
         read_vmap(source)
+
+
+@pytest.mark.parametrize('suffix', ['vmap', 'vtable'])
+def test_duplicate_keys_ignore_ids_and_provenance_but_preserve_exact_stored_keys(tmp_path, suffix):
+    source = tmp_path / f'input.{suffix}'
+    rows = ['1\t01\tshared_id\tAC\tA', '1\t1\tshared_id\tAC\tA',
+            'chr1\t1\tshared_id\tAC\tA', '1\t1\tshared_id\tA\tAC']
+    if suffix == 'vmap':
+        rows = [f'{row}\t.\t0\tidentity' for row in rows]
+    source.write_text('\n'.join(rows) + '\n')
+    reader = vtable_utils.read_vmap_table if suffix == 'vmap' else vtable_utils.read_vtable_table
+    assert len(reader(source)) == 4
+    # Changing only the ID/provenance does not make a repeated target key unique.
+    repeated = '1\t1\tdifferent_id\tAC\tA' + ('\tother_shard\t9\tswap' if suffix == 'vmap' else '')
+    with source.open('a') as handle:
+        handle.write(repeated + '\n')
+    with pytest.raises(ValueError, match='sort_variants.py --drop-duplicates') as error:
+        reader(source)
+    assert str(source) in str(error.value)
 
 
 def test_metadata_variants_count_is_optional_but_validated_when_present():

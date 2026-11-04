@@ -126,7 +126,8 @@ def main() -> int:
     if not input_path.exists():
         raise ValueError(f"input variant object not found: {input_path}")
 
-    loaded = load_variant_object(input_path)
+    # Evidence is row-weighted, including repeats; no variant rows are rewritten.
+    loaded = load_variant_object(input_path, check_duplicates=False)
     current_meta = dict(loaded.raw_metadata)
     contig_naming = require_contig_naming(loaded.target_metadata, label="variant object")
     rows = loaded.target_rows

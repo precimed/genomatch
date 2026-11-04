@@ -132,7 +132,8 @@ The migrated suite must keep coverage for:
 
 ### Tools accepting `.vmap` or `.vtable`
 
-- for every primitive listed in [tools accepting `.vmap` or `.vtable`](spec/variant-transforms.md#tools-accepting-vmap-or-vtable), run equivalent ordered canonical target rows and metadata as `.vmap` and `.vtable` with the same options and reference assets; compare target rows, IDs, order, target metadata, retained/dropped counts, exclusion statuses, warnings, and failure behavior; also compare documented cleanup modes, with unsupported duplicate-containing input governed by the [duplicate-input rules](spec/variant-transforms.md#duplicate-containing-input)
+- for every primitive listed in [tools accepting `.vmap` or `.vtable`](spec/variant-transforms.md#tools-accepting-vmap-or-vtable), run equivalent ordered canonical target rows and metadata as `.vmap` and `.vtable` with the same options and reference assets; compare target rows, IDs, order, target metadata, retained/dropped counts, exclusion statuses, warnings, and failure behavior; also compare documented cleanup modes
+- under the [duplicate-input rule](spec/variant-transforms.md#duplicate-containing-input), verify the five rejecting primitives and the specified source-mapping readers fail on repeated variant keys and name the cleanup route; cover both object types where supported; verify explicit keep-first sorting cleanup, contig repair accepting exact repeats and dropping all duplicate output keys to original-locator QC (including mixed labels without `contig_naming` and unchanged labels), and build guessing preserving repeated-row weighting and total row counts without rewriting input rows; set-membership and ID-lookup inputs keep their own repeated-key rules
 - verify output type and metadata layout follow the input type; `.vmap` preserves original provenance and composes allele operations, while `.vtable` contains no provenance or `allele_op` columns
 - exercise missing and malformed target metadata, reference mismatches, all-filtered input, duplicate cleanup, and distinct input variant keys becoming equal after transformation for both types within each primitive's supported behavior
 - verify [variant keys](spec/core-objects.md#variant-keys) use the exact stored values before and after each transform and ignore IDs and provenance; include distinct contig spellings and allele orders that become equal only after the relevant transform
@@ -515,6 +516,7 @@ The migrated suite must keep coverage for:
 - `project_payload.py` supports `--force`
 - by default, `project_payload.py` fails if any wrapper-managed output already exists
 - for `bfile` and `pfile` output prefixes containing `@`, `project_payload.py` determines wrapper-managed PLINK outputs by replacing `@` with target contig labels present in the input `.vmap`, without glob-based inference
+- output planning and `--force` cleanup reuse the validated map's contigs; the standalone prefix-planning fallback streams only the chromosome column, preserving exact labels and first-occurrence order, including empty input
 - `project_payload.py --target-fam`, `--target-psam`, and `--sample-id-mode` are passed through unchanged to the format-appropriate canonical apply tool
 - `project_payload.py --retain-snp-id` is passed through unchanged to the format-appropriate canonical apply tool; without it, projected payload IDs use the apply-time corrected target ID default
 - `project_payload.py` prints the invoked subcommands

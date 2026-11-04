@@ -39,9 +39,11 @@ If imported rows are mixed or invalid:
 
 `normalize_contigs.py` is the only repair path. It may normalize target rows from mixed or inconsistent inputs, drops any row that cannot be mapped to the chosen target convention, preserves retained row order, emits the same artifact type as the input, and reports how many rows were normalized and how many were dropped as unresolved.
 
-If contig normalization makes distinct input [variant keys](core-objects.md#variant-keys)
-equal on output, `normalize_contigs.py` must drop all affected rows with status
+For every repeated output [variant key](core-objects.md#variant-keys),
+`normalize_contigs.py` must drop all affected rows with status
 `duplicate_target`, following the [shared row-level QC contract](variant-transforms.md#row-level-qc).
+This includes exact repeats in the input as well as distinct input keys that
+become equal after normalization, even when no label changes are needed.
 
 `normalize_contigs.py` operates on the target side only. It must not rewrite `source_shard`.
 
@@ -74,6 +76,10 @@ In v1, `guess_build.py` evaluates only `GRCh37` and `GRCh38`.
 For each build it computes an allele/reference compatibility rate against the configured UCSC internal FASTA for that build, after internal normalization to UCSC contig naming when needed.
 
 By default, build guessing is computed on a random downsample of up to `10,000` target rows (`--sample-rows 10000`). Sampling is without replacement and deterministic for reproducibility. Use `--sample-rows 0` to disable downsampling and evaluate all rows.
+
+Rows are evaluated as supplied, including repeats, without deduplication.
+Repeated keys therefore retain their multiplicity in the sampling population
+and compatibility evidence. `variants_count` remains the total row count.
 
 The current fixed decision policy is:
 

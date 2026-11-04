@@ -134,7 +134,7 @@ and multibase alleles. Each transform defines which operations it permits.
 - FASTA-consuming tools use bulk reference access by default. The reference access mode is controlled by `MATCH_REFERENCE_ACCESS_MODE`, which accepts `BULK` and `LEGACY` case-insensitively (`BULK` is the default when unset).
 - The legacy per-lookup FASTA fetch path is available only in `LEGACY` mode, primarily for tests and profiling.
 - `liftover_build.py` is the only cross-build conversion entrypoint.
-- Canonical outputs have unique [variant keys](#variant-keys) in both `.vmap` and `.vtable`. Distinct input variant keys may become equal after transformation; tools that create these duplicate output variant keys must handle them under their documented policy.
+- Canonical outputs have unique [variant keys](#variant-keys) in both `.vmap` and `.vtable`. Distinct input variant keys may become equal after transformation; tools that create these duplicate output variant keys must handle them under their documented policy. Repeated keys in an input object follow the [duplicate-input rule](variant-transforms.md#duplicate-containing-input).
 - In `.vmap` provenance, `source_index` must be a non-negative shard-local row index.
 - `source_shard` must be present for every `.vmap` row; `.` means a single-file source.
 - `.vmap` must not contain unmatched target rows or missing-provenance sentinels.

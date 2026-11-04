@@ -23,6 +23,7 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 
 **Individual tools**
 
+- Most tools now reject repeated variants in `.vtable` inputs, as they already did for `.vmap`. Run `sort_variants.py --drop-duplicates` to keep the first of each.
 - `restrict_build_compatible.py` follows the same rules, but every indel option is off by default: `--include-indels` keeps multi-base variants, and `--allow-indel-swaps` and `--norm-indels` must be added separately.
 - Removed `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`. Use `sort_variants.py` to sort; its `--drop-duplicates` keeps the first of any exact duplicates.
 - `liftover_build.py` no longer checks source alleles against the reference and expects `a2` to be the reference allele. If you run it directly, run `restrict_build_compatible.py` first. The preparation tools already do.

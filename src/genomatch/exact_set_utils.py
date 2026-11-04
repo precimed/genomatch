@@ -94,7 +94,7 @@ def read_target_table(path: Path) -> VariantRowsTable:
     # Performs: PN/PV via object readers, target-column projection.
     # Guarantees: validated target rows without provenance, allele history, or QC ordinals.
     if path.name.endswith(".vtable"):
-        table = read_vtable_table(path)
+        table = read_vtable_table(path, check_duplicates=False)
     elif path.name.endswith(".vmap"):
         table = read_vmap_table(path, check_duplicates=False)
     else:
@@ -167,7 +167,7 @@ def restrict_frame_to_membership_chunks(driver_frame: pd.DataFrame, restriction_
     if restriction_path.name.endswith(".vtable"):
         chunk_iter = iter_vtable_table_chunks(restriction_path, label="variant table row")
     elif is_vmap:
-        chunk_iter = iter_vmap_table_chunks(restriction_path, check_duplicates=False)
+        chunk_iter = iter_vmap_table_chunks(restriction_path)
     else:
         raise ValueError(f"unsupported variant object path: {restriction_path}")
 

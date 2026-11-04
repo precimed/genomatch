@@ -63,8 +63,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def iter_id_source_target_chunks(path: Path) -> Iterator[pd.DataFrame]:
+    # Repeated unused keys are allowed; used-key ambiguity is checked by this tool.
     if path.name.endswith(".vmap"):
-        for table in iter_vmap_table_chunks(path, check_duplicates=False):
+        for table in iter_vmap_table_chunks(path):
             yield table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
     else:
         for table in iter_vtable_table_chunks(path):
@@ -235,7 +236,8 @@ def main() -> int:
             ),
         )
 
-    write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False))
+    # Filtering validated source rows and changing only IDs preserves key uniqueness.
+    write_vmap_table(output_path, VMapRowsTable.from_frame(out_frame, copy=False), assume_validated=True)
     write_metadata(output_path, metadata_with_variants_count(vmap_info.raw_metadata, len(out_frame)))
     logger.info(
         "assign_vmap_ids.py: wrote %s with %s assigned rows; dropped %s rows",

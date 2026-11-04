@@ -1,7 +1,11 @@
 from pathlib import Path
+import sys
 
 import numpy as np
 import pgenlib
+import pytest
+
+from genomatch import vmap_project_payload, workflow_wrapper_utils
 
 from utils import read_bed_matrix, read_bim, run_py, write_bfile, write_json, write_lines
 
@@ -105,6 +109,49 @@ def test_project_payload_requires_vmap(tmp_path):
 
     assert result.returncode != 0
     assert "the following arguments are required: --vmap" in result.stderr
+
+
+@pytest.mark.parametrize('input_format,extension', [('bfile', '.bed'), ('pfile', '.pgen')])
+@pytest.mark.parametrize('force', [False, True])
+def test_project_output_planning_reuses_validated_map(tmp_path, monkeypatch, input_format, extension, force):
+    source = tmp_path / 'source.vmap'
+    write_vmap(source, ['2\t1\tsecond\tC\tA\t.\t0\tidentity',
+                        'X\t1\tx\tC\tA\t.\t1\tidentity',
+                        '2\t2\tsecond_again\tC\tA\t.\t2\tidentity',
+                        '1\t1\tfirst\tC\tA\t.\t3\tidentity'])
+    unrelated = tmp_path / f'out.9{extension}'
+    unrelated.write_text('keep')
+    managed = tmp_path / f'out.2{extension}'
+    if force:
+        managed.write_text('replace')
+    original = vmap_project_payload.require_supported_args
+
+    def validate_then_remove_input(args):
+        table = original(args)
+        source.unlink()  # Any redundant planning read now fails.
+        return table
+
+    commands = []
+    monkeypatch.setattr(vmap_project_payload, 'require_supported_args', validate_then_remove_input)
+    monkeypatch.setattr(vmap_project_payload, 'run_command', commands.append)
+    raw_extension = '.bim' if input_format == 'bfile' else '.pvar'
+    monkeypatch.setattr(sys, 'argv', ['project_payload.py', '--vmap', str(source), '--input-format', input_format,
+                                     '--input', str(tmp_path / f'raw.@{raw_extension}'), '--output', str(tmp_path / 'out.@'),
+                                     *(['--force'] if force else [])])
+    assert vmap_project_payload.main() == 0
+    assert len(commands) == 1
+    assert unrelated.read_text() == 'keep'
+    assert not managed.exists()
+
+
+@pytest.mark.parametrize('chroms', [[], ['2', 'X', '2', '1', 'X']])
+def test_output_prefix_fallback_streams_exact_contigs_in_first_occurrence_order(tmp_path, monkeypatch, chroms):
+    source = tmp_path / 'source.vmap'
+    write_lines(source, [f'{chrom}\t{i + 1}\trow{i}\tC\tA\t.\t{i}\tidentity' for i, chrom in enumerate(chroms)])
+    monkeypatch.setattr(workflow_wrapper_utils, 'WRITE_CHUNK_ROWS', 2)
+    output = tmp_path / 'out.@'
+    assert workflow_wrapper_utils.expected_bfile_output_prefixes(output, source) == [
+        tmp_path / f'out.{chrom}' for chrom in dict.fromkeys(chroms)]
 
 
 def test_project_payload_sumstats_uses_explicit_vmap_and_does_not_retain_restricted_vmap(tmp_path):

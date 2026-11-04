@@ -7,7 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .vtable_utils import load_variant_object, metadata_path_for
+import pandas as pd
+
+from .vtable_utils import WRITE_CHUNK_ROWS, metadata_path_for
 
 logger = logging.getLogger(__name__)
 
@@ -133,21 +135,36 @@ BFILE_OPTIONAL_SUFFIXES = (".ploidy",)
 PFILE_REQUIRED_SUFFIXES = (".pgen", ".pvar", ".psam")
 
 
-def expected_bfile_output_prefixes(output_prefix: Path, target_path: Path) -> list[Path]:
+def expected_bfile_output_prefixes(
+    output_prefix: Path, target_path: Path, *, target_chroms: list[str] | None = None,
+) -> list[Path]:
+    # Assumes: target rows were validated by the caller; this is output planning.
+    # Performs: first-occurrence contig collection, using only column 0 if needed.
+    # Guarantees: exact stored contig labels/order without full-object validation
+    # or Python row construction; fallback memory is bounded by a chunk/contig set.
     if "@" not in str(output_prefix):
         return [output_prefix]
-    chrom_order: list[str] = []
-    for row in load_variant_object(target_path).target_rows:
-        if row.chrom not in chrom_order:
-            chrom_order.append(row.chrom)
+    if target_chroms is not None:
+        chrom_order = dict.fromkeys(target_chroms)
+    else:
+        chrom_order = {}
+        try:
+            with pd.read_table(target_path, sep="\t", header=None, usecols=[0], dtype="object",
+                               keep_default_na=False, chunksize=WRITE_CHUNK_ROWS) as reader:
+                # PERF: iterate bounded chunks and their small unique contig sets,
+                # retaining no variant-sized state or per-variant Python objects.
+                for chunk in reader:
+                    chrom_order.update(dict.fromkeys(chunk[0].unique()))
+        except pd.errors.EmptyDataError:
+            pass
     return [Path(str(output_prefix).replace("@", chrom_label)) for chrom_label in chrom_order]
 
 
-def planned_bfile_artifacts(output_prefix: Path, target_path: Path | None = None) -> list[Path]:
+def planned_bfile_artifacts(output_prefix: Path, target_path: Path | None = None, *, target_chroms: list[str] | None = None) -> list[Path]:
     if "@" in str(output_prefix):
         if target_path is None:
             raise ValueError("target_path is required to plan sharded PLINK outputs")
-        prefixes = expected_bfile_output_prefixes(output_prefix, target_path)
+        prefixes = expected_bfile_output_prefixes(output_prefix, target_path, target_chroms=target_chroms)
     else:
         prefixes = [output_prefix]
     artifacts: list[Path] = []
@@ -157,12 +174,12 @@ def planned_bfile_artifacts(output_prefix: Path, target_path: Path | None = None
     return artifacts
 
 
-def existing_bfile_artifacts(output_prefix: Path, target_path: Path | None = None) -> list[Path]:
-    return [artifact for artifact in planned_bfile_artifacts(output_prefix, target_path) if artifact.exists()]
+def existing_bfile_artifacts(output_prefix: Path, target_path: Path | None = None, *, target_chroms: list[str] | None = None) -> list[Path]:
+    return [artifact for artifact in planned_bfile_artifacts(output_prefix, target_path, target_chroms=target_chroms) if artifact.exists()]
 
 
-def delete_bfile_outputs(output_prefix: Path, target_path: Path | None = None) -> None:
-    for artifact in existing_bfile_artifacts(output_prefix, target_path):
+def delete_bfile_outputs(output_prefix: Path, target_path: Path | None = None, *, target_chroms: list[str] | None = None) -> None:
+    for artifact in existing_bfile_artifacts(output_prefix, target_path, target_chroms=target_chroms):
         artifact.unlink()
 
 
@@ -176,11 +193,11 @@ def bfile_output_exists(output_prefix: Path, target_path: Path) -> bool:
     )
 
 
-def planned_pfile_artifacts(output_prefix: Path, target_path: Path | None = None) -> list[Path]:
+def planned_pfile_artifacts(output_prefix: Path, target_path: Path | None = None, *, target_chroms: list[str] | None = None) -> list[Path]:
     if "@" in str(output_prefix):
         if target_path is None:
             raise ValueError("target_path is required to plan sharded PLINK outputs")
-        prefixes = expected_bfile_output_prefixes(output_prefix, target_path)
+        prefixes = expected_bfile_output_prefixes(output_prefix, target_path, target_chroms=target_chroms)
     else:
         prefixes = [output_prefix]
     artifacts: list[Path] = []
@@ -190,12 +207,12 @@ def planned_pfile_artifacts(output_prefix: Path, target_path: Path | None = None
     return artifacts
 
 
-def existing_pfile_artifacts(output_prefix: Path, target_path: Path | None = None) -> list[Path]:
-    return [artifact for artifact in planned_pfile_artifacts(output_prefix, target_path) if artifact.exists()]
+def existing_pfile_artifacts(output_prefix: Path, target_path: Path | None = None, *, target_chroms: list[str] | None = None) -> list[Path]:
+    return [artifact for artifact in planned_pfile_artifacts(output_prefix, target_path, target_chroms=target_chroms) if artifact.exists()]
 
 
-def delete_pfile_outputs(output_prefix: Path, target_path: Path | None = None) -> None:
-    for artifact in existing_pfile_artifacts(output_prefix, target_path):
+def delete_pfile_outputs(output_prefix: Path, target_path: Path | None = None, *, target_chroms: list[str] | None = None) -> None:
+    for artifact in existing_pfile_artifacts(output_prefix, target_path, target_chroms=target_chroms):
         artifact.unlink()
 
 

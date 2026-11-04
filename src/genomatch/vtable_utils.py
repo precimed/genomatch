@@ -287,8 +287,8 @@ def make_vmap_metadata(
     return metadata
 
 
-def read_vtable(path: Path) -> List[VariantRow]:
-    return read_vtable_table(path).to_rows()
+def read_vtable(path: Path, *, check_duplicates: bool = True) -> List[VariantRow]:
+    return read_vtable_table(path, check_duplicates=check_duplicates).to_rows()
 
 
 def variant_row_identity(row: VariantRow | VMapRow) -> Tuple[str, str, str, str]:
@@ -327,7 +327,8 @@ def iter_vmap_rows(path: Path) -> Iterator[VMapRow]:
 def iter_vtable_table_chunks(path: Path, *, label: str = "vtable row") -> Iterator[VariantRowsTable]:
     # Assumes: path contains a vtable payload.
     # Performs: PN(alleles), PV(rows), assignment of invocation-local QC ordinals.
-    # Guarantees: validated chunks with continuous row_idx independent of frame indexes.
+    # Guarantees: schema-valid chunks with continuous row_idx; repeated keys are
+    # permitted without accumulating input-sized uniqueness state.
     row_offset = 0
     for chunk in _iter_tabular_chunks(path, _VTABLE_COLUMNS, label=label):
         if chunk.isna().any(axis=None):
@@ -342,7 +343,11 @@ def iter_vtable_table_chunks(path: Path, *, label: str = "vtable row") -> Iterat
         yield table
 
 
-def iter_vmap_table_chunks(path: Path, *, check_duplicates: bool = True) -> Iterator[VMapRowsTable]:
+def iter_vmap_table_chunks(path: Path) -> Iterator[VMapRowsTable]:
+    # Assumes: path contains a vmap payload.
+    # Performs: PN/PV per chunk without target-key duplicate checks.
+    # Guarantees: schema-valid chunks with canonical alleles and provenance;
+    # repeated keys are permitted without accumulating input-sized state.
     for chunk in _iter_tabular_chunks(path, _VMAP_COLUMNS, label="vmap"):
         if chunk.isna().any(axis=None):
             raise ValueError(f"invalid vmap row in {path}")
@@ -357,14 +362,15 @@ def iter_vmap_table_chunks(path: Path, *, check_duplicates: bool = True) -> Iter
         frame = table.to_frame(copy=False)
         frame["a1"] = frame["a1"].str.strip().str.upper()
         frame["a2"] = frame["a2"].str.strip().str.upper()
-        _validate_vmap_frame(frame, assume_normalized_alleles=True, check_duplicates=check_duplicates)
+        _validate_vmap_frame(frame, assume_normalized_alleles=True, check_duplicates=False)
         yield table
 
 
-def read_vtable_table(path: Path) -> VariantRowsTable:
+def read_vtable_table(path: Path, *, check_duplicates: bool = True) -> VariantRowsTable:
     # Assumes: path points to a tab-delimited vtable payload.
     # Performs: PN(allele canonicalization), PV(row-shape/type parseability), SV/CV(frame validation).
-    # Guarantees: validated VariantRowsTable with uppercase alleles and stored input QC ordinals.
+    # Guarantees: validated VariantRowsTable with uppercase alleles and stored input QC ordinals;
+    # target keys are unique unless the input role explicitly permits repeats.
     frame = _read_exact_width_frame(path, _VTABLE_COLUMNS, label="vtable row")
     if frame.isna().any(axis=None):
         raise ValueError(f"invalid vtable row in {path}")
@@ -373,6 +379,8 @@ def read_vtable_table(path: Path) -> VariantRowsTable:
     frame["a1"] = frame["a1"].str.strip().str.upper()
     frame["a2"] = frame["a2"].str.strip().str.upper()
     _validate_vtable_frame(frame, label=str(path), assume_normalized_alleles=True)
+    if check_duplicates:
+        require_unique_target_frame(frame, label=str(path))
     frame["row_idx"] = np.arange(len(frame), dtype=np.int64)
     return table
 
@@ -405,8 +413,8 @@ def write_vtable_table(path: Path, table: VariantRowsTable, *, assume_validated:
         _write_series_in_chunks(handle, lines)
 
 
-def read_vmap(path: Path) -> List[VMapRow]:
-    return read_vmap_table(path).to_rows()
+def read_vmap(path: Path, *, check_duplicates: bool = True) -> List[VMapRow]:
+    return read_vmap_table(path, check_duplicates=check_duplicates).to_rows()
 
 
 def read_vmap_table(path: Path, *, check_duplicates: bool = True) -> VMapRowsTable:
@@ -427,7 +435,8 @@ def read_vmap_table(path: Path, *, check_duplicates: bool = True) -> VMapRowsTab
     frame = table.to_frame(copy=False)
     frame["a1"] = frame["a1"].str.strip().str.upper()
     frame["a2"] = frame["a2"].str.strip().str.upper()
-    _validate_vmap_frame(frame, assume_normalized_alleles=True, check_duplicates=check_duplicates)
+    _validate_vmap_frame(frame, assume_normalized_alleles=True, check_duplicates=check_duplicates,
+                         duplicate_label=str(path))
     return table
 
 
@@ -517,6 +526,7 @@ def _validate_vmap_frame(
     *,
     assume_normalized_alleles: bool = False,
     check_duplicates: bool = True,
+    duplicate_label: str = "vmap target rows",
 ) -> None:
     validate_allele_values(
         pd.concat([frame["a1"], frame["a2"]], ignore_index=True),
@@ -528,9 +538,7 @@ def _validate_vmap_frame(
         first_idx = int(invalid_pos.idxmax())
         raise ValueError(f"vmap row has invalid pos: {frame.at[first_idx, 'pos']!r}")
     if check_duplicates:
-        duplicate_mask = frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first")
-        if duplicate_mask.any():
-            raise ValueError("duplicate chrom:pos:a1:a2 in vmap target rows")
+        require_unique_target_frame(frame, label=duplicate_label)
     out_of_range = frame["source_index"].lt(0)
     if out_of_range.any():
         raise ValueError("vmap row source_index out of range")
@@ -579,14 +587,14 @@ def write_apply_qc(path: Path, rows: Iterable[tuple[str, int, str, str, int]]) -
             handle.write(f"{source_shard}\t{source_index}\t{variant_id}\t{status}\t{n_affected}\n")
 
 
-def load_variant_object(path: Path) -> LoadedVariantObject:
+def load_variant_object(path: Path, *, check_duplicates: bool = True) -> LoadedVariantObject:
     metadata = load_metadata(path)
     if path.name.endswith(".vtable"):
         validate_vtable_metadata(metadata)
         return LoadedVariantObject(
             path=path,
             object_type="variant_table",
-            target_rows=read_vtable(path),
+            target_rows=read_vtable(path, check_duplicates=check_duplicates),
             target_metadata={
                 "genome_build": metadata["genome_build"],
                 **({"contig_naming": metadata["contig_naming"]} if "contig_naming" in metadata else {}),
@@ -596,7 +604,7 @@ def load_variant_object(path: Path) -> LoadedVariantObject:
         )
     if path.name.endswith(".vmap"):
         validate_vmap_metadata(metadata)
-        vmap_rows = read_vmap(path)
+        vmap_rows = read_vmap(path, check_duplicates=check_duplicates)
         return LoadedVariantObject(
             path=path,
             object_type="variant_map",
@@ -608,7 +616,7 @@ def load_variant_object(path: Path) -> LoadedVariantObject:
     raise ValueError(f"unsupported variant object path: {path}")
 
 
-def load_variant_object_tables(path: Path) -> LoadedVariantObjectTables:
+def load_variant_object_tables(path: Path, *, check_duplicates: bool = True) -> LoadedVariantObjectTables:
     # Assumes: metadata sidecar exists and matches object suffix.
     # Performs: PV(object-type/metadata boundary checks), PN/PV via table readers.
     # Guarantees: typed table-first loaded object with target metadata and optional provenance table.
@@ -618,7 +626,7 @@ def load_variant_object_tables(path: Path) -> LoadedVariantObjectTables:
         return LoadedVariantObjectTables(
             path=path,
             object_type="variant_table",
-            target_rows_table=read_vtable_table(path),
+            target_rows_table=read_vtable_table(path, check_duplicates=check_duplicates),
             target_metadata={
                 "genome_build": metadata["genome_build"],
                 **({"contig_naming": metadata["contig_naming"]} if "contig_naming" in metadata else {}),
@@ -628,7 +636,7 @@ def load_variant_object_tables(path: Path) -> LoadedVariantObjectTables:
         )
     if path.name.endswith(".vmap"):
         validate_vmap_metadata(metadata)
-        vmap_table = read_vmap_table(path)
+        vmap_table = read_vmap_table(path, check_duplicates=check_duplicates)
         target_frame = vmap_table.to_frame(copy=False).loc[:, ["chrom", "pos", "id", "a1", "a2"]]
         return LoadedVariantObjectTables(
             path=path,
@@ -705,6 +713,18 @@ def duplicate_target_rows_mask_table(frame: pd.DataFrame) -> pd.Series:
         missing_csv = ",".join(missing)
         raise ValueError(f"target frame is missing required columns: {missing_csv}")
     return frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep=False)
+
+
+def duplicate_input_message(label: str) -> str:
+    return f"duplicate chrom:pos:a1:a2 in {label}; run sort_variants.py --drop-duplicates for explicit cleanup"
+
+
+def require_unique_target_frame(frame: pd.DataFrame, *, label: str) -> None:
+    # Assumes: parser-validated target key columns with canonical allele strings.
+    # Performs: SV(exact target-key uniqueness, independent of IDs/provenance).
+    # Guarantees: duplicate inputs fail with the explicit cleanup route.
+    if frame.duplicated(subset=["chrom", "pos", "a1", "a2"], keep="first").any():
+        raise ValueError(duplicate_input_message(label))
 
 
 def require_unique_target_rows(rows: Sequence[VariantRow], *, message: str = "duplicate chrom:pos:a1:a2 in target rows") -> None:
