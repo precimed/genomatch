@@ -213,6 +213,7 @@ The migrated suite must keep coverage for:
 - include `a1=A, a2=TT` on reference `AAG` with strand flips enabled: without indel-swap permission it is dropped; with permission the forward swap is selected
 - `restrict_build_compatible.py` keeps only same-build reference-compatible rows
 - `restrict_build_compatible.py` canonicalizes retained rows to reference-second target ordering with `a1=non-reference` and `a2=reference`
+- a tiny-FASTA PVAR import/restriction fixture with one reversed row among normal rows must yield `swap` only for that row and `identity` for the rest, preserving row order and original provenance
 - `restrict_build_compatible.py` rejects removed flags `--sort` and `--drop-duplicates`
 - cover class 3 inputs for which both REF/ALT assignments would pass REF validation: valid `a2` must be selected rather than dropping the row as ambiguous
 - include padded SNVs, padded deletions, MNVs, and delins in class 3 fixtures, with input inclusion enabled and normalization enabled/disabled

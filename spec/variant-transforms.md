@@ -198,6 +198,10 @@ operation whose proposed full REF matches FASTA, in this order:
 | `flip` | Reverse complement of `a2` | Class 1 and `--allow-strand-flips` |
 | `flip_swap` | Reverse complement of `a1` | Class 1 and `--allow-strand-flips` |
 
+Reference-allele assignment is evaluated independently for each row against the
+configured FASTA. Source format or a file-wide allele-order assumption must not
+determine the operation; one file may contain both unchanged and swapped rows.
+
 Apply the chosen [allele operation](core-objects.md#allele-operations) to obtain
 the REF/ALT allele assignment, with `REF=a2` and `ALT=a1`.
 If no REF/ALT allele assignment allowed by the enabled operation controls matches
