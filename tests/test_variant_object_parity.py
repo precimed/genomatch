@@ -143,19 +143,17 @@ def test_contig_collisions_use_original_qc_locators(tmp_path, suffix):
 
 
 @pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-@pytest.mark.parametrize('sort', [False, True])
-def test_reference_collisions_and_exclusions_use_original_locators(tmp_path, reference_env, suffix, sort):
+def test_reference_collisions_and_exclusions_use_original_locators(tmp_path, reference_env, suffix):
     source = write_input(tmp_path, suffix, [
         '1\t5\tretained\tA\tT', '1\t1\tfirst\tA\tG',
         '1\t3\tmismatch\tC\tG', '1\t1\tsecond\tG\tA',
         '1\t2\talso_retained\tC\tA',
     ])
     output = tmp_path / f'out.{suffix}'
-    result = run_py_with_env('restrict_build_compatible.py', reference_env, '--source', source, '--output', output,
-                             *(['--sort', '--drop-duplicates'] if sort else []))
+    result = run_py_with_env('restrict_build_compatible.py', reference_env, '--source', source, '--output', output)
     assert result.returncode == 0, result.stderr
     expected = [['1', '5', 'retained', 'T', 'A'], ['1', '2', 'also_retained', 'C', 'A']]
-    assert [row[:5] for row in read_tsv(output)] == (expected[::-1] if sort else expected)
+    assert [row[:5] for row in read_tsv(output)] == expected
     assert read_tsv(output.with_name(output.name + '.qc.tsv'))[1:] == [
         [*qc_locator(suffix, 2), 'mismatch', 'no_reference_match'],
         [*qc_locator(suffix, 1), 'first', 'duplicate_target'],

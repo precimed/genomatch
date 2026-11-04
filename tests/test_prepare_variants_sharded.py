@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -107,7 +108,10 @@ def test_prepare_variants_sharded_groups_x_tokens_and_concatenates_in_contig_ran
     )
 
     assert result.returncode == 0, result.stderr
-    assert "sort_variants.py" not in result.stderr
+    assert "sort_variants.py" in result.stderr
+    for group in ("2", "10", "X"):
+        stem = tmp_path / "work" / f"reference.{group}.prepared"
+        assert read_tsv(Path(f"{stem}.sorted.vmap")) == read_tsv(Path(f"{stem}.vmap"))
 
     command_lines = [line for line in result.stderr.splitlines() if "+ prepare_variants.py" in line]
     assert all("--src-build GRCh37" in line for line in command_lines)

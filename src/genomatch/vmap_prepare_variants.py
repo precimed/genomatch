@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare raw input variants through the canonical import -> optional contig normalization -> "
-            "metadata update -> restrict -> optional liftover -> optional strand/contig restriction "
+            "metadata update -> restrict -> optional liftover -> optional strand/contig restriction -> sort "
             "chain, retaining stage outputs and copying the last retained stage to <output>.vmap."
         )
     )
@@ -166,6 +166,7 @@ def all_retained_stage_outputs(prefix: Path) -> list[Path]:
         variant_object_path(prefix, ".splitx"),
         variant_object_path(prefix, ".strand_filtered"),
         variant_object_path(prefix, ".contigs"),
+        variant_object_path(prefix, ".sorted"),
     ]
 
 
@@ -198,6 +199,7 @@ def main() -> int:
     splitx_path = variant_object_path(prefix, ".splitx")
     strand_path = variant_object_path(prefix, ".strand_filtered")
     contig_path = variant_object_path(prefix, ".contigs")
+    sorted_path = variant_object_path(prefix, ".sorted")
 
     planned_variant_outputs = [
         imported_path,
@@ -211,7 +213,7 @@ def main() -> int:
         planned_variant_outputs.append(strand_path)
     if args.chr2use:
         planned_variant_outputs.append(contig_path)
-    planned_variant_outputs.append(final_output)
+    planned_variant_outputs.extend([sorted_path, final_output])
     force_variant_outputs = [*all_retained_stage_outputs(prefix), final_output]
 
     if args.force:
@@ -244,6 +246,7 @@ def main() -> int:
         *( [splitx_path] if defer_splitx else [] ),
         *( [strand_path] if args.drop_strand_ambiguous else [] ),
         *( [contig_path] if args.chr2use else [] ),
+        sorted_path,
         final_output,
     ]
     if initial_normalize_to is not None:
@@ -266,6 +269,7 @@ def main() -> int:
         *( [splitx_path] if defer_splitx else [] ),
         *( [strand_path] if args.drop_strand_ambiguous else [] ),
         *( [contig_path] if args.chr2use else [] ),
+        sorted_path,
         final_output,
     ]
     ensure_stage_ready_for_resume(restricted_path, restricted_later_outputs, resume=args.resume)
@@ -275,9 +279,6 @@ def main() -> int:
         restrict_extra_args.append("--allow-strand-flips")
     if args.norm_indels:
         restrict_extra_args.append("--norm-indels")
-    if current_build == args.dst_build:
-        restrict_extra_args.append("--sort")
-        restrict_extra_args.append("--drop-duplicates")
     run_command_if_needed(
         transform_command("restrict_build_compatible.py", current_path, restricted_path, restrict_extra_args),
         restricted_path,
@@ -290,6 +291,7 @@ def main() -> int:
         *( [splitx_path] if defer_splitx else [] ),
         *( [strand_path] if args.drop_strand_ambiguous else [] ),
         *( [contig_path] if args.chr2use else [] ),
+        sorted_path,
         final_output,
     ]
     if current_build != args.dst_build:
@@ -312,6 +314,7 @@ def main() -> int:
         splitx_later_outputs = [
             *( [strand_path] if args.drop_strand_ambiguous else [] ),
             *( [contig_path] if args.chr2use else [] ),
+            sorted_path,
             final_output,
         ]
         ensure_stage_ready_for_resume(splitx_path, splitx_later_outputs, resume=args.resume)
@@ -324,7 +327,7 @@ def main() -> int:
         current_path = splitx_path
 
     if args.drop_strand_ambiguous:
-        strand_later_outputs = [*( [contig_path] if args.chr2use else [] ), final_output]
+        strand_later_outputs = [*( [contig_path] if args.chr2use else [] ), sorted_path, final_output]
         ensure_stage_ready_for_resume(strand_path, strand_later_outputs, resume=args.resume)
         run_command_if_needed(
             transform_command("drop_strand_ambiguous.py", current_path, strand_path),
@@ -335,7 +338,7 @@ def main() -> int:
         current_path = strand_path
 
     if args.chr2use:
-        ensure_stage_ready_for_resume(contig_path, [final_output], resume=args.resume)
+        ensure_stage_ready_for_resume(contig_path, [sorted_path, final_output], resume=args.resume)
         run_command_if_needed(
             transform_command("restrict_contigs.py", current_path, contig_path, ["--chr2use", args.chr2use]),
             contig_path,
@@ -343,6 +346,15 @@ def main() -> int:
             wrapper_name=WRAPPER_NAME,
         )
         current_path = contig_path
+
+    ensure_stage_ready_for_resume(sorted_path, [final_output], resume=args.resume)
+    run_command_if_needed(
+        transform_command("sort_variants.py", current_path, sorted_path),
+        sorted_path,
+        resume=args.resume,
+        wrapper_name=WRAPPER_NAME,
+    )
+    current_path = sorted_path
 
     copy_variant_object(current_path, final_output)
     logger.info("%s: wrote %s", WRAPPER_NAME, final_output)

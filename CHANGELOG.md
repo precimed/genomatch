@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ### Changed
 
+- Removed `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`; use `sort_variants.py` for explicit ordering and optional keep-first cleanup. Preparation always retains a final `<prefix>.sorted.vmap` stage, covered by preflight and resume/force handling, including when liftover runs.
 - Repeated variant keys are now accepted in `.vmap` inputs to `intersect_variants.py` and `union_variants.py`, and in restriction inputs to `restrict_vmap.py`. Previously, these inputs could be rejected for containing duplicates.
 - Tools accepting `.vmap` or `.vtable` follow the [common transformation and QC contract](spec/variant-transforms.md#tools-accepting-vmap-or-vtable). Operations requiring row-level QC also write sidecars for `.vtable` inputs; QC row identifiers identify input rows without adding provenance to output tables.
 - Restriction now drops all `.vtable` rows whose distinct input variant keys become equal after transformation and audits them with `duplicate_target`, replacing the previous retention of all rows with duplicate output variant keys or keep-first behavior with `--drop-duplicates`. Affected outputs will contain fewer rows; this also affects SNV-only inputs.
@@ -16,7 +17,6 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ### Pending implementation
 
-- Remove `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`; use `sort_variants.py` for explicit ordering and optional keep-first cleanup. Preparation always retains a final `<prefix>.sorted.vmap` stage, covered by preflight and resume/force handling, including when liftover runs.
 - Revised the [reference-compatibility contract](spec/variant-transforms.md#same-build-reference-compatibility) and [preparation input/option policy](spec/workflow.md#input-variant-filtering-and-indel-options); these changes are not yet implemented.
 - `restrict_build_compatible.py` and both preparation wrappers now default to SNV-only input. Commands that previously retained multibase input must add `--include-indels`, including commands already passing `--norm-indels`.
 - Direct `restrict_build_compatible.py` calls no longer swap indels automatically. To permit that behavior, supply both `--include-indels` and `--allow-indel-swaps`; preparation wrappers enable indel swaps when input inclusion is requested unless explicitly disabled.
