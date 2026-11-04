@@ -1177,3 +1177,37 @@ def test_restrict_build_compatible_rejects_removed_flags(tmp_path, flag, suffix)
     )
     assert result.returncode != 0
     assert f"unrecognized arguments: {flag}" in result.stderr
+
+
+def test_imported_pvar_with_one_reversed_row_is_oriented_per_row(tmp_path):
+    pvar = tmp_path / 'mixed.pvar'
+    imported = tmp_path / 'imported.vmap'
+    output = tmp_path / 'compatible.vmap'
+    fasta = tmp_path / 'reference.fa'
+    config = tmp_path / 'config.yaml'
+    write_primary_ucsc_fasta(fasta, {'chr1': 'ACG'})
+    write_match_config(config, grch37_ucsc_fasta=fasta, grch38_ucsc_fasta=fasta)
+    env = {'MATCH_CONFIG': str(config)}
+    write_lines(pvar, [
+        '##fileformat=VCFv4.2',
+        '#CHROM\tPOS\tID\tREF\tALT',
+        '1\t1\tnormal1\tA\tG',
+        '1\t2\treversed\tT\tC',  # FASTA is C; only this row requires swap.
+        '1\t3\tnormal2\tG\tA',
+    ])
+    result = run_py_with_env('import_pvar.py', env, '--input', pvar,
+                             '--output', imported, '--genome-build', 'GRCh37')
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(imported) == [
+        ['1', '1', 'normal1', 'G', 'A', '.', '0', 'identity'],
+        ['1', '2', 'reversed', 'C', 'T', '.', '1', 'identity'],
+        ['1', '3', 'normal2', 'A', 'G', '.', '2', 'identity'],
+    ]
+    result = run_py_with_env('restrict_build_compatible.py', env, '--source', imported, '--output', output)
+    assert result.returncode == 0, result.stderr
+    assert read_tsv(output) == [
+        ['1', '1', 'normal1', 'G', 'A', '.', '0', 'identity'],
+        ['1', '2', 'reversed', 'T', 'C', '.', '1', 'swap'],
+        ['1', '3', 'normal2', 'A', 'G', '.', '2', 'identity'],
+    ]
+    assert not output.with_name(output.name + '.qc.tsv').exists()
