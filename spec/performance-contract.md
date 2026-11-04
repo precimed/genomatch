@@ -58,6 +58,16 @@ Redundant normalization/validation is allowed only if at least one holds:
 
 When retained in hot paths, rationale must be documented in code comments or PR notes.
 
+## Reference FASTA access
+
+In `BULK` mode, repeated per-variant indexed FASTA fetches are prohibited.
+The implementation may choose its cache layout, batching strategy, and
+span-processing approach, including Python loops over cached sequence. No
+particular vectorization technique or whole-contig cache is required. Results
+must remain isolated by reference FASTA path. Per-query indexed FASTA fetches
+are allowed in `LEGACY` mode. Access-mode semantics and reference-matching
+rules are defined in the [reference access policy](variant-transforms.md#reference-access-policy).
+
 ## Evidence Requirements For Changes
 
 For performance-sensitive changes, contributors must provide:

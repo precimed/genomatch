@@ -50,7 +50,7 @@ Within [README.md](README.md) and the user documentation in [docs/](docs/), the 
 - newly written `.vmap` and `.vtable` sidecars include top-level `variants_count`; readers accept missing `variants_count` for backward compatibility, and tools may use it as planning metadata without changing output semantics
 - importer-emitted rows preserve source-format allele meaning at import time, while reference-aware target rows emitted by `restrict_build_compatible.py` and `liftover_build.py` use ordered alleles `a1=non-reference` and `a2=reference`
 - only `import_*` tools originate new provenance in v1
-- for tools that accept both `.vtable` and `.vmap`, the default contract is to emit the same type as the input and preserve provenance only for `.vmap` input, unless the tool explicitly defines a provenance-free `.vtable` output
+- behavior for tools accepting `.vmap` or `.vtable`, including row-level QC, is defined in [variant-transforms.md](spec/variant-transforms.md#tools-accepting-vmap-or-vtable); tools with explicit provenance-free output contracts retain those output types
 - for tools that accept `.vmap` as a table-like input, `.vmap` is interpreted as its target side unless a tool-specific spec says otherwise
 - target-side transforms on `.vmap` preserve provenance unless the tool explicitly materializes a provenance-free `.vtable` or otherwise documents a provenance break
 - `intersect_variants.py` always emits a provenance-free `.vtable`

@@ -26,6 +26,37 @@ In that workflow:
 
 `prepare_variants.py` is the convenience wrapper for the preparation stage of the common workflow. It advances a retained stage-by-stage `.vmap` waterfall and then copies the last retained stage to `<output>.vmap`.
 
+### Input variant filtering and indel options
+
+Both preparation wrappers accept `--include-indels` with the primitive's default
+and pass it through unchanged to `restrict_build_compatible.py`. Input eligibility,
+exclusion QC, and no-op warnings are defined in the primitive's
+[reference-compatibility contract](variant-transforms.md#same-build-reference-compatibility).
+Input filtering belongs to the build-compatible stage and its `--resume` /
+`--force` lifecycle, following the stage order in the [contract](#contract).
+Retained imported and contig-normalized stages remain unfiltered by this policy.
+Build guessing uses the rows before input filtering and follows the canonical
+`guess_build.py` contract.
+
+| Control | Default |
+| --- | --- |
+| `--allow-strand-flips` / `--no-allow-strand-flips` | Enabled |
+| `--allow-indel-swaps` / `--no-allow-indel-swaps` | Enabled when `--include-indels` is supplied; otherwise disabled |
+| `--norm-indels` / `--no-norm-indels` | Enabled when `--include-indels` is supplied; otherwise disabled |
+
+Explicit positive or negative controls override these defaults independently.
+Forward the effective operation controls to `restrict_build_compatible.py`;
+their meanings are defined in the linked reference-compatibility contract.
+
+If the build-compatible stage retains no rows, preparation succeeds with valid
+empty retained stages from build compatibility onward and an empty final `.vmap`. The final
+object has `variants_count=0`, the requested target build and contig naming, and
+the original `derived_from`. This also applies to individual sharded groups and
+an entirely empty concatenated result. Source build must still be resolved: if it is unknown
+and the input before filtering is empty or build guessing is inconclusive, fail
+clearly and request `--src-build`; do not infer it from the destination build or
+another shard group.
+
 ### Contract
 
 - `current_path` means the latest retained `.vmap` stage in the wrapper waterfall
@@ -45,8 +76,6 @@ In that workflow:
 - accept optional `--src-build` as the known source genome build and pass it through to the selected `import_*` tool as `--genome-build`
 - default `--dst-build` to `GRCh38`
 - default `--dst-contig-naming` to `ncbi`
-- accept `--allow-strand-flips` / `--no-allow-strand-flips`, defaulting strand-flip allowance to enabled
-- accept `--norm-indels` / `--no-norm-indels`, defaulting indel normalization to enabled
 - dispatch to the appropriate `import_*` tool for the selected input format
 - for `--input-format sumstats`, pass `--id-lookup` through to `import_sumstats.py` when supplied
 - pass `--src-build` through to the importer as `--genome-build` when supplied; in `import_sumstats.py --id-lookup` mode, lookup-object target metadata still takes precedence over the `--genome-build` value as defined by the importer spec
@@ -59,30 +88,16 @@ In that workflow:
 - run `guess_build.py` in place on the current retained stage when its `genome_build` is `unknown`
 - skip `guess_build.py` when the current retained stage already has resolved `genome_build`, including when `--src-build` supplied known importer metadata
 - run `restrict_build_compatible.py` before any optional liftover
-- by default, pass both `--allow-strand-flips` and `--norm-indels` through to `restrict_build_compatible.py`
-- if `--no-allow-strand-flips` is supplied to `prepare_variants.py`, omit `--allow-strand-flips` when invoking `restrict_build_compatible.py`
-- if `--no-norm-indels` is supplied to `prepare_variants.py`, omit `--norm-indels` when invoking `restrict_build_compatible.py`
-- if the current retained stage already matches `--dst-build`, pass `--sort --drop-duplicates` to `restrict_build_compatible.py`
-- final `prepare_variants.py` output is therefore in declared coordinate order with duplicates dropped: either from `restrict_build_compatible.py --sort --drop-duplicates` in same-build cases or from `liftover_build.py` in build-conversion cases
-- under `--norm-indels`, `prepare_variants.py` still runs exactly one retained build-compatible stage, even though `restrict_build_compatible.py` may internally make at most one `bcftools norm` call for branch 2 and at most one `bcftools norm` call for branch 3
+- under `--norm-indels`, normalization remains within the single retained build-compatible stage
 - skip `liftover_build.py` when the current retained stage already matches `--dst-build`
 - in the deferred `plink_splitx` case, after any required liftover and after build is known, run one final `normalize_contigs.py --to plink_splitx` stage before any optional `drop_strand_ambiguous.py` or `restrict_contigs.py`
 - run `drop_strand_ambiguous.py` only when explicitly requested
 - run `restrict_contigs.py` only when `--chr2use` / `--contigs` is supplied
-- compute the full planned wrapper-managed stage graph before invoking canonical tools
-- planned wrapper-managed outputs are the retained stage outputs under `<prefix>.*.vmap` plus the final `<output>.vmap`
-- `<prefix>.build_compatible.vmap` remains the retained stage name regardless of whether `restrict_build_compatible.py` was invoked with `--allow-strand-flips`, `--norm-indels`, both, or neither
-- `<prefix>.build_compatible.vmap` is the final same-build retained stage; `prepare_variants.py` does not retain a separate `.sorted.vmap` stage
+- always run `sort_variants.py` as the final transform after all requested filtering, including after liftover; use sorting only, since importers and transforms that can produce duplicate output variant keys handle them under their own contracts
+- output names and stage lifecycle follow [output, preflight, `--resume`, and `--force`](#prepare_variantspy-output-preflight---resume-and---force)
+- `<prefix>.build_compatible.vmap` remains the retained stage name for every combination of operation controls
 - `<prefix>.splitx.vmap` is retained only for the deferred final `plink_splitx` normalization case
 - after the requested preparation steps, copy the last retained `current_path` to `<output>.vmap`
-- by default, fail if any planned output or retained intermediate for the invocation already exists
-- `--resume` and `--force` are mutually exclusive
-- if `--resume` is supplied, iterate through planned stages in order and skip a stage if and only if that stage output already exists
-- if `--resume` is supplied, never overwrite any outputs
-- if `--resume` is supplied and a later planned stage output exists while an earlier required stage output is missing, fail because the retained stage graph has a hole
-- if final `<output>.vmap` already exists under `--resume`, nothing remains to do
-- if `--resume` reruns a liftover step because the final lifted object is missing but retained `bcftools +liftover` output still exists, pass `--resume` through to `liftover_build.py` so it can reuse that retained bcftools output and rerun parse/QC/output logic
-- if `--force` is supplied, delete all wrapper-managed outputs first and then rerun the full planned stage graph cleanly from scratch
 - print the invoked subcommands
 - retain intermediate outputs by default
 
@@ -90,7 +105,7 @@ In that workflow:
 
 - Treat `--output` as an output stem, not as a full filename. The final wrapper artifact is exactly `<output>.vmap`.
 - If `--prefix` is omitted, default `--prefix` to `--output`.
-- retained intermediates: `<prefix>.imported.vmap`, `.normalized.vmap`, `.build_compatible.vmap`, `.lifted.vmap`, `.splitx.vmap`, `.strand_filtered.vmap`, `.contigs.vmap`
+- retained intermediates: `<prefix>.imported.vmap`, `.normalized.vmap`, `.build_compatible.vmap`, `.lifted.vmap`, `.splitx.vmap`, `.strand_filtered.vmap`, `.contigs.vmap`, `.sorted.vmap`
 - Before executing any canonical tool, the wrapper must determine the full planned stage graph and the full set of wrapper-managed outputs for the requested invocation.
 - By default, the wrapper must fail if any planned wrapper-managed output already exists.
 - `--resume` and `--force` are mutually exclusive and must not be accepted together.
@@ -98,8 +113,10 @@ In that workflow:
 - In `--resume` mode, the wrapper must never overwrite any output.
 - In `--resume` mode, if a later planned stage output exists while an earlier required stage output is missing, this is an error. For example, if an `a -> b -> c` chain is planned and `a` and `c` exist but `b` is missing, the wrapper must fail rather than continue or overwrite.
 - In `--resume` mode, if the final `<output>.vmap` already exists, there is nothing left to do.
+- If `--resume` reruns a liftover step because the final lifted object is missing but retained `bcftools +liftover` output still exists, pass `--resume` through to `liftover_build.py` so it can reuse that retained bcftools output and rerun parse/QC/output logic.
 - `--force` means: delete all wrapper-managed outputs for the planned invocation first, then run cleanly from scratch.
 - for `prepare_variants.py`, `--force` deletes the full retained stage namespace under `<prefix>.*.vmap` plus the final `<output>.vmap`, even for optional stages that the current invocation would skip, including deferred final `plink_splitx` normalization
+- under `--force`, the build-compatible stage's diagnostics follow the [per-run normalization diagnostic cleanup](variant-transforms.md#normalization-diagnostics), including when the rerun disables indel inclusion or normalization
 
 ## `prepare_variants_sharded.py`
 
@@ -138,6 +155,7 @@ Per-contig-group execution:
 - for each target-contig group, replace `@` in wrapper `--prefix` with the canonical group token (`1` through `22`, `X`, `Y`, or `MT`); all wrapper-managed retained intermediates and temporary files for that invocation must be under this per-contig-group stem
 - invoke `prepare_variants.py` once per target-contig group with the original `@` input template, `--shards <comma-separated exact selected shard tokens for this target-contig group>`, wrapper-controlled `--contigs <target contig label for this group>`, and the per-contig-group stem as both `--prefix` and group final `--output`
 - pass all other preparation controls through unchanged to each per-contig-group `prepare_variants.py` invocation, including source build, destination build, contig naming, strand, indel, allele-length, `--resume`, and `--force` controls
+- preserve omission as well as explicit positive/negative overrides for `--norm-indels` and `--allow-indel-swaps`; an omitted control must use the shared conditional defaults rather than become an explicit override during forwarding
 - the importer invoked inside `prepare_variants.py` must preserve each exact selected shard token as `source_shard`
 - the wrapper-controlled contig filter ensures each per-contig-group final `.vmap` contains only that target contig; a group final may contain zero rows after filtering
 
@@ -146,7 +164,7 @@ Final concatenation:
 - before final concatenation, validate that all per-contig-group final `.vmap` metadata agree on target `genome_build` and target `contig_naming`; mismatches fail clearly and no partial concatenated output is retained
 - validate that all per-contig-group final `.vmap` metadata agree on `derived_from`, which must be the original `--input` `@` template; mismatches fail clearly
 - concatenate per-contig-group final `.vmap` rows in declared target-contig order by sorting groups on the canonical rank of the mapped target contig, not by raw shard-token or discovery order; preserve row order within each group
-- do not sort, deduplicate, or explicitly validate cross-shard duplicate target identities during final concatenation; non-overlap is guaranteed by the chromosome-semantic shard contract
+- do not sort, deduplicate, or explicitly validate cross-shard duplicate variant keys during final concatenation; non-overlap is guaranteed by the chromosome-semantic shard contract
 - copy final metadata from the first non-empty target-contig group's final `.vmap`, or from the first target-contig group's final `.vmap` if all groups are empty
 - leave per-contig-group QC sidecars in place under each retained group prefix; do not concatenate them and do not write a top-level QC sidecar for the final `<output>.vmap`
 - under `--resume`, if final `<output>.vmap` already exists, do nothing; otherwise skip any target-contig group whose final `.vmap` already exists and run final concatenation from the available group finals after all missing groups are produced

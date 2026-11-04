@@ -39,11 +39,12 @@ Illustrative stage flow:
 | Import | Always runs `import_<format>.py`; passes importer controls such as `--max-allele-length`, `--shards`, and sumstats-only `--id-lookup` when supplied | `<prefix>.imported.vmap` |
 | Contig normalization | Runs `normalize_contigs.py --to <dst-contig-naming>` when the current object omits `contig_naming` or differs from `--dst-contig-naming`; final `plink_splitx` can be deferred until build is known | `<prefix>.normalized.vmap` |
 | Build resolution | Runs `guess_build.py` in place when the current object still has `genome_build=unknown`; skipped when build is already resolved, including after `--src-build` import metadata | current retained `.vmap` |
-| Same-build reference filtering | Always runs before any optional liftover; invokes `restrict_build_compatible.py`, passing `--allow-strand-flips` unless disabled, `--norm-indels` unless disabled, and `--sort --drop-duplicates` when current build already matches `--dst-build` | `<prefix>.build_compatible.vmap` |
+| Same-build reference filtering | Always runs before any optional liftover; invokes `restrict_build_compatible.py` with the [effective input and operation controls](../spec/workflow.md#input-variant-filtering-and-indel-options) | `<prefix>.build_compatible.vmap` |
 | Liftover | Runs `liftover_build.py --target-build <dst-build>` when the current build differs from `--dst-build` after same-build filtering | `<prefix>.lifted.vmap` |
 | Deferred split-X normalization | Runs `normalize_contigs.py --to plink_splitx` when `--dst-contig-naming=plink_splitx` and final split-X normalization was deferred until build resolution | `<prefix>.splitx.vmap` |
 | Strand filter | Runs `drop_strand_ambiguous.py` when `--drop-strand-ambiguous` is supplied | `<prefix>.strand_filtered.vmap` |
 | Contig filter | Runs `restrict_contigs.py --chr2use/--contigs <value>` when `--chr2use` / `--contigs` is supplied | `<prefix>.contigs.vmap` |
+| Final sort | Always runs `sort_variants.py` after filtering, following the [preparation contract](../spec/workflow.md#contract) | `<prefix>.sorted.vmap` |
 | Final copy | Always copies the last retained stage | `<output>.vmap` |
 
 | `prepare_variants.py` argument | Meaning |
@@ -54,12 +55,23 @@ Illustrative stage flow:
 | `--dst-contig-naming` | Target contig naming; defaults to `ncbi`. Supported values are `ncbi`, `ucsc`, `plink`, and `plink_splitx`; `plink_splitx` follows PLINK `--split-x` style X/XY_PAR labeling. See [spec/contigs-and-metadata.md](../spec/contigs-and-metadata.md) |
 | `--src-build` | Known source genome build (`GRCh37`, `GRCh38`, or `T2T-CHM13v2.0`). When supplied, it is passed to the importer as source metadata and `prepare_variants.py` skips `guess_build.py`. For summary statistics with `--id-lookup`, lookup-object target metadata still takes precedence during import |
 | `--dst-build` | Target genome build (`GRCh37`, `GRCh38`, or `T2T-CHM13v2.0`); defaults to `GRCh38`. If the input build differs, liftover rewrites both coordinates and alleles via `bcftools +liftover`, then emits canonical target rows with `a2=reference`. See [spec/variant-transforms.md](../spec/variant-transforms.md) |
-| `--[no-]allow-strand-flips` | Control strand-flip allowance during same-build reference-aware restriction; enabled by default |
-| `--[no-]norm-indels` | Control indel normalization during same-build reference-aware restriction; `bcftools norm` is used internally when enabled |
+| `--include-indels` | Disabled by default: preparation is SNV-only. Supply this flag to admit multibase input; [input eligibility](../spec/variant-transforms.md#same-build-reference-compatibility) belongs to the primitive, with [wrapper operation defaults](../spec/workflow.md#input-variant-filtering-and-indel-options) defined separately |
+| `--[no-]allow-strand-flips`, `--[no-]allow-indel-swaps`, `--[no-]norm-indels` | Independent operation controls with meanings defined in [reference compatibility](../spec/variant-transforms.md#same-build-reference-compatibility); wrapper defaults and overrides are in the linked input/option policy |
 | `--drop-strand-ambiguous` | Optional removal of strand-ambiguous variants after build compatibility / liftover |
 | `--chr2use` / `--contigs` | Optional restriction of final prepared output to selected contigs. `--contigs` is an alias for `--chr2use`. For non-autosomes and ploidy-related behavior, see [spec/ploidy-model.md](../spec/ploidy-model.md) |
 | `--prefix` | Optional retained-intermediate stem; defaults to `--output` |
 | `--resume`, `--force` | Wrapper execution controls; mutually exclusive |
+
+FASTA compatibility does not prove that unknown source REF/ALT roles have been
+recovered. For indels, both allele assignments can match the same FASTA sequence
+while describing different insertion/deletion events. With `--include-indels`,
+inputs without declared REF/ALT roles, such as BIM or summary statistics, may
+therefore be retained under an interpretation that differs from the source
+event. Review the source allele conventions and the
+[reference-compatibility policy](../spec/variant-transforms.md#same-build-reference-compatibility).
+
+Implementation/release status for the revised controls is recorded in the
+[changelog](../CHANGELOG.md#unreleased).
 
 ## Prepare sharded variants
 

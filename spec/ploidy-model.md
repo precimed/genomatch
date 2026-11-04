@@ -47,7 +47,7 @@ Normative rule:
 This currently applies to:
 
 - `liftover_build.py`
-- `restrict_build_compatible.py --norm-indels` for normalization-aware branches that can change `chrom` or `pos`
+- `restrict_build_compatible.py --norm-indels` when normalization changes `chrom` or `pos`
 
 This does not apply to tools that only relabel contigs or reorder rows without changing biological loci, such as:
 

@@ -4,6 +4,9 @@ This tutorial uses the checked-in fixture under `examples/tutorial-1/` to show t
 
 The reference VCF defines the target variant universe. The study summary statistics and the cohort BFILE are payloads: each keeps its own source-row provenance and is projected independently through its own restricted `.vmap`.
 
+The preparation commands below require the pending indel changes described in
+the [changelog](../CHANGELOG.md#unreleased).
+
 ## Inputs
 
 Release users can download `genomatch-tutorial-1-fixtures-<version>.zip` from the matching GitHub Release and unzip it in a working directory. The archive expands to `examples/tutorial-1/`, so the commands below work unchanged.
@@ -35,6 +38,7 @@ mkdir -p work/tutorial-1 out/tutorial-1
 prepare_variants.py \
   --input examples/tutorial-1/reference.grch38.vcf \
   --input-format vcf \
+  --include-indels \
   --dst-build GRCh38 \
   --dst-contig-naming ncbi \
   --output work/tutorial-1/reference
@@ -64,6 +68,7 @@ This fixture deliberately includes many allele flips and several A/T or C/G SNPs
 prepare_variants_sharded.py \
   --input examples/tutorial-1/cohort.@.bim \
   --input-format bim \
+  --include-indels \
   --prefix work/tutorial-1/cohort.@ \
   --output work/tutorial-1/cohort \
   --dst-build GRCh38 \
@@ -72,6 +77,13 @@ prepare_variants_sharded.py \
 ```
 
 This imports the PLINK 1 BIM shards, prepares each chromosome group, and writes one concatenated `work/tutorial-1/cohort.vmap`.
+
+Of the two opposite-strand cohort indel examples, only `rsTUT100029` is dropped
+at the build-compatible stage and appears in its per-group QC.
+`rsTUT100032` is retained by a swap, selecting an event that differs from the
+reference-universe event. It is excluded later by `restrict_vmap.py` without a
+QC entry. The fixture manifest and README describe intended membership; use the
+prepared maps and QC to determine observed membership.
 
 ## 4. Restrict Each Payload to the Reference Universe
 

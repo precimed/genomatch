@@ -44,6 +44,12 @@ Summary-statistics payloads are single-file inputs. They do not support `@` shar
 
 Use the normal path when the raw file has coordinate columns, or joined coordinate columns that the metadata points to as `col_CHR` and `col_POS`.
 
+The preparation examples below use the SNV-only default: both input alleles
+must be single-base. To also admit multibase input, add `--include-indels` to
+either command. Eligibility follows the
+[reference-compatibility policy](../spec/variant-transforms.md#same-build-reference-compatibility);
+the [workflow guide](workflow.md#prepare-variants) describes the operation controls.
+
 ```bash
 prepare_variants.py \
   --input study.tsv.gz \

@@ -8,9 +8,9 @@ This directory contains a small, deterministic fixture for the Tutorial 1 workfl
 
 The fixture is intentionally messy. Warnings during preparation and projection are expected; inspect `manifest.tsv` for the reason each special row exists.
 
-## Effective Membership Counts
+## Intended Membership Counts
 
-These counts are after preparation QC and the tutorial's study-side strand-ambiguous filter, so intentionally duplicated study rows and A/T or C/G study SNPs are excluded from study membership.
+These counts describe the fixture's intended membership after duplicate-target and study-side strand-ambiguous exclusions. Observed membership also depends on reference-allele assignment QC; revalidate it after the pending indel changes using the prepared maps and QC described in the tutorial.
 
 `reference=200  study=94  cohort=150`
 

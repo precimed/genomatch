@@ -5,6 +5,7 @@
 - `import_bim.py`, `import_pvar.py`, `import_vcf.py`, and `import_sumstats.py` emit `.vmap`, not `.vtable`.
 - Import is the first provenance-aware mapping step in the canonical workflow.
 - The importer-emitted `.vmap` target side contains retained canonical imported rows.
+- Importers keep the first otherwise-retained occurrence of each exact `(chrom, pos, a1, a2)` identity in resolved shard and row order, ignoring `id`; audit subsequent occurrences with import QC reason `duplicate_target`.
 - The importer-emitted `.vmap` source side stores retained canonical target rows together with raw source provenance `(source_shard, source_index)`.
 - Importers may infer `contig_naming`, but they must not normalize, repair, or rewrite input contig labels.
 - Importers infer the first supported naming convention compatible with all retained rows in this fixed priority order: `ncbi`, `ucsc`, `plink`, `plink_splitx`.
