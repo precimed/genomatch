@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from genomatch import vtable_utils
-from utils import read_tsv, write_json, write_lines
+from utils import read_tsv, run_py, write_json, write_lines
 
 
 def write_object(path, rows, *, include_count):
@@ -80,3 +80,29 @@ def test_membership_readers_still_validate_rows(tmp_path, reader, row, error):
 
             driver = pd.DataFrame([["1", "100", "AC", "A"]], columns=["chrom", "pos", "a1", "a2"])
             restrict_frame_to_membership_chunks(driver, path)
+
+
+@pytest.mark.parametrize('tool', ['intersect_variants', 'union_variants', 'restrict_vmap', 'assign_vmap_ids'])
+@pytest.mark.parametrize('membership_type', ['vmap', 'vtable'])
+@pytest.mark.parametrize('builds', [('unknown', 'unknown'), ('unknown', 'GRCh37'), ('GRCh37', 'unknown')])
+def test_exact_matching_rejects_unknown_builds_before_reading_rows(tmp_path, tool, membership_type, builds):
+    source = tmp_path / 'source.vmap'
+    membership = tmp_path / f'membership.{membership_type}'
+    output = tmp_path / ('output.vmap' if tool in {'restrict_vmap', 'assign_vmap_ids'} else 'output.vtable')
+    for path, build in zip((source, membership), builds):
+        target = {'genome_build': build, 'contig_naming': 'ncbi'}
+        metadata = ({'object_type': 'variant_map', 'target': target} if path.suffix == '.vmap'
+                    else {'object_type': 'variant_table', **target})
+        # Metadata rejection must happen before malformed payloads are parsed.
+        write_lines(path, ['malformed'])
+        write_json(path.with_name(path.name + '.meta.json'), metadata)
+    args = (['--vmap', source, '--id-source', membership] if tool == 'assign_vmap_ids'
+            else [source, membership])
+    result = run_py(f'{tool}.py', *args, '--output', output)
+    assert result.returncode != 0
+    assert 'all inputs must have a known genome_build' in result.stderr
+    assert 'guess_build.py' in result.stderr
+    assert f'{source}: genome_build={builds[0]}' in result.stderr
+    assert f'{membership}: genome_build={builds[1]}' in result.stderr
+    assert not output.exists()
+    assert not output.with_name(output.name + '.meta.json').exists()

@@ -10,6 +10,7 @@ This file defines exact set-operation semantics. Target-side row-transform seman
 - Prepared target objects are allele-canonical. Filtering and intersection are exact set operations, not harmonization steps.
 - Exact set operations use the biallelic target-row allele model defined in [core-objects.md](core-objects.md#invariants).
 - Allele operations are defined in [core-objects.md](core-objects.md#allele-operations).
+- `intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, and `assign_vmap_ids.py` require a known `genome_build` on every input before reading variant rows. Any `genome_build: unknown` is an error, including when all inputs declare `unknown`; run `guess_build.py` explicitly before matching.
 - Build mismatch is an error; no implicit liftover is performed
 - `guess_build.py` is the only build-guessing entrypoint
 - Exact set tools may use object metadata `variants_count` to choose memory-efficient scan order, but this is an implementation detail and must not change documented output order, ID policy, provenance, or emitted object type.

@@ -28,6 +28,8 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 
 **Individual tools**
 
+- Exact matching (`intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, and `assign_vmap_ids.py`) now rejects inputs with `genome_build: unknown`, even when all inputs declare it. Run `guess_build.py` before matching.
+
 - Most tools now reject repeated variants in `.vtable` inputs, as they already did for `.vmap`. Run `sort_variants.py --drop-duplicates` to keep the first of each.
 - `restrict_build_compatible.py` follows the same rules, but every indel option is off by default: `--include-indels` keeps multi-base variants, and `--allow-indel-swaps` and `--norm-indels` must be added separately.
 - Removed `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`. Use `sort_variants.py` to sort; its `--drop-duplicates` keeps the first of any exact duplicates.
