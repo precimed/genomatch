@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-11-05
+
 ### Important: regenerate your outputs
 
 This release fixes a major bug in indel handling: earlier versions could choose the wrong reference allele, for example recording a deletion as an insertion. Regenerate all outputs from your original raw inputs, and don't reuse earlier outputs, including through `--resume`.
