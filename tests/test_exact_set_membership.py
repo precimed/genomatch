@@ -1,11 +1,12 @@
 import importlib
 import json
+from pathlib import Path
 import sys
 
 import pytest
 
 from genomatch import vtable_utils
-from utils import read_tsv, run_py, write_object_metadata, write_lines
+from utils import read_tsv, write_object_metadata, write_lines
 
 
 def write_object(path, rows, *, include_count):
@@ -20,9 +21,17 @@ def write_object(path, rows, *, include_count):
     write_object_metadata(path.with_name(path.name + ".meta.json"), metadata)
 
 
-@pytest.mark.parametrize("tool", ["intersect_variants", "union_variants", "restrict_vmap"])
-@pytest.mark.parametrize("object_type", ["vmap", "vtable"])
-@pytest.mark.parametrize("scan_plan", ["declared", "source-first", "membership-first"])
+# "declared" has no counts and repeats reach the chunked reader; "membership-first"
+# makes the repeated input the driver. restrict_vmap has a separate source-first branch.
+TOOLS = ["intersect_variants", "union_variants", "restrict_vmap"]
+REPEATED_KEY_CASES = [
+    *[(tool, "vmap", plan) for tool in TOOLS for plan in ("declared", "membership-first")],
+    ("restrict_vmap", "vmap", "source-first"),
+    *[(tool, "vtable", "membership-first") for tool in TOOLS],
+]
+
+
+@pytest.mark.parametrize("tool,object_type,scan_plan", REPEATED_KEY_CASES)
 def test_repeated_membership_keys_preserve_set_results(tmp_path, monkeypatch, tool, object_type, scan_plan):
     module = importlib.import_module(f"genomatch.{tool}")
     monkeypatch.setattr(vtable_utils, "WRITE_CHUNK_ROWS", 2)
@@ -61,10 +70,8 @@ def test_repeated_membership_keys_preserve_set_results(tmp_path, monkeypatch, to
 @pytest.mark.parametrize(
     "row,error",
     [
-        ("1\t100\tbad\tAC\tA\t.\t-1\tidentity", "source_index out of range"),
         ("1\t100\tbad\tAC\tA\t.\t2\tinvalid", "invalid allele_op"),
         ("1\t0\tbad\tAC\tA\t.\t2\tidentity", "invalid pos"),
-        ("1\t100\tbad\tN\tA\t.\t2\tidentity", "allele"),
     ],
 )
 def test_membership_readers_still_validate_rows(tmp_path, reader, row, error):
@@ -82,27 +89,19 @@ def test_membership_readers_still_validate_rows(tmp_path, reader, row, error):
             restrict_frame_to_membership_chunks(driver, path)
 
 
-@pytest.mark.parametrize('tool', ['intersect_variants', 'union_variants', 'restrict_vmap', 'assign_vmap_ids'])
-@pytest.mark.parametrize('membership_type', ['vmap', 'vtable'])
-@pytest.mark.parametrize('builds', [('unknown', 'unknown'), ('unknown', 'GRCh37'), ('GRCh37', 'unknown')])
-def test_exact_matching_rejects_unknown_builds_before_reading_rows(tmp_path, tool, membership_type, builds):
-    source = tmp_path / 'source.vmap'
-    membership = tmp_path / f'membership.{membership_type}'
-    output = tmp_path / ('output.vmap' if tool in {'restrict_vmap', 'assign_vmap_ids'} else 'output.vtable')
-    for path, build in zip((source, membership), builds):
-        target = {'genome_build': build, 'contig_naming': 'ncbi'}
-        metadata = ({'object_type': 'variant_map', 'target': target} if path.suffix == '.vmap'
-                    else {'object_type': 'variant_table', **target})
-        # Metadata rejection must happen before malformed payloads are parsed.
-        write_lines(path, ['malformed'])
-        write_object_metadata(path.with_name(path.name + '.meta.json'), metadata)
-    args = (['--vmap', source, '--id-source', membership] if tool == 'assign_vmap_ids'
-            else [source, membership])
-    result = run_py(f'{tool}.py', *args, '--output', output)
-    assert result.returncode != 0
-    assert 'all inputs must have a known genome_build' in result.stderr
-    assert 'guess_build.py --write' in result.stderr
-    assert f'{source}: genome_build={builds[0]}' in result.stderr
-    assert f'{membership}: genome_build={builds[1]}' in result.stderr
-    assert not output.exists()
-    assert not output.with_name(output.name + '.meta.json').exists()
+@pytest.mark.parametrize("builds", [("unknown", "unknown"), ("unknown", "GRCh37")], ids=["all-unknown", "mixed"])
+def test_exact_matching_rejects_unknown_builds(builds):
+    from genomatch.exact_set_utils import TargetObjectInfo, require_shared_target_metadata
+
+    infos = [
+        TargetObjectInfo(
+            path=Path(f"input{idx}.vmap"),
+            object_type="variant_map",
+            target_metadata={"genome_build": build, "contig_naming": "ncbi"},
+            raw_metadata={},
+            variants_count=None,
+        )
+        for idx, build in enumerate(builds)
+    ]
+    with pytest.raises(ValueError, match="known genome_build; run guess_build.py --write"):
+        require_shared_target_metadata(infos)

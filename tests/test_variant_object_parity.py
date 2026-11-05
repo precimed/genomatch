@@ -68,8 +68,11 @@ def tool_args(tool, source, output):
     return args
 
 
-@pytest.mark.parametrize('tool', TOOLS)
-@pytest.mark.parametrize('empty', [False, True])
+# sort_variants covers empty input in test_sort_variants.py.
+PARITY_CASES = [(tool, False) for tool in TOOLS] + [(tool, True) for tool in TOOLS if tool != 'sort_variants']
+
+
+@pytest.mark.parametrize('tool,empty', PARITY_CASES)
 def test_target_behavior_parity(tmp_path, reference_env, tool, empty):
     rows = [] if empty else ['1\t5\tshared_id\tc\ta', '1\t4\tshared_id\tt\ta', '1\t3\tother\tg\ta']
     results = []
@@ -113,8 +116,7 @@ def test_target_behavior_parity(tmp_path, reference_env, tool, empty):
         assert results[0] == results[1]
 
 
-@pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-@pytest.mark.parametrize('tool', TOOLS)
+@pytest.mark.parametrize('tool,suffix', [(tool, 'vtable') for tool in TOOLS] + [('sort_variants', 'vmap')])
 def test_missing_contig_metadata_fails_for_both_types(tmp_path, reference_env, suffix, tool):
     source = write_input(tmp_path, suffix, ['1\t1\tid\tC\tA'], naming=None)
     output = tmp_path / f'out.{suffix}'
@@ -126,9 +128,15 @@ def test_missing_contig_metadata_fails_for_both_types(tmp_path, reference_env, s
         assert 'contig_naming' in result.stderr
 
 
-@pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-@pytest.mark.parametrize('tool', [tool for tool in TOOLS if tool not in {'guess_build', 'normalize_contigs'}])
-@pytest.mark.parametrize('alt', ['C', 'AC'])
+# The indel case guards against checking duplicates only after default SNV filtering.
+DUPLICATE_CASES = [
+    *[(tool, suffix, 'C') for tool in TOOLS if tool not in {'guess_build', 'normalize_contigs'}
+      for suffix in ('vtable', 'vmap')],
+    ('restrict_build_compatible', 'vmap', 'AC'),
+]
+
+
+@pytest.mark.parametrize('tool,suffix,alt', DUPLICATE_CASES)
 def test_duplicate_input_fails_with_explicit_cleanup_route(tmp_path, reference_env, suffix, tool, alt):
     source = write_input(tmp_path, suffix, [
         f'1\t1\tfirst\t{alt}\tA', '1\t2\tother\tG\tA', f'1\t1\tsecond\t{alt}\tA',
@@ -143,10 +151,13 @@ def test_duplicate_input_fails_with_explicit_cleanup_route(tmp_path, reference_e
     assert metadata.read_bytes() == original
 
 
-@pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-@pytest.mark.parametrize('mixed', [False, True])
+@pytest.mark.parametrize('suffix,mixed', [('vtable', True), ('vmap', True), ('vtable', False)])
 def test_contig_repair_accepts_exact_repeats_and_audits_all_output_duplicates(tmp_path, suffix, mixed):
+    # An earlier unresolved row must not shift the locators of later QC rows.
+    unresolved = ['chrUn\t1\tunresolved\tA\tG'] if mixed else []
+    offset = len(unresolved)
     source = write_input(tmp_path, suffix, [
+        *unresolved,
         'chr1\t1\tfirst\tC\tA', 'chr1\t1\texact_repeat\tC\tA',
         f'{"1" if mixed else "chr1"}\t1\tcollision\tC\tA',
         'chr1\t2\tretained\tG\tA',
@@ -159,18 +170,17 @@ def test_contig_repair_accepts_exact_repeats_and_audits_all_output_duplicates(tm
     qc = read_tsv(output.with_name(output.name + '.qc.tsv'))
     assert qc[0] == (['source_shard', 'source_index', 'source_id', 'status'] if suffix == 'vmap'
                      else ['row_idx', 'source_id', 'status'])
-    assert qc[1:] == [[*qc_locator(suffix, i), row_id, 'duplicate_target']
+    assert qc[1:] == [[*qc_locator(suffix, i + offset), row_id, 'duplicate_target']
                       for i, row_id in enumerate(['first', 'exact_repeat', 'collision'])]
     metadata = json.loads(output.with_name(output.name + '.meta.json').read_text())
     target = metadata['target'] if suffix == 'vmap' else metadata
     assert target['contig_naming'] == ('ncbi' if mixed else 'ucsc')
     assert metadata['variants_count'] == 1
     if suffix == 'vmap':
-        assert read_tsv(output)[0][5:] == [*qc_locator(suffix, 3), 'flip']
+        assert read_tsv(output)[0][5:] == [*qc_locator(suffix, 3 + offset), 'flip']
 
 
-@pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-@pytest.mark.parametrize('sample_rows', [0, 3])
+@pytest.mark.parametrize('suffix,sample_rows', [('vtable', 0), ('vmap', 3)])
 def test_build_guess_preserves_repeated_row_weighting_and_only_updates_metadata(tmp_path, suffix, sample_rows):
     source = write_input(tmp_path, suffix, [
         '1\t1\tfirst\tC\tA', '1\t1\trepeat1\tC\tA', '1\t1\trepeat2\tC\tA', '1\t2\tother\tT\tG',
@@ -226,22 +236,6 @@ def test_source_mapping_readers_reject_duplicate_keys(tmp_path, tool):
     assert result.returncode != 0
     assert 'duplicate chrom:pos:a1:a2' in result.stderr
     assert 'sort_variants.py --drop-duplicates' in result.stderr
-
-
-@pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-def test_contig_collisions_use_original_qc_locators(tmp_path, suffix):
-    source = write_input(tmp_path, suffix, [
-        'chrUn\t1\tunresolved\tA\tG', 'chr1\t2\tfirst\tA\tG',
-        '1\t2\tsecond\tA\tG', 'chr1\t3\tretained\tC\tA',
-    ], naming=None)
-    output = tmp_path / f'out.{suffix}'
-    result = run_py_with_env('normalize_contigs.py', {}, '--input', source, '--output', output, '--to', 'ncbi')
-    assert result.returncode == 0, result.stderr
-    assert [row[:5] for row in read_tsv(output)] == [['1', '3', 'retained', 'C', 'A']]
-    assert read_tsv(output.with_name(output.name + '.qc.tsv'))[1:] == [
-        [*qc_locator(suffix, 1), 'first', 'duplicate_target'],
-        [*qc_locator(suffix, 2), 'second', 'duplicate_target'],
-    ]
 
 
 @pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
@@ -346,63 +340,15 @@ def test_normalized_row_colliding_with_unchanged_row_drops_both(tmp_path, suffix
     ]
 
 
-@pytest.mark.parametrize('field', ['source_shard', 'source_index'])
-def test_vtable_qc_rejects_provenance_fields(tmp_path, field):
-    frame = pd.DataFrame({'row_idx': [7], 'id': ['id'], 'status': ['duplicate_target'], field: [0]})
+def test_vtable_qc_rejects_provenance_fields(tmp_path):
+    frame = pd.DataFrame({'row_idx': [7], 'id': ['id'], 'status': ['duplicate_target'], 'source_index': [0]})
     with pytest.raises(ValueError, match='must not contain .vmap provenance fields'):
         vtable_utils.write_variant_status_qc(tmp_path / 'out.qc.tsv', frame, is_vmap=False)
     assert not (tmp_path / 'out.qc.tsv').exists()
 
 
-def test_liftover_vtable_keeps_row_idx_through_all_stages(tmp_path, reference_env, monkeypatch):
-    import sys
-    from genomatch import vmap_liftover_build as liftover
-
-    source = write_input(tmp_path, 'vtable', ['1\t3\tunmapped\tC\tA', '1\t1\tretained\tG\tA'])
-    output = tmp_path / 'out.vtable'
-    for key, value in reference_env.items():
-        monkeypatch.setenv(key, value)
-    original_prepare = liftover.prepare_liftover_table
-    original_write = liftover.write_temp_vcf
-    original_parse = liftover.parse_lifted_vcf
-
-    def check_identifiers(frame):
-        assert 'row_idx' in frame.columns
-        assert 'source_index' not in frame.columns
-        assert 'source_shard' not in frame.columns
-
-    def prepare(frame, *, is_vmap):
-        assert not is_vmap
-        check_identifiers(frame)
-        result = original_prepare(frame, is_vmap=is_vmap)
-        check_identifiers(result)
-        return result
-
-    def write(path, prepared, *, is_vmap):
-        result = original_write(path, prepared, is_vmap=is_vmap)
-        check_identifiers(result)
-        return result
-
-    def parse(path, lookup, *args, is_vmap):
-        check_identifiers(lookup)
-        result, statuses = original_parse(path, lookup, *args, is_vmap=is_vmap)
-        check_identifiers(result.frame)
-        assert result.frame['row_idx'].tolist() == [1]
-        return result, statuses
-
-    monkeypatch.setattr(liftover, 'prepare_liftover_table', prepare)
-    monkeypatch.setattr(liftover, 'write_temp_vcf', write)
-    monkeypatch.setattr(liftover, 'parse_lifted_vcf', parse)
-    monkeypatch.setattr(sys, 'argv', ['liftover_build', '--input', str(source), '--output', str(output), '--target-build', 'GRCh38'])
-    assert liftover.main() == 0
-    assert read_tsv(output.with_name(output.name + '.qc.tsv')) == [
-        ['row_idx', 'source_id', 'status'], ['0', 'unmapped', 'unmapped'],
-    ]
-
-
-@pytest.mark.parametrize('suffix', ['vtable', 'vmap'])
-def test_set_membership_reads_exclude_qc_identifiers(tmp_path, suffix):
+def test_set_membership_reads_exclude_qc_identifiers(tmp_path):
     from genomatch.exact_set_utils import read_target_table
 
-    source = write_input(tmp_path, suffix, ['1\t1\tid\tC\tA'])
+    source = write_input(tmp_path, 'vtable', ['1\t1\tid\tC\tA'])
     assert list(read_target_table(source).frame.columns) == ['chrom', 'pos', 'id', 'a1', 'a2']

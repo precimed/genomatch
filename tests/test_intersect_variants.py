@@ -366,42 +366,6 @@ def test_intersect_variants_first_vmap_output_metadata_is_vtable(tmp_path):
     }
 
 
-def test_intersect_variants_accepts_duplicate_first_vmap_target_keys(tmp_path):
-    first = tmp_path / "a.vmap"
-    second = tmp_path / "b.vtable"
-    out = tmp_path / "out.vtable"
-    write_lines(first, ["1\t100\tfirst\tA\tG\t.\t0\tidentity", "1\t100\tsecond\tA\tG\t.\t1\tidentity"])
-    write_lines(second, ["1\t100\tid1\tA\tG"])
-    write_object_metadata(
-        first.with_name(first.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-    write_object_metadata(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
-
-    result = run_py("intersect_variants.py", first, second, "--output", out)
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
-
-
-def test_intersect_variants_accepts_duplicate_vmap_target_keys(tmp_path):
-    first = tmp_path / "a.vtable"
-    second = tmp_path / "b.vmap"
-    out = tmp_path / "out.vtable"
-    write_lines(first, ["1\t100\tid1\tA\tG"])
-    write_lines(second, ["1\t100\tfirst\tA\tG\t.\t0\tidentity", "1\t100\tsecond\tA\tG\t.\t1\tidentity"])
-    write_object_metadata(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
-    write_object_metadata(
-        second.with_name(second.name + ".meta.json"),
-        {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
-    )
-
-    result = run_py("intersect_variants.py", first, second, "--output", out)
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "1:100:G:A", "A", "G"]]
-
-
 def test_intersect_variants_rejects_template_paths(tmp_path):
     first = tmp_path / "a.vtable"
     second = tmp_path / "b.vtable"

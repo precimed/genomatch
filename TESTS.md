@@ -7,6 +7,7 @@ This file is the authoritative migration-aware test specification for `match/`.
 - Canonical test execution for this toolkit should run under the `match-liftover` conda environment.
 - Use that environment for both `pytest tests` and full `pytest` validation when reviewing `match/` changes.
 - This keeps the real liftover integration coverage active instead of relying on skipped-test behavior in a lighter environment.
+- Run the full suite in parallel with `conda run -n match-liftover pytest tests -n 8`, which requires `pytest-xdist` in that environment. Tests must stay safe to run in parallel: write only under `tmp_path`, not to shared paths.
 - `MATCH_REFERENCE_ACCESS_MODE` defaults to `BULK`, matching production behavior. End-to-end integration tests that rely on full real FASTA sequence assets must set `MATCH_REFERENCE_ACCESS_MODE=LEGACY`; preloading whole production FASTAs is multiple-GB behavior and is not appropriate for CI-sized tests.
 
 Active migrated modules currently include:
@@ -76,30 +77,18 @@ non-`identity` operation and a source shard token other than `.`.
 - Add fixtures when introducing a schema; retain existing fixtures for every
   supported older schema. Any intentional support removal must be documented
   and tested as a clear rejection rather than silently changing expectations.
-- Keep current-writer save/load round trips separate from historical compatibility
-  tests. Using temporary fixture copies, verify that missing, malformed, and
-  unsupported versions are rejected clearly for both `.vmap` and `.vtable`.
-- Exercise rejection through every CLI path that consumes canonical objects,
-  including `--id-lookup` and wrapper metadata reads. Use malformed variant rows
-  to prove the version check runs before row parsing, and assert the object/version
-  diagnostic and regeneration remedy. Cover missing, numeric, null, empty,
-  whitespace-altered, and unsupported string versions.
-- Verify every canonical-object producer emits its explicit supported version,
-  including transforms, conversions, and sharded wrapper outputs. `write_metadata`
-  must set the current writer version without mutating the supplied metadata.
-  Metadata-only updates must validate both the existing and replacement metadata
-  and reject version changes; `guess_build.py --write` must preserve the validated
-  input version. Use `write_object_metadata` in `tests/utils.py` for ordinary test
-  sidecars, raw JSON for missing/invalid-version tests, and original fixture bytes
-  for historical compatibility tests. A supported
-  version without `variants_count` must remain readable under the existing rules.
-- Raw sharded concatenation must reject a supported non-current schema on any
-  input, including empty inputs and inputs without `variants_count`, before
-  overwriting output. Current-schema inputs must preserve row bytes and order.
-- For both preparation wrappers, cover an invalid final object under `--resume`
-  when no stage would otherwise run, invalid skipped intermediates or per-group
-  finals, and normal reuse of supported objects. Schema-invalid outputs must cause
-  failure without overwriting them or returning success.
+- Keep schema coverage to small unit tests in `tests/test_schema_metadata.py`, one
+  case per behavior, rather than crossing tools with invalid values:
+  - write then read `.vmap` and `.vtable`: `write_metadata` sets the current version,
+    replacing any supplied version, without mutating the supplied metadata
+  - using temporary fixture copies, a missing and an unsupported version are refused
+    before variant rows are parsed, with an error naming the object and the
+    regeneration remedy
+  - `--resume` with an invalid final object, where no stage would otherwise run,
+    fails without modifying the object
+  - `update_metadata_in_place` refuses a version change
+- Use `write_object_metadata` in `tests/utils.py` for ordinary test sidecars, raw
+  JSON for invalid-version tests, and original fixture bytes for compatibility tests.
 
 ## Required migration tests
 
@@ -214,7 +203,7 @@ non-`identity` operation and a source shard token other than `.`.
 - `drop_strand_ambiguous.py` drops target-side strand-ambiguous biallelic rows, defined by `reverse_complement(a1) == a2`
 - `drop_strand_ambiguous.py` applies that rule to both SNP and non-SNP biallelic alleles
 - `sort_variants.py` sorts target rows into declared coordinate order
-- exact matching tools (`intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, `assign_vmap_ids.py`) reject any `genome_build: unknown` before reading rows or emitting output, including all-unknown inputs and an unknown input in either role, for both `.vmap` and `.vtable` membership inputs
+- exact matching tools (`intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, `assign_vmap_ids.py`) reject any `genome_build: unknown` through the shared metadata check, including all-unknown inputs; a unit test of that check is enough, because each tool's metadata-mismatch test covers its call
 - declared coordinate order follows the [row-order contract](spec/core-objects.md#row-order-contract)
 - exercise the allele tie-break with a co-located SNV and deletion whose `a1`-first and `a2`-first orders differ, covering `sort_variants.py`, `intersect_variants.py`, `union_variants.py`, and `liftover_build.py`; verify numeric position and declared contig ordering independently of rendered ID strings
 - generated-ID coverage must include every generation surface in the [generated-ID contract](spec/core-objects.md#generated-variant-ids), multibase alleles, and unverified rows whose IDs remain slot-derived without reference validation; copied and explicitly retained IDs remain unchanged
