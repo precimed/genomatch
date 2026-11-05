@@ -37,6 +37,8 @@ Active migrated modules currently include:
 - `tests/test_project_payload.py`
 - `tests/test_plink_vcf_helpers.py`
 - `tests/integration/test_liftover_build_bcftools_real.py`
+- `tests/integration/test_bcftools_norm_allele_correspondence.py`
+- `tests/integration/test_bcftools_liftover_allele_correspondence.py`
 - `tests/integration/test_end_to_end_sumstats_bcftools_real.py`
 - `tests/integration/test_apply_vmap_to_bfile_vcf_roundtrip.py`
 - `tests/integration/test_apply_vmap_to_bfile_haploid_roundtrip.py`
@@ -217,6 +219,7 @@ non-`identity` operation and a source shard token other than `.`.
 - `liftover_build.py` rejects declared `plink_splitx` input clearly
 - `liftover_build.py` supports `--resume` for reparsing retained bcftools liftover output without rerunning bcftools
 - `liftover_build.py` fixtures must cover prepared deletions, MNVs, and delins with multibase source `a2`, and inspect source VCF records for `REF=a2, ALT=a1` under the [required source reference compatibility](spec/variant-transforms.md#required-source-reference-compatibility)
+- `tests/integration/test_bcftools_liftover_allele_correspondence.py` exercises the production VCF preparation, plugin invocation, and output parser with tiny controlled references and chains. For SNVs, MNVs, insertions, deletions, and delins, cover both chain strands and both retained/exchanged reference roles, including indels spanning chain gaps and a repeat that forces left alignment. Palindromic A/T and C/G cases must show identical output allele strings under `FLIP` versus `SWAP=1` but opposite genotype handling. Compare annotations with homozygous and phased GT sentinels and independently reconstructed target haplotypes; sentinels alone cannot verify strand reversal. Check composition with all four upstream operations and preserved provenance. A third target reference must produce `SWAP=-1` and be excluded by the parser. These tests and the normalization sentinel tests use only temporary synthetic assets and do not add sentinel genotypes to production VCFs.
 - with a stubbed liftover plugin, verify structurally valid source rows are forwarded without source-FASTA sequence checks or source allele reselection, including `a1`-only and partial-REF matches; do not require biological correctness or mismatch detection for inputs violating the source reference compatibility requirement
 - `liftover_build.py` audits unrepresentable lifted outputs under the [liftover acceptance contract](spec/variant-transforms.md#liftover), covering multiallelic, missing/symbolic/non-sequence, identical-allele, invalid-position, and multiple-result cases, plus unsupported allele-operation annotations such as `SWAP=-1` and `SWAP=2`; row-level exclusions do not fail the invocation
 - `liftover_build.py` drops lifted rows on unsupported target contigs with QC status `unsupported_target_contig`
@@ -263,6 +266,7 @@ non-`identity` operation and a source shard token other than `.`.
 - with `--norm-indels`, `restrict_build_compatible.py` does not use `bcftools norm` atomization
 - with `--norm-indels`, `restrict_build_compatible.py` invokes `bcftools norm` with `-c e` and does not use `-c x`, `-c w`, or `-c s`
 - with `--norm-indels`, normalized representation changes introduce no additional allele operation; reference-allele assignment for multibase input contributes only local `identity` or `swap`, composed with the existing `allele_op`
+- `tests/integration/test_bcftools_norm_allele_correspondence.py` checks real bcftools through the production normalization command using synthetic homozygous, phased heterozygous, and missing GT sentinels. Cover repeat shifts, insertions/deletions, padded SNVs, MNVs, delins, both-alleles-matching input, and the contig start; verify unchanged genotypes and independently reconstructed ordered allele haplotypes. Positive controls with `-c s` must visibly exchange sentinel genotypes for an SNV and unequal-length alleles. A REF-replacement control must change REF without exchanging sentinels; the production invocation must reject all these mismatched-REF inputs.
 - cover every failure in the [normalization output-validation table](spec/variant-transforms.md#normalization), verifying exclusion with the specified status and shared QC row identifiers; retained output must remain one canonical biallelic row per retained input row
 - cover an input submitted for normalization that yields no output record alongside a successfully normalized row; verify `norm_ref_mismatch` QC, retention of the successful row, and successful invocation; also cover all records submitted for normalization missing from the output
 - verify malformed normalization output and output records with unknown input identifiers fail the invocation

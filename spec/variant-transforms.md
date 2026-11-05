@@ -247,6 +247,17 @@ source REF/ALT roles have been recovered.
 - with `--norm-indels`, the same internal contig-normalization model used by `liftover_build.py` applies here as well: convert declared input contigs to UCSC labels before calling `bcftools`, and convert normalized UCSC output contigs back to the declared naming afterward
 - with `--norm-indels`, unsupported input contig labels still fail the whole invocation rather than being QC-filtered row by row
 
+The external normalization step must preserve allele correspondence: input REF
+remains output REF and input ALT remains output ALT, even when normalization
+changes their strings or position. Under the restricted invocation above,
+`bcftools norm` contributes local `identity`; compose only the reference-allele
+assignment operation with the existing `.vmap` operation.
+
+REF compatibility checks do not establish allele correspondence, so this
+external-tool contract is checked by the real-bcftools tests in
+[TESTS.md](../TESTS.md). `-c s` is prohibited because it can exchange alleles or
+replace REF.
+
 Normalized output must be representable as one canonical biallelic target row
 per retained input row. Drop rows with the following failures, using these
 status codes under the shared row-level QC contract; do not split an input row
@@ -345,10 +356,12 @@ invocation-wide failures.
 
 ## Liftover allele operations
 
-`bcftools +liftover` reports strand reversal with `FLIP` and a REF/ALT exchange
-with `SWAP=1`. Payload projection needs this allele correspondence to recode
-genotypes and effects correctly; normalized allele strings alone are
-insufficient to infer it.
+`bcftools +liftover` annotations must describe actual allele correspondence
+through the entire transformation, including indel padding, trimming, and left
+alignment. `FLIP` records reverse complementation without exchanging allele
+indices; `SWAP=1` means source ALT became target REF and source REF became target
+ALT. Representation changes contribute no further operation. Payload projection
+needs this correspondence; normalized allele strings alone cannot establish it.
 
 `liftover_build.py` must request these annotations with
 `--flip-tag FLIP --swap-tag SWAP` and decode them as a local allele operation:
@@ -360,6 +373,9 @@ insufficient to infer it.
 
 These are local operations, before composition with the input `.vmap`'s
 existing `allele_op` under the [input-type rules](#tools-accepting-vmap-or-vtable).
+
+This external-tool contract is checked by the real-plugin tests in
+[TESTS.md](../TESTS.md); production uses the annotations, not genotype sentinels.
 
 Other annotation values, including `SWAP=-1` for a new reference allele outside
 the source pair and `SWAP=2`, cannot be represented by the four supported
