@@ -73,8 +73,8 @@ def iter_id_source_target_chunks(path: Path) -> Iterator[pd.DataFrame]:
 
 
 def raise_duplicate_used_key(path: Path, row: pd.Series) -> None:
-    key = ":".join(str(row[column]) for column in TARGET_KEY_COLUMNS)
-    raise ValueError(f"{path} contains duplicate used chrom:pos:a1:a2 key: {key}")
+    key = tuple(str(row[column]) for column in TARGET_KEY_COLUMNS)
+    raise ValueError(f"{path} contains duplicate used (chrom, pos, a1, a2) key: {key}")
 
 
 def require_no_duplicate_candidate_keys(coordinates: pd.DataFrame, *, path: Path) -> None:

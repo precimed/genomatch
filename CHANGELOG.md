@@ -23,20 +23,19 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 
 **All workflows**
 
-- Generated variant IDs are now `chrom:pos:a2:a1` instead of `chrom:pos:a1:a2`, and variants at the same position now sort by `a2`, then `a1`. Update anything that joins on the old IDs.
-- Combined variant columns are now read as `CHR:POS:OtherAllele:EffectAllele` (for example `chr:pos:ref:alt` with ALT as the effect allele). Previously the third field was read as the effect allele. If your combined column lists the effect allele first, split it into separate columns.
+- Generated variant IDs are now `chrom:pos:a2:a1` instead of `chrom:pos:a1:a2`. This changes the `.bim` and `.pvar` ID columns, the summary-statistics `SNP` column, and the IDs from `intersect_variants.py` and `union_variants.py`, unless IDs were copied or retained. Update anything that joins on the old IDs. Variants at the same position now sort by `a2`, then `a1`.
+- Fix [#28](https://github.com/precimed/genomatch/issues/28): Combined variant columns are now read as `CHR:POS:OtherAllele:EffectAllele` (for example `chr:pos:ref:alt` with ALT as the effect allele). Previously the third field was read as the effect allele. If your combined column lists the effect allele first, split it into separate columns.
 
 **Individual tools**
 
-- Exact matching (`intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, and `assign_vmap_ids.py`) now rejects inputs with `genome_build: unknown`, even when all inputs declare it. Run `guess_build.py` before matching.
-
+- Exact matching tools (`intersect_variants.py`, `union_variants.py`, `restrict_vmap.py`, and `assign_vmap_ids.py`) now reject inputs with `genome_build: unknown`. Run `guess_build.py --write` before matching, or set the build in the input's `.meta.json`.
 - Most tools now reject repeated variants in `.vtable` inputs, as they already did for `.vmap`. Run `sort_variants.py --drop-duplicates` to keep the first of each.
-- `restrict_build_compatible.py` follows the same rules, but every indel option is off by default: `--include-indels` keeps multi-base variants, and `--allow-indel-swaps` and `--norm-indels` must be added separately.
+- Repeated variants are now allowed where they can't affect the result: `.vmap` inputs to `intersect_variants.py` and `union_variants.py`, and restriction inputs to `restrict_vmap.py`.
+- `restrict_build_compatible.py` checks indels the same way as the preparation tools, but every indel option is off by default: `--include-indels` keeps multi-base variants, and `--allow-indel-swaps` and `--norm-indels` must be added separately.
 - Removed `--sort` and `--drop-duplicates` from `restrict_build_compatible.py`. Use `sort_variants.py` to sort; its `--drop-duplicates` keeps the first of any exact duplicates.
 - `liftover_build.py` no longer checks source alleles against the reference and expects `a2` to be the reference allele. If you run it directly, run `restrict_build_compatible.py` first. The preparation tools already do.
 - `.vmap` and `.vtable` inputs now get the same treatment, including the same filtering, duplicate handling and QC. `.vtable` inputs now get a QC file too, which identifies dropped rows by `row_idx`.
 - When different `.vtable` rows become the same variant during restriction, for example `A/G` and `G/A` at one position, all of them are now dropped and recorded in QC as `duplicate_target`. `.vmap` already worked this way. Some outputs will have fewer rows, including SNV-only ones.
-- Repeated variant keys are now accepted in `.vmap` inputs to `intersect_variants.py` and `union_variants.py`, and in restriction inputs to `restrict_vmap.py`. Previously, these inputs could be rejected for containing duplicates.
 
 ### Fixed
 

@@ -321,7 +321,7 @@ def test_assign_vmap_ids_rejects_duplicate_used_id_source_target_keys(tmp_path):
     result = run_py("assign_vmap_ids.py", "--vmap", source, "--id-source", id_source, "--output", out)
 
     assert result.returncode != 0
-    assert "duplicate used chrom:pos:a1:a2 key: 1:10:A:G" in result.stderr
+    assert "duplicate used (chrom, pos, a1, a2) key: ('1', '10', 'A', 'G')" in result.stderr
     assert not out.exists()
 
 
@@ -340,7 +340,7 @@ def test_assign_vmap_ids_rejects_duplicate_used_key_across_id_source_chunks(tmp_
     source_frame = read_vmap_table(source).to_frame(copy=False)
     id_source_info = load_target_object_info(id_source)
 
-    with pytest.raises(ValueError, match="duplicate used chrom:pos:a1:a2 key: 1:10:A:G"):
+    with pytest.raises(ValueError) as error:
         assign_ids_from_id_source(
             source_frame,
             id_source,
@@ -348,6 +348,8 @@ def test_assign_vmap_ids_rejects_duplicate_used_key_across_id_source_chunks(tmp_
             unmatched_id_policy="drop",
             duplicate_id_policy="fail",
         )
+
+    assert "duplicate used (chrom, pos, a1, a2) key: ('1', '10', 'A', 'G')" in str(error.value)
 
 
 def test_assign_vmap_ids_ignores_duplicate_unused_id_source_target_keys(tmp_path):
