@@ -1,4 +1,4 @@
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 import json
 
 
@@ -6,7 +6,7 @@ def test_convert_vmap_to_target_materializes_target_side(tmp_path):
     source = tmp_path / "map.vmap"
     out = tmp_path / "out.vtable"
     write_lines(source, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "1\t200\tt2\tC\tT\t1\t1\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {
             "object_type": "variant_map",
@@ -18,7 +18,7 @@ def test_convert_vmap_to_target_materializes_target_side(tmp_path):
     assert read_tsv(out) == [["1", "100", "t1", "A", "G"], ["1", "200", "t2", "C", "T"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh37",
         "contig_naming": "ncbi",
         "created_by": "convert_vmap_to_target.py",

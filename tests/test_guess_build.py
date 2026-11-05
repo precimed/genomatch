@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from utils import run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
+from utils import run_py_with_env, write_object_metadata, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def test_guess_build_updates_unknown_build_only_for_vtable(tmp_path):
@@ -13,7 +13,7 @@ def test_guess_build_updates_unknown_build_only_for_vtable(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -35,7 +35,7 @@ def test_guess_build_updates_vmap_target_metadata_only(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {
             "object_type": "variant_map",
@@ -63,7 +63,7 @@ def test_guess_build_force_overwrites_existing_build(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"},
     )
@@ -83,7 +83,7 @@ def test_guess_build_requires_declared_contig_naming(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown"},
     )
@@ -102,7 +102,7 @@ def test_guess_build_returns_unknown_on_ambiguous_build_evidence(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "A"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -123,7 +123,7 @@ def test_guess_build_accepts_ucsc_named_input(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["chr1\t1\trs1\tA\tC", "chr1\t2\trs2\tC\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ucsc"},
     )
@@ -145,7 +145,7 @@ def test_guess_build_returns_unknown_when_best_rate_is_below_threshold(tmp_path)
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tA\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -166,7 +166,7 @@ def test_guess_build_returns_unknown_when_no_rows_are_usable_as_evidence(tmp_pat
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t999\trs1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -212,7 +212,7 @@ def test_guess_build_accepts_plink_family_input(tmp_path, contig_naming, chrom, 
     write_primary_ucsc_fasta(grch38, {"chrX": prefix + "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, [f"{chrom}\t{pos}\trs1\tA\tC", f"{chrom}\t60002\trs2\tC\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": contig_naming},
     )
@@ -234,7 +234,7 @@ def test_guess_build_reference_access_modes_are_consistent_and_default_to_bulk(t
     write_primary_ucsc_fasta(grch38, {"chr1": "TGA"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC", "1\t2\trs2\tC\tA", "1\t3\trs3\tT\tG"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -274,7 +274,7 @@ def test_guess_build_sample_rows_limits_considered_rows(tmp_path):
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     rows = [f"1\t{i}\trs{i}\tA\tC" for i in range(1, 21)]
     write_lines(source, rows)
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -305,7 +305,7 @@ def test_guess_build_sample_rows_zero_uses_all_rows(tmp_path):
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     rows = [f"1\t{i}\trs{i}\tA\tC" for i in range(1, 13)]
     write_lines(source, rows)
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -335,7 +335,7 @@ def test_guess_build_rejects_negative_sample_rows(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\trs1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )

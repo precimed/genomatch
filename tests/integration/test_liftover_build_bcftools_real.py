@@ -9,7 +9,7 @@ from real_liftover_helpers import (
     select_mapping_entries,
     write_real_match_config,
 )
-from utils import read_tsv, run_py_with_env, write_json, write_lines
+from utils import read_tsv, run_py_with_env, write_object_metadata, write_lines
 
 
 def expected_lifted_table_rows(entries):
@@ -48,7 +48,7 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
     lifted = tmp_path / "lifted.vtable"
     validated = tmp_path / "validated.vtable"
     write_lines(source, [f"{entry.chrom}\t{entry.bp37}\t{entry.rsid}\t" + "\t".join(canonical_alleles_for_build(entry, build_name="GRCh37")) for entry in entries])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -66,7 +66,7 @@ def test_real_guess_liftover_and_validate_pipeline(tmp_path: Path) -> None:
     assert read_tsv(lifted) == expected_lifted_table_rows(entries)
     lifted_meta = json.loads(lifted.with_name(lifted.name + ".meta.json").read_text(encoding="utf-8"))
     assert lifted_meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh38",
         "contig_naming": "ncbi",
         "variants_count": len(entries),
@@ -105,7 +105,7 @@ def test_real_liftover_composes_existing_vmap_provenance(tmp_path: Path) -> None
                 f"{entry.chrom}\t{entry.bp37}\t{entry.rsid}\t{canonical_a1}\t{canonical_a2}\torig{entry.chrom}\t{100 + idx}\tidentity"
             )
     write_lines(source, rows)
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {
             "object_type": "variant_map",

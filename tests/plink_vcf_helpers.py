@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from genomatch.vtable_utils import compose_allele_ops
-from utils import REPO_ROOT, read_bim, read_tsv, run_cmd, run_py, write_json, write_lines
+from utils import REPO_ROOT, read_bim, read_tsv, run_cmd, run_py, write_object_metadata, write_lines
 
 
 BASES = ("A", "C", "G", "T")
@@ -385,7 +385,7 @@ def write_target_vtable(path: Path, rows: List[List[str]], *, genome_build: str,
     for row in rows:
         normalized_rows.append([normalize_test_chrom(row[0], to_naming=contig_naming), *row[1:]])
     write_lines(path, ["\t".join(row) for row in normalized_rows])
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {
             "object_type": "variant_table",
@@ -421,7 +421,7 @@ def build_vmap(source_vmap: Path, target_vtable: Path, output_path: Path) -> Non
         output_rows.append(matched)
     write_lines(output_path, ["\t".join(row) for row in output_rows])
     target_meta = read_variant_object_target_metadata(target_vtable)
-    write_json(
+    write_object_metadata(
         output_path.with_name(output_path.name + ".meta.json"),
         {
             "object_type": "variant_map",

@@ -6,42 +6,32 @@ import pytest
 from genomatch import vtable_utils
 from genomatch.exact_set_utils import load_target_object_info
 from genomatch.sumstats_id_lookup import augment_rows_frame_with_id_lookup
-from utils import read_tsv, run_py, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def write_vtable_with_meta(path, lines, *, genome_build="GRCh37", contig_naming="ucsc"):
     write_lines(path, lines)
-    path.with_name(path.name + ".meta.json").write_text(
-        json.dumps(
-            {
-                "object_type": "variant_table",
-                "genome_build": genome_build,
-                **({"contig_naming": contig_naming} if contig_naming is not None else {}),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    write_object_metadata(
+        path.with_name(path.name + ".meta.json"),
+        {
+            "object_type": "variant_table",
+            "genome_build": genome_build,
+            **({"contig_naming": contig_naming} if contig_naming is not None else {}),
+        },
     )
 
 
 def write_vmap_with_meta(path, lines, *, genome_build="GRCh37", contig_naming="ucsc"):
     write_lines(path, lines)
-    path.with_name(path.name + ".meta.json").write_text(
-        json.dumps(
-            {
-                "object_type": "variant_map",
-                "target": {
-                    "genome_build": genome_build,
-                    **({"contig_naming": contig_naming} if contig_naming is not None else {}),
-                },
+    write_object_metadata(
+        path.with_name(path.name + ".meta.json"),
+        {
+            "object_type": "variant_map",
+            "target": {
+                "genome_build": genome_build,
+                **({"contig_naming": contig_naming} if contig_naming is not None else {}),
             },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+        },
     )
 
 

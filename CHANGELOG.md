@@ -10,6 +10,8 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 This release fixes a major bug in indel handling: earlier versions could choose the wrong reference allele, for example recording a deletion as an insertion. Regenerate all outputs from your original raw inputs, and don't reuse earlier outputs, including through `--resume`.
 
+`.vmap` and `.vtable` objects from earlier releases without the required `schema_version` metadata are now refused, including `--id-lookup` objects. Regenerate these objects from their original raw inputs.
+
 ### Changed
 
 **`prepare_variants.py` and `prepare_variants_sharded.py`**

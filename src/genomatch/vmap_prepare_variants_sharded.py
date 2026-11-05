@@ -11,6 +11,7 @@ from .importer_utils import DiscoveredInputShard, resolve_import_input_paths
 from .vmap_prepare_variants import all_retained_stage_outputs
 from .vtable_utils import (
     CANONICAL_CONTIG_RANK,
+    CURRENT_SCHEMA_VERSION,
     SUPPORTED_GENOME_BUILDS,
     load_metadata,
     metadata_path_for,
@@ -236,6 +237,13 @@ def summed_variants_count_from_metadata(paths: list[Path]) -> int | None:
 
 
 def write_concatenated_vmap(path: Path, final_paths: list[Path], metadata: dict) -> None:
+    for final_path in final_paths:
+        version = load_metadata(final_path)["schema_version"]
+        if version != CURRENT_SCHEMA_VERSION:
+            raise ValueError(
+                f"{final_path}: raw concatenation requires schema_version={CURRENT_SCHEMA_VERSION!r}, "
+                f"got {version!r}; regenerate from the original raw inputs"
+            )
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_output = path.with_name(path.stem + ".tmp.vmap")
     temp_meta = metadata_path_for(temp_output)
@@ -305,6 +313,7 @@ def main() -> int:
         require_outputs_absent(managed_outputs)
 
     if args.resume and variant_object_exists(final_output):
+        read_target_metadata(final_output)
         logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
         return 0
 
@@ -314,6 +323,7 @@ def main() -> int:
         group_final = variant_object_path(output_prefix)
         final_paths.append(group_final)
         if args.resume and variant_object_exists(group_final):
+            read_target_metadata(group_final)
             logger.info("%s: skipping group %s; output exists at %s", WRAPPER_NAME, group_label, group_final)
             continue
         run_command(

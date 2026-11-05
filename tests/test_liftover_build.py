@@ -4,7 +4,7 @@ import stat
 from pathlib import Path
 import pytest
 
-from utils import read_tsv, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
+from utils import read_tsv, run_py_with_env, write_object_metadata, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def write_fake_bcftools(path: Path) -> None:
@@ -147,7 +147,7 @@ def test_liftover_build_vtable_emits_vtable_and_qc(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t2\trs2\tC\tA', '1\t1\trs1\tG\tA', '1\t4\trs4\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -198,7 +198,7 @@ def test_liftover_build_resolves_grch38_to_t2t_edge(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t2\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"},
     )
@@ -217,7 +217,7 @@ def test_liftover_build_resolves_grch38_to_t2t_edge(tmp_path):
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "T2T-CHM13v2.0",
         "contig_naming": "ncbi",
         "variants_count": 1,
@@ -247,7 +247,7 @@ def test_liftover_build_resolves_t2t_to_grch38_edge(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t2\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"},
     )
@@ -266,7 +266,7 @@ def test_liftover_build_resolves_t2t_to_grch38_edge(tmp_path):
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh38",
         "contig_naming": "ncbi",
         "variants_count": 1,
@@ -296,7 +296,7 @@ def test_liftover_build_resolves_grch37_to_t2t_edge(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t2\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -315,7 +315,7 @@ def test_liftover_build_resolves_grch37_to_t2t_edge(tmp_path):
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "T2T-CHM13v2.0",
         "contig_naming": "ncbi",
         "variants_count": 1,
@@ -345,7 +345,7 @@ def test_liftover_build_resolves_t2t_to_grch37_edge(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t2\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"},
     )
@@ -364,7 +364,7 @@ def test_liftover_build_resolves_t2t_to_grch37_edge(tmp_path):
     assert read_tsv(out) == [["1", "5", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh37",
         "contig_naming": "ncbi",
         "variants_count": 1,
@@ -394,7 +394,7 @@ def test_liftover_build_resume_reuses_retained_bcftools_output(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t2\trs2\tC\tA', '1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -458,7 +458,7 @@ def test_liftover_build_vmap_preserves_original_provenance(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\tt1\tG\tA\tshardA\t8\tswap', '1\t2\tt2\tT\tA\tshardA\t9\tswap'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -504,7 +504,7 @@ def test_liftover_build_drops_rows_when_lifted_ploidy_class_changes(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["X\t60001\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -561,7 +561,7 @@ def test_liftover_build_uses_bcftools_flip_and_swap_tags(tmp_path):
         source,
         ['1\t1\trs1\tG\tA\t.\t0\tswap', '1\t2\trs2\tG\tA\t.\t1\tswap', '1\t3\trs3\tG\tA\t.\t2\tswap', '1\t4\trs4\tG\tA\t.\t3\tswap'],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -603,7 +603,7 @@ def test_liftover_build_lifts_one_side_multibase_rows_with_qc(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tAT\tA', '1\t2\trs2\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -649,7 +649,7 @@ def test_liftover_build_drops_multiallelic_liftover_output_with_qc(tmp_path):
     )
     write_multiallelic_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -696,7 +696,7 @@ def test_liftover_build_retains_both_multibase_liftover_output(tmp_path):
     )
     write_both_multibase_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -740,7 +740,7 @@ def test_liftover_build_drops_non_primary_target_contig_with_qc(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -790,7 +790,7 @@ def test_liftover_build_drops_duplicate_lifted_targets_with_qc(tmp_path):
         source,
         ['1\t1\trs1\tG\tA\tshardA\t0\tswap', '1\t2\trs2\tG\tA\tshardB\t0\tswap'],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -838,7 +838,7 @@ def test_liftover_build_accepts_ucsc_named_input(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['chr1\t2\trs2\tC\tA', 'chr1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ucsc"},
     )
@@ -860,7 +860,7 @@ def test_liftover_build_accepts_ucsc_named_input(tmp_path):
     ]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh38",
         "contig_naming": "ucsc",
         "variants_count": 2,
@@ -880,7 +880,7 @@ def test_liftover_build_fails_on_missing_chain_entry(tmp_path):
     write_match_config(config, grch37_ucsc_fasta=grch37_ucsc, grch38_ucsc_fasta=grch38_ucsc)
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -920,7 +920,7 @@ def test_liftover_build_fails_on_missing_bcftools_override(tmp_path):
         chain38to37=chain38to37,
     )
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -962,7 +962,7 @@ def test_liftover_build_fails_on_missing_fasta_index(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1004,7 +1004,7 @@ def test_liftover_build_trusts_source_reference_compatibility(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t1\trs1\tT\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1054,7 +1054,7 @@ def test_liftover_build_accepts_plink_family_input(tmp_path, contig_naming, chro
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, [f"{chrom}\t{pos}\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": contig_naming},
     )
@@ -1073,7 +1073,7 @@ def test_liftover_build_accepts_plink_family_input(tmp_path, contig_naming, chro
     assert read_tsv(out) == [[chrom, "60005", "rs1", "G", "A"]]
     meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh38",
         "contig_naming": contig_naming,
         "variants_count": 1,
@@ -1105,7 +1105,7 @@ def test_liftover_build_rejects_plink_splitx_input(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['25\t60001\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "plink_splitx"},
     )
@@ -1147,7 +1147,7 @@ def test_liftover_build_fails_on_unsupported_contig_label(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['chrUn_gl000220\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1189,7 +1189,7 @@ def test_liftover_build_audits_unsupported_swap_annotation(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t1\trs1\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1232,7 +1232,7 @@ def test_liftover_build_forwards_unchecked_source_reference_rows(tmp_path):
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ["1\t1\trs1\tAT\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1274,7 +1274,7 @@ def test_liftover_build_reference_access_modes_are_consistent_and_default_to_bul
     )
     write_fake_bcftools(fake_bcftools)
     write_lines(source, ['1\t2\trs2\tC\tA', '1\t1\trs1\tG\tA', '1\t4\trs4\tG\tA'])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )

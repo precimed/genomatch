@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from real_liftover_helpers import resolve_bcftools_with_liftover, select_mapping_entries, write_real_match_config
-from utils import read_tsv, run_py, run_py_with_env, write_json, write_lines
+from utils import read_tsv, run_py, run_py_with_env, write_object_metadata, write_lines
 
 
 def format_output_float(value: float) -> str:
@@ -107,7 +107,7 @@ def test_end_to_end_sumstats_liftover_restrict_apply_real(tmp_path: Path) -> Non
     lifted_rows = read_tsv(lifted)
     expected_vmap = [row for idx, row in enumerate(lifted_rows) if idx % 2 == 0]
     write_lines(membership_vtable, ["\t".join(row[:5]) for row in reversed(expected_vmap)])
-    write_json(
+    write_object_metadata(
         membership_vtable.with_name(membership_vtable.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"},
     )

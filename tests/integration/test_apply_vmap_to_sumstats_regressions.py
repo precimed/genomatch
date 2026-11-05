@@ -7,7 +7,7 @@ from typing import Dict, Iterable, List
 import pytest
 
 from genomatch.vtable_utils import classify_allele_operation
-from utils import REPO_ROOT, read_tsv, run_py, write_json, write_lines
+from utils import REPO_ROOT, read_tsv, run_py, write_object_metadata, write_lines
 
 
 REGRESSION_DIR = REPO_ROOT / "tests" / "data" / "regressions"
@@ -180,7 +180,7 @@ def write_bridge_vmap(
             )
         )
     write_lines(path, rows)
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {
             "object_type": "variant_map",

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from utils import read_tsv, run_py, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
+from utils import read_tsv, run_py, run_py_with_env, write_json, write_object_metadata, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def assert_wrote(result, path: Path) -> None:
@@ -97,7 +97,7 @@ def write_known_sumstats_inputs(tmp_path: Path, *, genome_build: str) -> tuple[P
     write_lines(source, ["SNP\tEA\tOA\tBETA", "rs1\tG\tA\t0.5"])
     write_sumstats_id_lookup_metadata(metadata)
     write_lines(id_vtable, ["1\t1\trs1\tG\tA"])
-    write_json(
+    write_object_metadata(
         id_vtable.with_name(id_vtable.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": genome_build, "contig_naming": "ncbi"},
     )
@@ -694,7 +694,7 @@ def test_prepare_variants_sumstats_passes_id_lookup_through_to_importer(tmp_path
     write_lines(source, ["SNP\tEA\tOA\tBETA", "rs1\tA\tG\t0.5"])
     write_sumstats_id_lookup_metadata(metadata)
     write_lines(id_vtable, ["1\t1\trs1\tC\tT"])
-    write_json(
+    write_object_metadata(
         id_vtable.with_name(id_vtable.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -820,7 +820,7 @@ def test_prepare_variants_fails_when_planned_outputs_exist_without_resume_or_for
     output = tmp_path / "prepared"
     write_bim(source, ["1\trs1\t0\t1\tA\tG"])
     write_lines(tmp_path / "prepared.imported.vmap", ["1\t1\trs1\tA\tG\t.\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         tmp_path / "prepared.imported.vmap.meta.json",
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -1058,12 +1058,12 @@ def test_prepare_variants_force_deletes_skipped_stage_outputs_under_prefix(tmp_p
     output = tmp_path / "prepared"
     write_bim(source, ["1\trs1\t0\t1\tA\tG"])
     write_lines(tmp_path / "prepared.normalized.vmap", ["stale"])
-    write_json(
+    write_object_metadata(
         tmp_path / "prepared.normalized.vmap.meta.json",
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
     )
     write_lines(tmp_path / "prepared.splitx.vmap", ["stale"])
-    write_json(
+    write_object_metadata(
         tmp_path / "prepared.splitx.vmap.meta.json",
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "plink_splitx"}},
     )

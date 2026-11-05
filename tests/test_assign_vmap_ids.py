@@ -7,12 +7,12 @@ from genomatch import vtable_utils
 from genomatch.assign_vmap_ids import assign_ids_from_id_source
 from genomatch.exact_set_utils import load_target_object_info
 from genomatch.vtable_utils import read_vmap_table
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def write_vmap(path: Path, lines: list[str], *, genome_build: str = "GRCh38", contig_naming: str = "ncbi") -> None:
     write_lines(path, lines)
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {
             "object_type": "variant_map",
@@ -25,7 +25,7 @@ def write_vmap(path: Path, lines: list[str], *, genome_build: str = "GRCh38", co
 
 def write_vtable(path: Path, lines: list[str], *, genome_build: str = "GRCh38", contig_naming: str = "ncbi") -> None:
     write_lines(path, lines)
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {
             "object_type": "variant_table",

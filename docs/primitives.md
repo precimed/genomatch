@@ -32,7 +32,7 @@ For exact schema and edge-case rules, see [SPEC.md](../SPEC.md), [core-objects.m
 
 ### Core objects and metadata
 
-Each `.vtable` or `.vmap` object is a single file with JSON sidecars at `<object>.meta.json`.
+Each `.vtable` or `.vmap` object is a single file with JSON sidecars at `<object>.meta.json`. Both object types require a supported [schema version](../spec/core-objects.md#schema-versions).
 
 | Object | Purpose | Required metadata |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ Each `.vtable` or `.vmap` object is a single file with JSON sidecars at `<object
 
 Downstream transforms other than `normalize_contigs.py` require declared `contig_naming`. If an imported object is unresolved or mixed, clean it with `normalize_contigs.py` before continuing. See [core-objects.md](../spec/core-objects.md) for the on-disk column contracts.
 
-Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` row-count metadata. Readers accept missing `variants_count` for backward compatibility. Set-operation tools may use it to choose memory-efficient scan order, but not to change documented output order, ID policy, provenance, or emitted object type.
+Newly written `.vmap` and `.vtable` sidecars include top-level `variants_count` row-count metadata. Readers accept missing `variants_count`. Set-operation tools may use it to choose memory-efficient scan order, but not to change documented output order, ID policy, provenance, or emitted object type.
 
 `a1` and `a2` are ordered alleles, not an unordered allele set. Importers preserve source-format allele meaning at import time, while reference-aware tools such as `restrict_build_compatible.py` and `liftover_build.py` emit reference-aligned variants with `a1=non-reference` and `a2=reference`. This keeps canonical reference-aware rows aligned with ALT/effect/counting-style semantics while still making the reference allele explicit in `a2`.
 

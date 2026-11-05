@@ -1,7 +1,7 @@
 import os
 
 from genomatch.apply_vmap_bfile import has_identity_sample_axis_remap
-from utils import read_bed_matrix, read_bim, read_fam_sample_count, run_py, run_py_with_env, write_bfile, write_json, write_lines
+from utils import read_bed_matrix, read_bim, read_fam_sample_count, run_py, run_py_with_env, write_bfile, write_object_metadata, write_lines
 
 
 def test_has_identity_sample_axis_remap_requires_full_identity_mapping():
@@ -28,7 +28,7 @@ def test_apply_vmap_to_bfile_preserves_target_order_for_single_file_provenance(t
             "1\t100\tt1\tA\tG\t.\t0\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
     os.utime(source_prefix.with_suffix(".fam"), (1, 1))
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
@@ -54,7 +54,7 @@ def test_apply_vmap_to_bfile_retain_snp_id_uses_vmap_id(tmp_path):
         [[0]],
     )
     write_lines(vmap, ["1\t100\ttarget_id\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py(
         "apply_vmap_to_bfile.py",
@@ -77,7 +77,7 @@ def test_apply_vmap_to_bfile_treats_flip_swap_as_genotype_swap(tmp_path):
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9", "S2 S2 0 0 0 -9"], [[0, 3]])
     write_lines(vmap, ["1\t100\tt1\tC\tT\t.\t0\tflip_swap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -101,7 +101,7 @@ def test_apply_vmap_to_bfile_reports_chunk_progress(tmp_path):
             "1\t200\tt2\tC\tT\t.\t1\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py_with_env(
         "apply_vmap_to_bfile.py",
@@ -142,7 +142,7 @@ def test_apply_vmap_to_bfile_chrX_chunk_boundary_parity(tmp_path):
             "X\t5000002\tt3\tG\tA\t.\t2\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         vmap.with_name(vmap.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -189,7 +189,7 @@ def test_apply_vmap_to_bfile_warns_about_unknown_sex_only_for_sex_dependent_rows
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9", "S2 S2 0 0 1 -9"], [[0, 3]])
     write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -203,7 +203,7 @@ def test_apply_vmap_to_bfile_validates_sex_independent_haploid_rows_even_with_un
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["MT\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9"], [[2]])
     write_lines(vmap, ["MT\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -218,7 +218,7 @@ def test_apply_vmap_to_bfile_reports_haploid_heterozygous_calls_without_rewritin
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[2]])
     write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -233,7 +233,7 @@ def test_apply_vmap_to_bfile_reports_absent_region_calls_without_rewriting(tmp_p
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["Y\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 2 -9"], [[0]])
     write_lines(vmap, ["Y\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -249,7 +249,7 @@ def test_apply_vmap_to_bfile_writes_qc_tsv_for_haploid_het_incompatible(tmp_path
     # Male with het genotype at X non-PAR (X:100 is outside PAR1 for GRCh37) → haploid_het_incompatible
     write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[2]])
     write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -269,7 +269,7 @@ def test_apply_vmap_to_bfile_writes_qc_tsv_for_absent_nonmissing(tmp_path):
     # Female with non-missing genotype at Y MSY (Y:100 is in Y_MSY for GRCh37) → absent_nonmissing
     write_bfile(source_prefix, ["Y\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 2 -9"], [[0]])
     write_lines(vmap, ["Y\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -288,7 +288,7 @@ def test_apply_vmap_to_bfile_no_qc_tsv_when_no_ploidy_issues(tmp_path):
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[0]])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -301,7 +301,7 @@ def test_apply_vmap_to_bfile_removes_stale_qc_tsv_when_no_ploidy_issues(tmp_path
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[0]])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
     out_prefix.with_suffix(".qc.tsv").write_text("stale content\n", encoding="utf-8")
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
@@ -322,7 +322,7 @@ def test_apply_vmap_to_bfile_uses_exact_source_shard_for_sharded_payloads(tmp_pa
         for ext in (".bed", ".bim", ".fam"):
             src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
     write_lines(vmap, ["1\t100\tt1\tA\tG\tchr1\t0\tidentity", "2\t200\tt2\tC\tT\t2\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -337,7 +337,7 @@ def test_apply_vmap_to_bfile_discovers_xy_shard_alias_for_chr_template(tmp_path)
     write_bfile(tmp_path / "source_chrX", ["23\trs_x\t0\t100\tA\tG"], fam_lines, [[0]])
     write_bfile(tmp_path / "source_chrXY", ["25\trs_xy\t0\t200\tC\tT"], fam_lines, [[3]])
     write_lines(vmap, ["X\t100\tt_x\tA\tG\tX\t0\tidentity", "X\t200\tt_xy\tC\tT\tXY\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -353,7 +353,7 @@ def test_apply_vmap_to_bfile_rejects_missing_required_source_shard(tmp_path):
     for ext in (".bed", ".bim", ".fam"):
         (tmp_path / f"source_chr1{ext}").rename(tmp_path / f"source.chr1{ext}")
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode != 0
@@ -365,7 +365,7 @@ def test_apply_vmap_to_bfile_rejects_zero_discovered_source_shards(tmp_path):
     vmap = tmp_path / "map.vmap"
     out_prefix = tmp_path / "aligned"
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
 
@@ -379,7 +379,7 @@ def test_apply_vmap_to_bfile_rejects_missing_provenance_sentinel_rows(tmp_path):
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9"], [[0]])
     write_lines(vmap, ["1\t400\tt_missing\tA\tC\t.\t-1\tmissing"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
 
@@ -393,7 +393,7 @@ def test_apply_vmap_to_bfile_shards_output_by_target_contig(tmp_path):
     out_prefix = tmp_path / "aligned.@"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG", "2\trs2\t0\t200\tC\tT"], ["S1 S1 0 0 0 -9"], [[0], [3]])
     write_lines(vmap, ["2\t200\tt2\tC\tT\t.\t1\tidentity", "1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -409,7 +409,7 @@ def test_apply_vmap_to_bfile_suppresses_empty_output_shards(tmp_path):
     out_prefix = tmp_path / "aligned.@"
     write_bfile(source_prefix, ["2\trs2\t0\t200\tC\tT"], ["S1 S1 0 0 0 -9"], [[3]])
     write_lines(vmap, ["2\t200\tt2\tC\tT\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -423,7 +423,7 @@ def test_apply_vmap_to_bfile_fails_on_out_of_range_single_file_provenance(tmp_pa
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9"], [[0]])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t5\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode != 0
@@ -436,7 +436,7 @@ def test_apply_vmap_to_bfile_supports_dotted_output_prefix(tmp_path):
     out_prefix = tmp_path / "aligned.panel"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9"], [[0]])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -467,7 +467,7 @@ def test_apply_vmap_to_bfile_merges_source_shards_when_target_contigs_merge(tmp_
             "X\t60001\tt_par\tC\tT\t25\t0\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -490,7 +490,7 @@ def test_apply_vmap_to_bfile_splits_source_shard_when_target_contigs_split(tmp_p
             "23\t70000\tt_nonpar\tA\tG\t23\t0\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "plink_splitx"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "plink_splitx"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -513,7 +513,7 @@ def test_apply_vmap_to_bfile_target_fam_reorders_and_fills_missing_for_inconsist
         for ext in (".bed", ".bim", ".fam"):
             src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "2\t200\tt2\tC\tT\t2\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
     write_lines(target_fam, ["S3 S3 0 0 1 -9", "S1 S1 0 0 1 -9", "S2 S2 0 0 2 -9"])
 
     result = run_py(
@@ -541,7 +541,7 @@ def test_apply_vmap_to_bfile_iid_mode_ignores_fid_for_target_fam(tmp_path):
     target_fam = tmp_path / "target.fam"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["F1 S1 0 0 1 -9", "F2 S2 0 0 2 -9"], [[0, 3]])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
     write_lines(target_fam, ["X9 S2 0 0 2 -9", "X8 S1 0 0 1 -9"])
 
     result = run_py(
@@ -568,7 +568,7 @@ def test_apply_vmap_to_bfile_rejects_duplicate_subject_keys_in_source_shard(tmp_
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["1\trs1\t0\t100\tA\tG"], ["F1 S1 0 0 1 -9", "F2 S1 0 0 2 -9"], [[0, 3]])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py(
         "apply_vmap_to_bfile.py",
@@ -593,7 +593,7 @@ def test_apply_vmap_to_bfile_target_fam_controls_haploid_validation_sex(tmp_path
     target_fam = tmp_path / "target.fam"
     write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 0 -9"], [[0]])
     write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
     write_lines(target_fam, ["S1 S1 0 0 1 -9"])
 
     result = run_py(
@@ -632,7 +632,7 @@ def test_apply_vmap_to_bfile_relocates_genotypes_across_output_shards_by_provena
             "1\t600\tt_from_2\tC\tT\t2\t0\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
@@ -656,7 +656,7 @@ def test_apply_vmap_to_bfile_rejects_sharded_source_fam_content_mismatch(tmp_pat
         for ext in (".bed", ".bim", ".fam"):
             src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "2\t200\tt2\tC\tT\t2\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_template, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode != 0
@@ -674,7 +674,7 @@ def test_apply_vmap_to_bfile_sample_axis_native_keeps_per_output_shard_fam(tmp_p
         for ext in (".bed", ".bim", ".fam"):
             src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "X\t5000000\ttx\tC\tT\tX\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py(
         "apply_vmap_to_bfile.py",
@@ -706,7 +706,7 @@ def test_apply_vmap_to_bfile_sample_axis_native_rejects_mixed_axes_in_one_output
         for ext in (".bed", ".bim", ".fam"):
             src.with_suffix(ext).rename(tmp_path / f"source.{token}{ext}")
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity", "X\t5000000\ttx\tC\tT\tX\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py(
         "apply_vmap_to_bfile.py",
@@ -731,7 +731,7 @@ def test_apply_vmap_to_bfile_skip_ploidy_check_suppresses_validation_warning_and
     out_prefix = tmp_path / "aligned"
     write_bfile(source_prefix, ["X\trs1\t0\t100\tA\tG"], ["S1 S1 0 0 1 -9"], [[2]])
     write_lines(vmap, ["X\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py(
         "apply_vmap_to_bfile.py",
@@ -767,7 +767,7 @@ def test_apply_vmap_to_bfile_streams_single_file_payload_in_small_chunks(tmp_pat
             "1\t100\tt1\tA\tG\t.\t0\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py_with_env(
         "apply_vmap_to_bfile.py",
@@ -805,7 +805,7 @@ def test_apply_vmap_to_bfile_streams_interleaved_sharded_input(tmp_path):
             "2\t800\tt_from_1b\tT\tC\t1\t1\tswap",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py_with_env(
         "apply_vmap_to_bfile.py",

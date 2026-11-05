@@ -224,6 +224,7 @@ def main() -> int:
         require_outputs_absent(planned_variant_outputs)
 
     if args.resume and variant_object_exists(final_output):
+        read_target_metadata(final_output)
         logger.info("%s: wrote %s", WRAPPER_NAME, final_output)
         return 0
 

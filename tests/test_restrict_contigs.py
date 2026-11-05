@@ -1,6 +1,6 @@
 import json
 
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def test_restrict_contigs_vtable_emits_vtable(tmp_path):
@@ -14,7 +14,7 @@ def test_restrict_contigs_vtable_emits_vtable(tmp_path):
             "2\t300\trs3\tG\tA",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -28,7 +28,7 @@ def test_restrict_contigs_vtable_emits_vtable(tmp_path):
     ]
     out_meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert out_meta == {
-        "object_type": "variant_table",
+        "object_type": "variant_table", "schema_version": "1.0",
         "genome_build": "GRCh37",
         "contig_naming": "ncbi",
         "variants_count": 3,
@@ -46,7 +46,7 @@ def test_restrict_contigs_vmap_preserves_original_provenance_and_type(tmp_path):
             "2\t300\tmid3\tC\tA\tshardB\t4\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {
             "object_type": "variant_map",
@@ -63,7 +63,7 @@ def test_restrict_contigs_vmap_preserves_original_provenance_and_type(tmp_path):
     ]
     out_meta = json.loads(out.with_name(out.name + ".meta.json").read_text(encoding="utf-8"))
     assert out_meta == {
-        "object_type": "variant_map",
+        "object_type": "variant_map", "schema_version": "1.0",
         "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"},
         "variants_count": 3,
     }
@@ -80,7 +80,7 @@ def test_restrict_contigs_filters_target_rows_by_chr2use(tmp_path):
             "3\t300\trs3\tG\tA",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -95,7 +95,7 @@ def test_restrict_contigs_requires_declared_contig_naming(tmp_path):
     source = tmp_path / "in.vtable"
     out = tmp_path / "out.vtable"
     write_lines(source, ["1\t100\trs1\tA\tG", "unknown\t200\trs2\tC\tT"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37"},
     )
@@ -110,7 +110,7 @@ def test_restrict_contigs_rejects_invalid_declared_contigs(tmp_path):
     source = tmp_path / "in.vtable"
     out = tmp_path / "out.vtable"
     write_lines(source, ["chr1\t100\trs1\tA\tG", "unknown\t200\trs2\tC\tT"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -124,7 +124,7 @@ def test_restrict_contigs_rejects_unknown_contigs_under_declared_metadata(tmp_pa
     source = tmp_path / "in.vtable"
     out = tmp_path / "out.vtable"
     write_lines(source, ["1\t100\trs1\tA\tG", "unknown\t200\trs2\tC\tT"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )

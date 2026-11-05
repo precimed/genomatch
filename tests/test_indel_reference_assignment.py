@@ -9,13 +9,13 @@ import pytest
 from genomatch import vmap_restrict_build_compatible as restriction
 from genomatch.tabular_rows import VariantRowsTable
 from test_restrict_build_compatible import restrict_env_with_fake_norm
-from utils import read_tsv, run_py_with_env, write_json, write_lines
+from utils import read_tsv, run_py_with_env, write_object_metadata, write_lines
 
 
 def write_object(path, rows, suffix):
     write_lines(path, [f'{row}\toriginal\t{100 + i}\tswap' if suffix == 'vmap' else row for i, row in enumerate(rows)])
     target = {'genome_build': 'GRCh37', 'contig_naming': 'ncbi'}
-    write_json(path.with_name(path.name + '.meta.json'), {'object_type': 'variant_map', 'target': target} if suffix == 'vmap' else {'object_type': 'variant_table', **target})
+    write_object_metadata(path.with_name(path.name + '.meta.json'), {'object_type': 'variant_map', 'target': target} if suffix == 'vmap' else {'object_type': 'variant_table', **target})
 
 
 @pytest.mark.parametrize('include,swaps,flips,norm', itertools.product([False, True], repeat=4))

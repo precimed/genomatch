@@ -1,0 +1,9 @@
+{
+  "contig_naming": "ncbi",
+  "created_by": "generate_1_0.py",
+  "derived_from": "schema-fixture",
+  "genome_build": "GRCh37",
+  "object_type": "variant_table",
+  "schema_version": "1.0",
+  "variants_count": 3
+}

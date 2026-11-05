@@ -21,6 +21,7 @@ Active migrated modules currently include:
 - `tests/test_liftover_build.py`
 - `tests/test_sort_variants.py`
 - `tests/test_variant_rendering.py`
+- `tests/test_schema_metadata.py`
 - `tests/test_convert_vmap_to_target.py`
 - `tests/test_intersect_variants.py`
 - `tests/test_restrict_vmap.py`
@@ -54,6 +55,51 @@ The migrated suite must keep coverage for:
 - importer `--chr2use` / `--contigs` filtering and `restrict_contigs.py` target-row filtering
 - summary-stat effect inversion for swapped alleles
 - target-derived IDs for provenance-free set outputs
+
+## Schema compatibility fixtures
+
+Keep small checked-in fixtures with original metadata sidecars for every supported
+[object/schema pair](spec/core-objects.md#schema-versions). Store them under
+`tests/fixtures/schema/` with flat, version-labelled names such as
+`vmap_1_0.vmap` and `vtable_1_0.vtable`.
+Fixtures must include a multibase row; the `.vmap` fixture must also include a
+non-`identity` operation and a source shard token other than `.`.
+
+- Compatibility tests must load these committed files through the normal object
+  readers and assert expected logical contents: row order, IDs, ordered alleles,
+  metadata, and `.vmap` provenance and `allele_op`. Successful loading alone is
+  insufficient; documented migration defaults, if any, must also be checked.
+- Each fixture must have a schema-specific generator or reproduction instructions
+  beside it recording the producing release/commit. Historical fixtures must come
+  from the corresponding writer, not a current-writer output with its version
+  label changed. Do not regenerate them during tests or routine fixture updates.
+- Add fixtures when introducing a schema; retain existing fixtures for every
+  supported older schema. Any intentional support removal must be documented
+  and tested as a clear rejection rather than silently changing expectations.
+- Keep current-writer save/load round trips separate from historical compatibility
+  tests. Using temporary fixture copies, verify that missing, malformed, and
+  unsupported versions are rejected clearly for both `.vmap` and `.vtable`.
+- Exercise rejection through every CLI path that consumes canonical objects,
+  including `--id-lookup` and wrapper metadata reads. Use malformed variant rows
+  to prove the version check runs before row parsing, and assert the object/version
+  diagnostic and regeneration remedy. Cover missing, numeric, null, empty,
+  whitespace-altered, and unsupported string versions.
+- Verify every canonical-object producer emits its explicit supported version,
+  including transforms, conversions, and sharded wrapper outputs. `write_metadata`
+  must set the current writer version without mutating the supplied metadata.
+  Metadata-only updates must validate both the existing and replacement metadata
+  and reject version changes; `guess_build.py --write` must preserve the validated
+  input version. Use `write_object_metadata` in `tests/utils.py` for ordinary test
+  sidecars, raw JSON for missing/invalid-version tests, and original fixture bytes
+  for historical compatibility tests. A supported
+  version without `variants_count` must remain readable under the existing rules.
+- Raw sharded concatenation must reject a supported non-current schema on any
+  input, including empty inputs and inputs without `variants_count`, before
+  overwriting output. Current-schema inputs must preserve row bytes and order.
+- For both preparation wrappers, cover an invalid final object under `--resume`
+  when no stage would otherwise run, invalid skipped intermediates or per-group
+  finals, and normal reuse of supported objects. Schema-invalid outputs must cause
+  failure without overwriting them or returning success.
 
 ## Required migration tests
 

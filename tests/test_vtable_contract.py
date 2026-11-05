@@ -79,10 +79,10 @@ def test_duplicate_keys_ignore_ids_and_provenance_but_preserve_exact_stored_keys
 
 
 def test_metadata_variants_count_is_optional_but_validated_when_present():
-    validate_vtable_metadata({"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    validate_vtable_metadata({"object_type": "variant_table", "schema_version": "1.0", "genome_build": "GRCh37", "contig_naming": "ncbi"})
     validate_vmap_metadata(
         {
-            "object_type": "variant_map",
+            "object_type": "variant_map", "schema_version": "1.0",
             "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"},
             "variants_count": 0,
         }
@@ -90,7 +90,7 @@ def test_metadata_variants_count_is_optional_but_validated_when_present():
     with pytest.raises(ValueError, match="variants_count"):
         validate_vtable_metadata(
             {
-                "object_type": "variant_table",
+                "object_type": "variant_table", "schema_version": "1.0",
                 "genome_build": "GRCh37",
                 "contig_naming": "ncbi",
                 "variants_count": "1",

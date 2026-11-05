@@ -1,4 +1,4 @@
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def vmap_meta() -> dict:
@@ -11,12 +11,12 @@ def vtable_meta() -> dict:
 
 def write_vmap(path, rows, metadata=None):
     write_lines(path, rows)
-    write_json(path.with_name(path.name + ".meta.json"), metadata or vmap_meta())
+    write_object_metadata(path.with_name(path.name + ".meta.json"), metadata or vmap_meta())
 
 
 def write_vtable(path, rows, metadata=None):
     write_lines(path, rows)
-    write_json(path.with_name(path.name + ".meta.json"), metadata or vtable_meta())
+    write_object_metadata(path.with_name(path.name + ".meta.json"), metadata or vtable_meta())
 
 
 def test_restrict_vmap_preserves_source_order_ids_provenance_and_allele_op(tmp_path):

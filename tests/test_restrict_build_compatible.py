@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from utils import read_tsv, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
+from utils import read_tsv, run_py_with_env, write_object_metadata, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 def write_fake_norm_bcftools(path, behavior_path, log_path):
@@ -118,7 +118,7 @@ def test_restrict_build_compatible_vmap_uses_config_and_preserves_provenance(tmp
             "1\t3\tt3\tC\tG\tshardA\t7\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -158,7 +158,7 @@ def test_restrict_build_compatible_accepts_t2t_build(tmp_path):
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t1\tt1\tG\tA\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}},
     )
@@ -185,7 +185,7 @@ def test_restrict_build_compatible_t2t_fails_when_fasta_is_absent(tmp_path):
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t1\tt1\tG\tA\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}},
     )
@@ -219,7 +219,7 @@ def test_restrict_build_compatible_preserves_retained_input_order(tmp_path):
             "1\t1\tt1\tG\tT\tshardA\t0\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -250,7 +250,7 @@ def test_restrict_build_compatible_vtable_emits_vtable_and_keeps_reference_ancho
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tAT", "1\t2\tt2\tAT\tCG"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -279,7 +279,7 @@ def test_restrict_build_compatible_vtable_does_not_flip_multibase_input(tmp_path
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tT\tCG"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -308,7 +308,7 @@ def test_restrict_build_compatible_requires_known_build(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "unknown", "contig_naming": "ncbi"},
     )
@@ -335,7 +335,7 @@ def test_restrict_build_compatible_drops_rows_where_both_alleles_are_longer_than
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tAT\tCG"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -363,7 +363,7 @@ def test_restrict_build_compatible_accepts_ucsc_named_input(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["chr1\t1\tt1\tA\tC", "chr1\t2\tt2\tT\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ucsc"},
     )
@@ -389,7 +389,7 @@ def test_restrict_build_compatible_vmap_keeps_reference_second_rows_unchanged(tm
     write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tG\tA\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -417,7 +417,7 @@ def test_restrict_build_compatible_vmap_swaps_when_reference_is_in_a1(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tG\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -445,7 +445,7 @@ def test_restrict_build_compatible_vmap_can_flip_and_swap_to_reference_in_a2(tmp
     write_primary_ucsc_fasta(grch38, {"chr1": "C"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tT\tC\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -479,7 +479,7 @@ def test_restrict_build_compatible_vmap_drops_duplicate_targets_to_qc(tmp_path):
             "1\t1\tt2\tG\tA\tshardB\t1\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -513,7 +513,7 @@ def test_restrict_build_compatible_rejects_unknown_contigs(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["unknown\t1\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -540,7 +540,7 @@ def test_restrict_build_compatible_rejects_rows_inconsistent_with_declared_conti
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["chr1\t1\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -563,7 +563,7 @@ def test_restrict_build_compatible_fails_on_missing_config_section(tmp_path):
     out = tmp_path / "restricted.vtable"
     config.write_text("chain:\n  hg19ToHg38: missing.chain\n", encoding="utf-8")
     write_lines(source, ["1\t1\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -590,7 +590,7 @@ def test_restrict_build_compatible_fails_on_missing_fasta_index(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -626,7 +626,7 @@ def test_restrict_build_compatible_fails_on_bad_relative_fasta_path(tmp_path):
         encoding="utf-8",
     )
     write_lines(source, ["1\t1\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -653,7 +653,7 @@ def test_restrict_build_compatible_fails_on_non_acgt_alleles(tmp_path):
     write_primary_ucsc_fasta(grch38, {"chr1": "CC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t1\tt1\tA\tN"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -688,7 +688,7 @@ def test_restrict_build_compatible_accepts_plink_family_input(tmp_path, contig_n
     write_primary_ucsc_fasta(grch38, {"chrX": prefix + "TG"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, [f"{chrom}\t{pos}\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": contig_naming},
     )
@@ -709,7 +709,7 @@ def test_restrict_build_compatible_norm_indels_rejects_plink_splitx_input(tmp_pa
     source = tmp_path / "base.plink_splitx.vtable"
     out = tmp_path / "restricted.plink_splitx.vtable"
     write_lines(source, [f"25\t60001\tt1\tA\tC"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "plink_splitx"},
     )
@@ -734,7 +734,7 @@ def test_restrict_build_compatible_norm_indels_leaves_pure_snps_on_the_non_bcfto
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t1\tt1\tA\tG\tshardA\t0\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -768,7 +768,7 @@ def test_restrict_build_compatible_norm_indels_normalizes_one_multibase_branch(t
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t2\tt1\tA\tAT\tshardA\t5\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -803,7 +803,7 @@ def test_restrict_build_compatible_norm_indels_accepts_t2t_build(tmp_path):
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t2\tt1\tA\tAT\tshardA\t5\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "T2T-CHM13v2.0", "contig_naming": "ncbi"}},
     )
@@ -853,7 +853,7 @@ def test_restrict_build_compatible_norm_indels_drops_rows_when_ploidy_class_chan
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["chrX\t60001\tt1\tAT\tA\tshardA\t5\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ucsc"}},
     )
@@ -890,7 +890,7 @@ def test_restrict_build_compatible_norm_indels_retains_branch2_vcfs_and_clears_s
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t2\tt1\tA\tAT\tshardA\t5\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -938,7 +938,7 @@ def test_restrict_build_compatible_norm_indels_does_not_flip_multibase_before_no
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t1\tt1\tT\tCG\tshardA\t7\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -987,7 +987,7 @@ def test_restrict_build_compatible_norm_indels_audits_normalization_specific_sta
     source = tmp_path / "base.vmap"
     out = tmp_path / "restricted.vmap"
     write_lines(source, ["1\t2\tt1\tA\tAT\tshardA\t5\tidentity"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -1029,7 +1029,7 @@ def test_restrict_build_compatible_norm_indels_drops_duplicate_targets_after_nor
             "1\t4\tt2\tA\tAC\tshardB\t7\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
@@ -1065,7 +1065,7 @@ def test_restrict_build_compatible_norm_indels_fails_when_bcftools_is_missing(tm
     write_primary_ucsc_fasta(grch38, {"chr1": "CCCCCC"})
     write_match_config(config, grch37_ucsc_fasta=grch37, grch38_ucsc_fasta=grch38)
     write_lines(source, ["1\t2\tt1\tA\tAT"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1091,7 +1091,7 @@ def test_restrict_build_compatible_norm_indels_fails_when_bcftools_norm_fails(tm
     source = tmp_path / "base.vtable"
     out = tmp_path / "restricted.vtable"
     write_lines(source, ["1\t2\tt1\tA\tAT"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -1130,7 +1130,7 @@ def test_restrict_build_compatible_reference_access_modes_are_consistent_and_def
             "1\t3\tt3\tC\tG\tshardA\t7\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )

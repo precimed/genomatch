@@ -1,0 +1,3 @@
+2	20	rs_snv	T	C	chr2	7	identity
+1	100	1:100:AC:A	A	AC	chr1	2	swap
+1	100	rs_multibase	GT	ACG	chr1	8	flip_swap

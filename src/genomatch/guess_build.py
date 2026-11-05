@@ -17,7 +17,7 @@ from .vtable_utils import (
     normalize_contig_for_reference,
     require_contig_naming,
     require_rows_match_contig_naming,
-    write_metadata,
+    update_metadata_in_place,
 )
 
 MIN_GUESS_COMPATIBILITY_RATE = 0.60
@@ -167,7 +167,7 @@ def main() -> int:
         "evidence": build_guess["evidence"],
     }
     if args.write and metadata_can_change:
-        write_metadata(input_path, output_meta)
+        update_metadata_in_place(input_path, output_meta)
         summary["metadata_updated"] = True
     logger.info(
         "guess_build.py: completed build guess=%s confidence=%s (rows used=%s)",
