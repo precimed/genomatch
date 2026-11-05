@@ -19,7 +19,7 @@ Prefer small pure functions for transformation logic. Keep I/O separate from cor
 ## Testing discipline
 
 Run the narrowest relevant tests first. Add or update tests for behavior changes. Never claim tests passed unless they were actually run. If tests could not be run, say so clearly.
-Use `match-liftover` conda environment to run tests (non-trivial dependencies)
+Use `match-liftover` conda environment to run tests (non-trivial dependencies). Run the full suite in parallel: `conda run -n match-liftover pytest tests -n 8`.
 
 ## CLI, schema stability, documentation
 

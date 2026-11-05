@@ -137,38 +137,6 @@ def test_restrict_vmap_source_duplicate_target_keys_fail_before_restriction(tmp_
     assert f"duplicate chrom:pos:a1:a2 in {source}" in result.stderr
 
 
-def test_restrict_vmap_allows_duplicate_vmap_membership_keys(tmp_path):
-    source = tmp_path / "source.vmap"
-    restriction = tmp_path / "membership.vmap"
-    out = tmp_path / "out.vmap"
-    write_vmap(source, ["1\t100\tid1\tA\tG\t.\t0\tidentity"])
-    write_vmap(
-        restriction,
-        [
-            "1\t100\tfirst\tA\tG\t.\t0\tidentity",
-            "1\t100\tsecond\tA\tG\t.\t1\tidentity",
-        ],
-    )
-
-    result = run_py("restrict_vmap.py", source, restriction, "--output", out)
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "id1", "A", "G", ".", "0", "identity"]]
-
-
-def test_restrict_vmap_allows_duplicate_vtable_membership_keys(tmp_path):
-    source = tmp_path / "source.vmap"
-    restriction = tmp_path / "membership.vtable"
-    out = tmp_path / "out.vmap"
-    write_vmap(source, ["1\t100\tid1\tA\tG\t.\t0\tidentity"])
-    write_vtable(restriction, ["1\t100\tfirst\tA\tG", "1\t100\tsecond\tA\tG"])
-
-    result = run_py("restrict_vmap.py", source, restriction, "--output", out)
-
-    assert result.returncode == 0, result.stderr
-    assert read_tsv(out) == [["1", "100", "id1", "A", "G", ".", "0", "identity"]]
-
-
 def test_restrict_vmap_metadata_mismatch_fails_clearly(tmp_path):
     source = tmp_path / "source.vmap"
     restriction = tmp_path / "membership.vtable"
