@@ -1,6 +1,6 @@
 import json
 
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def test_sort_variants_vtable_sorts_by_declared_coordinate_order(tmp_path):
@@ -16,7 +16,7 @@ def test_sort_variants_vtable_sorts_by_declared_coordinate_order(tmp_path):
             "1\t100\tr1b\tA\tC",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -45,7 +45,7 @@ def test_sort_variants_vmap_sorts_target_rows_and_preserves_provenance(tmp_path)
             "X\t1\trx\tA\tC\tsh3\t3\tflip_swap",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
     )
@@ -65,7 +65,7 @@ def test_sort_variants_removes_stale_qc_sidecar(tmp_path):
     source = tmp_path / "source.vtable"
     out = tmp_path / "sorted.vtable"
     write_lines(source, ["1\t2\tr2\tC\tT", "1\t1\tr1\tA\tG"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -89,7 +89,7 @@ def test_sort_variants_drop_duplicates_drops_repeated_target_identities(tmp_path
             "1\t11\tlater\tA\tC\tsh4\t4\tidentity",
         ],
     )
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
     )
@@ -109,7 +109,7 @@ def test_sort_variants_empty_vtable_produces_empty_output(tmp_path):
     source = tmp_path / "source.vtable"
     out = tmp_path / "sorted.vtable"
     write_lines(source, [])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -125,7 +125,7 @@ def test_sort_variants_empty_vmap_produces_empty_output(tmp_path):
     source = tmp_path / "source.vmap"
     out = tmp_path / "sorted.vmap"
     write_lines(source, [])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
     )
@@ -141,7 +141,7 @@ def test_sort_variants_rejects_over_wide_vtable_row(tmp_path):
     source = tmp_path / "source.vtable"
     out = tmp_path / "sorted.vtable"
     write_lines(source, ["1\t100\tr1\tA\tG\textra_column"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -156,7 +156,7 @@ def test_sort_variants_rejects_over_wide_vmap_row(tmp_path):
     source = tmp_path / "source.vmap"
     out = tmp_path / "sorted.vmap"
     write_lines(source, ["1\t100\tr1\tA\tG\tsh1\t0\tidentity\textra_column"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"}},
     )
@@ -172,12 +172,12 @@ def test_sort_variants_preserves_metadata(tmp_path):
     out = tmp_path / "sorted.vmap"
     write_lines(source, ["1\t2\trs2\tC\tT\t.\t1\tidentity", "1\t1\trs1\tA\tG\t.\t0\tidentity"])
     metadata = {
-        "object_type": "variant_map",
+        "object_type": "variant_map", "schema_version": "1.0",
         "target": {"genome_build": "GRCh38", "contig_naming": "ncbi"},
         "created_by": "something.py",
         "derived_from": "raw.@.bim",
     }
-    write_json(source.with_name(source.name + ".meta.json"), metadata)
+    write_object_metadata(source.with_name(source.name + ".meta.json"), metadata)
 
     result = run_py("sort_variants.py", "--input", source, "--output", out)
 

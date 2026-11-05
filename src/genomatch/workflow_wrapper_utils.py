@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import subprocess
@@ -9,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .vtable_utils import WRITE_CHUNK_ROWS, metadata_path_for
+from .vtable_utils import WRITE_CHUNK_ROWS, load_metadata, metadata_path_for
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,7 @@ def delete_variant_object(path: Path) -> None:
 
 
 def copy_variant_object(source_path: Path, output_path: Path) -> None:
+    load_metadata(source_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     delete_variant_object(output_path)
     shutil.copy2(source_path, output_path)
@@ -99,7 +99,7 @@ def copy_variant_object(source_path: Path, output_path: Path) -> None:
 
 
 def read_target_metadata(path: Path) -> dict[str, object]:
-    metadata = json.loads(metadata_path_for(path).read_text(encoding="utf-8"))
+    metadata = load_metadata(path)
     if metadata.get("object_type") == "variant_map":
         return dict(metadata["target"])
     return dict(metadata)
@@ -119,6 +119,7 @@ def print_skip_resolved_build(wrapper_name: str, path: Path) -> None:
 
 def run_command_if_needed(cmd: list[str], output_path: Path, *, resume: bool, wrapper_name: str) -> None:
     if resume and variant_object_exists(output_path):
+        load_metadata(output_path)
         print_skip(wrapper_name, command_label(cmd), output_path)
         return
     run_command(cmd)

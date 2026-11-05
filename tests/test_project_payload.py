@@ -14,7 +14,7 @@ from utils import (
     run_py,
     run_py_with_env,
     write_bfile,
-    write_json,
+    write_object_metadata,
     write_lines,
     write_match_config,
     write_primary_ucsc_fasta,
@@ -41,7 +41,7 @@ def write_sumstats_metadata(path: Path) -> None:
 
 def write_vmap(path: Path, lines: list[str], *, genome_build: str = "GRCh38", contig_naming: str = "ncbi") -> None:
     write_lines(path, lines)
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": genome_build, "contig_naming": contig_naming}},
     )

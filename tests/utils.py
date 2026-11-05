@@ -22,6 +22,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from genomatch.bfile_utils import read_bed_selected, write_bed_matrix
 from genomatch.reference_utils import PRIMARY_UCSC_CONTIGS
+from genomatch.vtable_utils import CURRENT_SCHEMA_VERSION
 
 PLINK_BIN = os.environ.get("PLINK_BIN", "plink")
 PLINK2_BIN = os.environ.get("PLINK2_BIN", "plink2")
@@ -238,6 +239,14 @@ def write_lines(path: Path, lines: List[str]) -> None:
 
 def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_object_metadata(path: Path, payload: dict) -> None:
+    """Write a test sidecar, defaulting its version without validating its fields.
+
+    Explicit versions are preserved. Use write_json to exercise missing versions.
+    """
+    write_json(path, {"schema_version": CURRENT_SCHEMA_VERSION, **payload})
 
 
 def read_tsv(path: Path) -> List[List[str]]:

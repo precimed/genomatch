@@ -8,7 +8,7 @@ from genomatch import vtable_utils
 from genomatch.vtable_utils import read_vtable_table, iter_vtable_table_chunks
 from test_liftover_build import write_fake_bcftools
 from test_restrict_build_compatible import restrict_env_with_fake_norm
-from utils import read_tsv, run_py_with_env, write_json, write_lines, write_match_config, write_primary_ucsc_fasta
+from utils import read_tsv, run_py_with_env, write_object_metadata, write_lines, write_match_config, write_primary_ucsc_fasta
 
 
 TOOLS = [
@@ -29,7 +29,7 @@ def write_input(tmp_path, suffix, rows, *, build='GRCh37', naming='ncbi'):
     else:
         metadata = {'object_type': 'variant_table', **target}
     write_lines(source, rows)
-    write_json(source.with_name(source.name + '.meta.json'), metadata)
+    write_object_metadata(source.with_name(source.name + '.meta.json'), metadata)
     return source
 
 
@@ -204,7 +204,7 @@ def test_source_mapping_readers_reject_duplicate_keys(tmp_path, tool):
     source = write_input(tmp_path, 'vmap', ['1\t1\tfirst\tC\tA', '1\t1\tsecond\tC\tA'])
     membership = tmp_path / 'membership.vtable'
     write_lines(membership, ['1\t1\tlookup\tC\tA'])
-    write_json(membership.with_name(membership.name + '.meta.json'),
+    write_object_metadata(membership.with_name(membership.name + '.meta.json'),
                {'object_type': 'variant_table', 'genome_build': 'GRCh37', 'contig_naming': 'ncbi'})
     output = tmp_path / 'out.vmap'
     if tool == 'restrict_vmap':

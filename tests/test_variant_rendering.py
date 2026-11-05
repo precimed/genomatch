@@ -12,7 +12,7 @@ from genomatch.vtable_utils import (
     sort_target_rows_by_declared_coordinate,
     sort_target_table_by_declared_coordinate,
 )
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def test_generated_ids_agree_across_scalar_vector_and_payload_renderers():
@@ -54,7 +54,7 @@ def test_coordinate_order_for_colocated_snv_and_deletion(tmp_path, tool):
     source = tmp_path / 'source.vtable'
     out = tmp_path / 'out.vtable'
     write_lines(source, ['1\t100\tdel\tG\tGA', '1\t100\tsnv\tT\tG'])
-    write_json(source.with_name(source.name + '.meta.json'), {
+    write_object_metadata(source.with_name(source.name + '.meta.json'), {
         'object_type': 'variant_table', 'genome_build': 'GRCh37',
         'contig_naming': 'ncbi', 'variants_count': 2,
     })

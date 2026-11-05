@@ -9,12 +9,12 @@ import yaml
 from genomatch.apply_vmap_sumstats import run_sumstats_apply
 from genomatch.sumstats_utils import iter_sumstats_table_chunks
 
-from utils import REPO_ROOT, read_tsv, run_py, write_json, write_lines
+from utils import REPO_ROOT, read_tsv, run_py, write_object_metadata, write_lines
 
 
 def write_vmap_with_meta(path, lines, *, contig_naming="ncbi"):
     write_lines(path, lines)
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": contig_naming}},
     )
@@ -76,7 +76,7 @@ def test_apply_vmap_to_sumstats_target_order_and_swap_effects(tmp_path):
             "1\t100\tt1\tA\tG\t.\t0\tidentity",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -238,7 +238,7 @@ def test_apply_vmap_to_sumstats_resolves_padded_headers_for_projection_output(tm
     write_lines(sumstats, ["CHR \t POS \t EA \t OA \t BETA ", "1\t100\tA\tG\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["2\t250\tt1\tT\tC\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
@@ -254,7 +254,7 @@ def test_apply_vmap_to_sumstats_uses_canonical_variant_columns_even_when_source_
     write_lines(sumstats, ["CHR\tBETA", "1\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_SNP: SNP", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -269,7 +269,7 @@ def test_apply_vmap_to_sumstats_rejects_missing_provenance_sentinel_rows(tmp_pat
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity", "1\t200\tt2\tC\tT\t.\t-1\tmissing"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
@@ -297,7 +297,7 @@ def test_apply_vmap_to_sumstats_warns_and_writes_empty_for_invalid_swapped_numer
         ],
     )
     write_lines(vmap, ["1\t100\tt1\tG\tA\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -316,7 +316,7 @@ def test_apply_vmap_to_sumstats_flip_swap_uses_swap_numeric_effects(tmp_path):
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA\tOR\tEAF", "1\t100\tA\tC\t0.5\t2.0\t0.1"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA", "col_OR: OR", "col_EAF: EAF"])
     write_lines(vmap, ["1\t100\tt1\tG\tT\t.\t0\tflip_swap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -342,7 +342,7 @@ def test_apply_vmap_to_sumstats_swap_complements_other_allele_frequency_columns(
         ],
     )
     write_lines(vmap, ["1\t100\tt1\tG\tA\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
@@ -374,7 +374,7 @@ def test_apply_vmap_to_sumstats_formats_swapped_object_floats_with_float_format(
             "1\t200\tt2\tT\tC\t.\t1\tswap",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
@@ -404,7 +404,7 @@ def test_apply_vmap_to_sumstats_rewrites_target_chr_pos_and_id_when_columns_exis
         ],
     )
     write_lines(vmap, ["2\t250\trs_target\tT\tC\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -429,7 +429,7 @@ def test_apply_vmap_to_sumstats_retain_snp_id_uses_vmap_id(tmp_path):
         ],
     )
     write_lines(vmap, ["2\t250\trs_target\tT\tC\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py(
         "apply_vmap_to_sumstats.py",
@@ -466,7 +466,7 @@ def test_apply_vmap_to_sumstats_swap_inverts_and_swaps_or_confidence_bounds(tmp_
         ],
     )
     write_lines(vmap, ["1\t100\tt1\tG\tA\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -493,7 +493,7 @@ def test_apply_vmap_to_sumstats_reads_joined_source_variant_fields(tmp_path):
         ],
     )
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -508,7 +508,7 @@ def test_apply_vmap_to_sumstats_does_not_rewrite_joined_chr_field_in_place(tmp_p
     write_lines(sumstats, ["VARIANT\tBETA", "1_100:A:G\t0.5"])
     write_lines(meta, ["col_CHR: VARIANT", "col_BETA: BETA"])
     write_lines(vmap, ["2\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -523,7 +523,7 @@ def test_apply_vmap_to_sumstats_writes_tab_delimited_projection_output(tmp_path)
     write_lines(sumstats, ["CHR,POS,EA,OA,BETA", "1,100,A,G,0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tG\tA\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -538,7 +538,7 @@ def test_apply_vmap_to_sumstats_writes_gzipped_output_when_suffix_is_gz(tmp_path
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tG\tA\t.\t0\tswap"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -554,7 +554,7 @@ def test_apply_vmap_to_sumstats_fails_on_out_of_range_single_file_provenance(tmp
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t5\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
@@ -569,7 +569,7 @@ def test_apply_vmap_to_sumstats_rejects_non_single_file_provenance(tmp_path):
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t1\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
@@ -582,7 +582,7 @@ def test_apply_vmap_to_sumstats_rejects_template_input_path(tmp_path):
     out = tmp_path / "out.tsv"
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", tmp_path / "ss.@.tsv", "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
@@ -596,7 +596,7 @@ def test_apply_vmap_to_sumstats_rejects_template_output_path(tmp_path):
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA\tG\t0.5"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", tmp_path / "out.@.tsv")
     assert result.returncode != 0
@@ -611,7 +611,7 @@ def test_apply_vmap_to_sumstats_surfaces_pandas_parser_failure_for_ragged_payloa
     write_lines(sumstats, ["CHR\tPOS\tEA\tOA\tBETA", "1\t100\tA"])
     write_lines(meta, ["col_CHR: CHR", "col_POS: POS", "col_EffectAllele: EA", "col_OtherAllele: OA", "col_BETA: BETA"])
     write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode != 0
@@ -777,7 +777,7 @@ def test_apply_vmap_to_sumstats_source_index_ignores_comment_and_blank_lines(tmp
         ],
     )
     write_lines(vmap, ["1\t200\trs2\tC\tT\t.\t1\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr
@@ -871,7 +871,7 @@ def test_apply_vmap_to_sumstats_reuses_one_source_row_for_multiple_vmap_rows(tmp
             "2\t250\tt2\tT\tC\t.\t0\tswap",
         ],
     )
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
 
@@ -907,7 +907,7 @@ def test_apply_vmap_to_sumstats_supports_hash_prefixed_chr_header(tmp_path):
         ],
     )
     write_lines(vmap, ["1\t13668\trs2691328\tA\tG\t.\t0\tidentity"])
-    write_json(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
 
     result = run_py("apply_vmap_to_sumstats.py", "--input", sumstats, "--sumstats-metadata", meta, "--vmap", vmap, "--output", out)
     assert result.returncode == 0, result.stderr

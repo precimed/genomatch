@@ -1,6 +1,6 @@
 import json
 
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def test_union_variants_deduplicates_target_keys_assigns_target_ids_and_sorts(tmp_path):
@@ -24,11 +24,11 @@ def test_union_variants_deduplicates_target_keys_assigns_target_ids_and_sorts(tm
             "MT\t3\tmt\tA\tT",
         ],
     )
-    write_json(
+    write_object_metadata(
         first.with_name(first.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}},
     )
-    write_json(
+    write_object_metadata(
         second.with_name(second.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -59,8 +59,8 @@ def test_union_variants_rewrites_ids_for_non_overlapping_inputs(tmp_path):
     meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
     write_lines(first, ["1\t100\tinput-a\tA\tG"])
     write_lines(second, ["1\t200\tinput-b\tC\tT"])
-    write_json(first.with_name(first.name + ".meta.json"), meta)
-    write_json(second.with_name(second.name + ".meta.json"), meta)
+    write_object_metadata(first.with_name(first.name + ".meta.json"), meta)
+    write_object_metadata(second.with_name(second.name + ".meta.json"), meta)
 
     result = run_py("union_variants.py", first, second, "--output", out)
 
@@ -77,11 +77,11 @@ def test_union_variants_uses_count_order_when_all_counts_are_present(tmp_path):
     out = tmp_path / "out.vtable"
     write_lines(first, ["1\t300\tinput-a\tA\tC", "1\t100\tinput-b\tA\tG"])
     write_lines(second, ["1\t200\tinput-c\tC\tT"])
-    write_json(
+    write_object_metadata(
         first.with_name(first.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi", "variants_count": 2},
     )
-    write_json(
+    write_object_metadata(
         second.with_name(second.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi", "variants_count": 1},
     )
@@ -102,7 +102,7 @@ def test_union_variants_requires_at_least_two_inputs(tmp_path):
     source = tmp_path / "a.vtable"
     out = tmp_path / "out.vtable"
     write_lines(source, ["1\t100\tid1\tA\tG"])
-    write_json(
+    write_object_metadata(
         source.with_name(source.name + ".meta.json"),
         {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"},
     )
@@ -119,8 +119,8 @@ def test_union_variants_checks_metadata_before_loading_rows(tmp_path):
     out = tmp_path / "out.vtable"
     write_lines(first, ["1\t100\tid1\tA\tG"])
     write_lines(second, ["not\ta\tvalid\tvtable\trow"])
-    write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
-    write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"})
+    write_object_metadata(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    write_object_metadata(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh38", "contig_naming": "ncbi"})
 
     result = run_py("union_variants.py", first, second, "--output", out)
 
@@ -137,8 +137,8 @@ def test_union_variants_checks_contig_naming_before_loading_rows(tmp_path):
     out = tmp_path / "out.vtable"
     write_lines(first, ["1\t100\tid1\tA\tG"])
     write_lines(second, ["not\ta\tvalid\tvtable\trow"])
-    write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
-    write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ucsc"})
+    write_object_metadata(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    write_object_metadata(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ucsc"})
 
     result = run_py("union_variants.py", first, second, "--output", out)
 
@@ -155,8 +155,8 @@ def test_union_variants_fails_cleanly_on_missing_contig_naming(tmp_path):
     out = tmp_path / "out.vtable"
     write_lines(first, ["1\t100\tid1\tA\tG"])
     write_lines(second, ["not\ta\tvalid\tvtable\trow"])
-    write_json(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37"})
-    write_json(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
+    write_object_metadata(first.with_name(first.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37"})
+    write_object_metadata(second.with_name(second.name + ".meta.json"), {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"})
 
     result = run_py("union_variants.py", first, second, "--output", out)
 
@@ -174,8 +174,8 @@ def test_union_variants_rejects_template_paths(tmp_path):
     meta = {"object_type": "variant_table", "genome_build": "GRCh37", "contig_naming": "ncbi"}
     write_lines(first, ["1\t100\tid1\tA\tG"])
     write_lines(second, ["1\t200\tid2\tC\tT"])
-    write_json(first.with_name(first.name + ".meta.json"), meta)
-    write_json(second.with_name(second.name + ".meta.json"), meta)
+    write_object_metadata(first.with_name(first.name + ".meta.json"), meta)
+    write_object_metadata(second.with_name(second.name + ".meta.json"), meta)
 
     result = run_py("union_variants.py", first, "b.@.vtable", "--output", out)
 

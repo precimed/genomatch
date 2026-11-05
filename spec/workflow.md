@@ -109,10 +109,10 @@ another shard group.
 - Before executing any canonical tool, the wrapper must determine the full planned stage graph and the full set of wrapper-managed outputs for the requested invocation.
 - By default, the wrapper must fail if any planned wrapper-managed output already exists.
 - `--resume` and `--force` are mutually exclusive and must not be accepted together.
-- In `--resume` mode, the wrapper must iterate through the planned stage graph in order and skip a stage if and only if that stage output already exists.
+- In `--resume` mode, the wrapper must iterate through the planned stage graph in order and skip a stage if and only if that stage output already exists. Before reusing an existing stage output, validate its metadata under the [object schema contract](core-objects.md#schema-versions); file existence alone is insufficient.
 - In `--resume` mode, the wrapper must never overwrite any output.
 - In `--resume` mode, if a later planned stage output exists while an earlier required stage output is missing, this is an error. For example, if an `a -> b -> c` chain is planned and `a` and `c` exist but `b` is missing, the wrapper must fail rather than continue or overwrite.
-- In `--resume` mode, if the final `<output>.vmap` already exists, there is nothing left to do.
+- In `--resume` mode, if the final `<output>.vmap` already exists, validate its metadata under the same object schema contract before returning success without further work. Missing, malformed, or unsupported versions must fail with the regeneration remedy, even when no stage would run.
 - If `--resume` reruns a liftover step because the final lifted object is missing but retained `bcftools +liftover` output still exists, pass `--resume` through to `liftover_build.py` so it can reuse that retained bcftools output and rerun parse/QC/output logic.
 - `--force` means: delete all wrapper-managed outputs for the planned invocation first, then run cleanly from scratch.
 - for `prepare_variants.py`, `--force` deletes the full retained stage namespace under `<prefix>.*.vmap` plus the final `<output>.vmap`, even for optional stages that the current invocation would skip, including deferred final `plink_splitx` normalization
@@ -167,7 +167,7 @@ Final concatenation:
 - do not sort, deduplicate, or explicitly validate cross-shard duplicate variant keys during final concatenation; non-overlap is guaranteed by the chromosome-semantic shard contract
 - copy final metadata from the first non-empty target-contig group's final `.vmap`, or from the first target-contig group's final `.vmap` if all groups are empty
 - leave per-contig-group QC sidecars in place under each retained group prefix; do not concatenate them and do not write a top-level QC sidecar for the final `<output>.vmap`
-- under `--resume`, if final `<output>.vmap` already exists, do nothing; otherwise skip any target-contig group whose final `.vmap` already exists and run final concatenation from the available group finals after all missing groups are produced
+- under `--resume`, validate metadata under the same object schema contract before reusing any existing per-group final or returning success for an existing concatenated final `<output>.vmap`; otherwise skip valid existing group finals and run final concatenation after all missing groups are produced
 - under `--force`, first delete wrapper-managed per-contig-group variant objects and sidecars for all selected target-contig groups, plus final `<output>.vmap` and its metadata sidecar, then rerun cleanly
 
 ## `project_payload.py`

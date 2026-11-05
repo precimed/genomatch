@@ -109,6 +109,7 @@ def read_target_table(path: Path) -> VariantRowsTable:
 
 
 def read_mapped_vmap_table(path: Path) -> VMapRowsTable:
+    load_metadata(path)
     table = read_vmap_table(path)
     require_mapped_only_vmap_table(table, path=path)
     return table

@@ -26,13 +26,14 @@ Required sidecar metadata:
 ```json
 {
   "object_type": "variant_table",
+  "schema_version": "1.0",
   "genome_build": "GRCh37",
   "contig_naming": "ncbi",
   "variants_count": 123456
 }
 ```
 
-`variants_count` is the number of variant rows in the object. It is required for newly written `.vtable` objects and optional when reading existing objects for backward compatibility.
+`variants_count` is the number of variant rows in the object. It is required for newly written `.vtable` objects and optional when reading objects.
 
 `.vtable` is the provenance-free materialized object in v1. It is produced primarily by:
 
@@ -83,6 +84,7 @@ Required sidecar metadata:
 ```json
 {
   "object_type": "variant_map",
+  "schema_version": "1.0",
   "target": {
     "genome_build": "GRCh37",
     "contig_naming": "ncbi"
@@ -91,11 +93,42 @@ Required sidecar metadata:
 }
 ```
 
-`variants_count` is the number of variant rows in the object. It is required for newly written `.vmap` objects and optional when reading existing objects for backward compatibility.
+`variants_count` is the number of variant rows in the object. It is required for newly written `.vmap` objects and optional when reading objects.
 
 Importer-emitted `.vmap` is the normal starting artifact for provenance-preserving workflows. Its target side contains retained canonical imported rows; its source side carries exact raw source provenance as `(source_shard, source_index)`.
 
 Canonical `.vmap` is mapped-only: every row must correspond to one source payload row. Missing or unmatched target rows are represented by absence from `.vmap`, not by sentinel provenance rows.
+
+## Schema versions
+
+New `.vmap` and `.vtable` sidecars must emit top-level `schema_version: "1.0"`.
+This string identifies the persisted object structure and field meanings,
+independently of the package version. It must be a non-empty string matching a
+supported identifier exactly, without coercion or whitespace normalization;
+numeric `1.0`, `null`, and `""` are malformed. Readers must explicitly support
+each accepted `(object_type, schema_version)` pair and reject missing,
+malformed, or unsupported versions before interpreting variant rows.
+Unversioned legacy `.vmap` and `.vtable` files are unsupported.
+Supporting an older schema requires an explicit conversion
+rule to the current in-memory representation. Missing and unsupported versions
+remain errors. Copying an object together with its sidecar preserves its version.
+Concatenating raw row lines requires every input to use the current writer schema,
+since the output declares that schema.
+
+`write_metadata` sets the current writer schema version, validates the metadata,
+and writes the sidecar for newly serialized rows, including transforms that copy
+other metadata from an input. It must not mutate the supplied metadata.
+Metadata-only changes use `update_metadata_in_place`, which validates the existing
+object and replacement metadata and rejects a change to the schema version.
+Wrapper metadata reads, including `read_target_metadata`, must use validated
+`load_metadata` rather than parsing sidecars independently. Reusing existing objects follows the same rule, including
+[resumed preparation](workflow.md#prepare_variantspy-output-preflight---resume-and---force).
+
+Changes to required structure or field meanings require a new schema version
+and an explicit reader compatibility policy. Optional metadata additions that
+existing readers may safely ignore need not change the version.
+
+Schema compatibility must be covered by the [checked-in fixture contract](../TESTS.md#schema-compatibility-fixtures).
 
 ## Variant keys
 

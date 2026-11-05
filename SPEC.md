@@ -47,7 +47,7 @@ Within [README.md](README.md) and the user documentation in [docs/](docs/), the 
 - `source_shard` is the exact discovered shard label at import time, or `.` for a single-file source
 - `.vtable` remains in the system as the provenance-free materialized target-side object, produced primarily by `convert_vmap_to_target.py`, `intersect_variants.py`, and `union_variants.py`
 - `.vmap` metadata remains target-side only
-- newly written `.vmap` and `.vtable` sidecars include top-level `variants_count`; readers accept missing `variants_count` for backward compatibility, and tools may use it as planning metadata without changing output semantics
+- newly written `.vmap` and `.vtable` sidecars include top-level `variants_count`; readers accept missing `variants_count`, and tools may use it as planning metadata without changing output semantics
 - importer-emitted rows preserve source-format allele meaning at import time, while reference-aware target rows emitted by `restrict_build_compatible.py` and `liftover_build.py` use ordered alleles `a1=non-reference` and `a2=reference`
 - only `import_*` tools originate new provenance in v1
 - behavior for tools accepting `.vmap` or `.vtable`, including row-level QC, is defined in [variant-transforms.md](spec/variant-transforms.md#tools-accepting-vmap-or-vtable); tools with explicit provenance-free output contracts retain those output types

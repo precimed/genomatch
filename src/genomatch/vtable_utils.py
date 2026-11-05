@@ -24,6 +24,12 @@ from .contig_utils import (
     repair_contig_label,
 )
 
+CURRENT_SCHEMA_VERSION = "1.0"
+SUPPORTED_OBJECT_SCHEMAS = {
+    "variant_map": frozenset({CURRENT_SCHEMA_VERSION}),
+    "variant_table": frozenset({CURRENT_SCHEMA_VERSION}),
+}
+
 SUPPORTED_GENOME_BUILDS = {"GRCh37", "GRCh38", "T2T-CHM13v2.0", "unknown"}
 VALID_ALLELE_OPS = {"identity", "swap", "flip", "flip_swap"}
 ALLELE_OP_COMPOSITION = {
@@ -172,11 +178,27 @@ def _load_json(path: Path) -> Dict[str, object]:
 def load_metadata(path: Path) -> Dict[str, object]:
     meta_path = metadata_path_for(path)
     if not meta_path.exists():
-        raise ValueError(f"metadata sidecar not found: {meta_path}")
-    return _load_json(meta_path)
+        raise ValueError(f"metadata sidecar not found: {meta_path}; regenerate from the original raw inputs")
+    metadata = _load_json(meta_path)
+    validate_metadata_for_path(path, metadata)
+    return metadata
 
 
 def write_metadata(path: Path, metadata: Dict[str, object]) -> None:
+    """Write metadata for rows serialized by the current object writer."""
+    _write_validated_metadata(path, metadata_with_schema_version(metadata))
+
+
+def update_metadata_in_place(path: Path, metadata: Dict[str, object]) -> None:
+    """Update an existing sidecar without changing the schema of its rows."""
+    existing = load_metadata(path)
+    validate_metadata_for_path(path, metadata)
+    if metadata["schema_version"] != existing["schema_version"]:
+        raise ValueError(f"{path}: metadata-only updates must preserve schema_version")
+    _write_validated_metadata(path, metadata)
+
+
+def _write_validated_metadata(path: Path, metadata: Dict[str, object]) -> None:
     validate_metadata_for_path(path, metadata)
     meta_path = metadata_path_for(path)
     ensure_parent_dir(meta_path)
@@ -208,18 +230,37 @@ def validate_variants_count_if_present(path: Path, metadata: Dict[str, object], 
 
 
 def validate_metadata_for_path(path: Path, metadata: Dict[str, object]) -> None:
-    if path.name.endswith(".vtable"):
-        validate_vtable_metadata(metadata)
-        return
-    if path.name.endswith(".vmap"):
-        validate_vmap_metadata(metadata)
-        return
-    raise ValueError(f"unsupported variant object path: {path}")
+    try:
+        if path.name.endswith(".vtable"):
+            validate_vtable_metadata(metadata)
+        elif path.name.endswith(".vmap"):
+            validate_vmap_metadata(metadata)
+        else:
+            raise ValueError(f"unsupported variant object path: {path}")
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+
+
+def validate_schema_version(metadata: Dict[str, object]) -> None:
+    version = metadata.get("schema_version", "<missing>")
+    supported = SUPPORTED_OBJECT_SCHEMAS[metadata["object_type"]]
+    if not isinstance(version, str) or version not in supported:
+        raise ValueError(
+            f"unsupported schema_version={version!r} for {metadata['object_type']}; "
+            f"supported versions: {', '.join(sorted(supported))}; "
+            "regenerate from the original raw inputs, rather than adding or changing schema_version by hand"
+        )
+
+
+def metadata_with_schema_version(metadata: Dict[str, object]) -> Dict[str, object]:
+    """Metadata for a newly serialized object in the current writer schema."""
+    return {**metadata, "schema_version": CURRENT_SCHEMA_VERSION}
 
 
 def validate_vtable_metadata(metadata: Dict[str, object]) -> None:
     if metadata.get("object_type") != "variant_table":
         raise ValueError("vtable metadata must have object_type=variant_table")
+    validate_schema_version(metadata)
     _validate_variants_count_metadata(metadata, label="vtable")
     genome_build = metadata.get("genome_build")
     contig_naming = metadata.get("contig_naming")
@@ -232,6 +273,7 @@ def validate_vtable_metadata(metadata: Dict[str, object]) -> None:
 def validate_vmap_metadata(metadata: Dict[str, object]) -> None:
     if metadata.get("object_type") != "variant_map":
         raise ValueError("vmap metadata must have object_type=variant_map")
+    validate_schema_version(metadata)
     _validate_variants_count_metadata(metadata, label="vmap")
     target = metadata.get("target")
     if not isinstance(target, dict):
@@ -267,6 +309,7 @@ def make_vtable_metadata(
         metadata["contig_naming"] = contig_naming
     if provenance:
         metadata.update(provenance)
+    metadata = metadata_with_schema_version(metadata)
     validate_vtable_metadata(metadata)
     return metadata
 
@@ -285,6 +328,7 @@ def make_vmap_metadata(
         metadata["target"]["contig_naming"] = target_meta["contig_naming"]
     if provenance:
         metadata.update(provenance)
+    metadata = metadata_with_schema_version(metadata)
     validate_vmap_metadata(metadata)
     return metadata
 

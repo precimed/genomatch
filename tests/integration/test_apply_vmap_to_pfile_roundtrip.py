@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from utils import resolve_plink2, run_cmd, run_py, write_json, write_lines
+from utils import resolve_plink2, run_cmd, run_py, write_object_metadata, write_lines
 
 
 def export_pfile(plink2: list[str], prefix: Path, output: Path):
@@ -53,7 +53,7 @@ def test_pfile_roundtrip_preserves_hardcalls_dosages_order_and_swaps(tmp_path):
         ['1', '250', 'reused', 'A', 'AC', '.', '1', 'identity'],
     ]
     write_lines(vmap, ['\t'.join(row) for row in target_rows])
-    write_json(vmap.with_name(vmap.name + '.meta.json'), {
+    write_object_metadata(vmap.with_name(vmap.name + '.meta.json'), {
         'object_type': 'variant_map',
         'target': {'genome_build': 'GRCh37', 'contig_naming': 'ncbi'},
         'variants_count': 4,

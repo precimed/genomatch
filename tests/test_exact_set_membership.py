@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from genomatch import vtable_utils
-from utils import read_tsv, run_py, write_json, write_lines
+from utils import read_tsv, run_py, write_object_metadata, write_lines
 
 
 def write_object(path, rows, *, include_count):
@@ -17,7 +17,7 @@ def write_object(path, rows, *, include_count):
     if include_count:
         metadata["variants_count"] = len(rows)
     write_lines(path, rows)
-    write_json(path.with_name(path.name + ".meta.json"), metadata)
+    write_object_metadata(path.with_name(path.name + ".meta.json"), metadata)
 
 
 @pytest.mark.parametrize("tool", ["intersect_variants", "union_variants", "restrict_vmap"])
@@ -95,7 +95,7 @@ def test_exact_matching_rejects_unknown_builds_before_reading_rows(tmp_path, too
                     else {'object_type': 'variant_table', **target})
         # Metadata rejection must happen before malformed payloads are parsed.
         write_lines(path, ['malformed'])
-        write_json(path.with_name(path.name + '.meta.json'), metadata)
+        write_object_metadata(path.with_name(path.name + '.meta.json'), metadata)
     args = (['--vmap', source, '--id-source', membership] if tool == 'assign_vmap_ids'
             else [source, membership])
     result = run_py(f'{tool}.py', *args, '--output', output)

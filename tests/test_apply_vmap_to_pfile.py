@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pgenlib
 
-from utils import run_py, write_json, write_lines
+from utils import run_py, write_object_metadata, write_lines
 
 
 def write_psam(path: Path, sample_lines: list[str], *, header: str = "#IID") -> None:
@@ -93,7 +93,7 @@ def read_output_pvar(path: Path) -> list[list[str]]:
 
 def write_vmap(path: Path, lines: list[str], *, genome_build: str = "GRCh37", contig_naming: str = "ncbi") -> None:
     write_lines(path, lines)
-    write_json(
+    write_object_metadata(
         path.with_name(path.name + ".meta.json"),
         {"object_type": "variant_map", "target": {"genome_build": genome_build, "contig_naming": contig_naming}},
     )
