@@ -101,7 +101,7 @@ def test_exact_matching_rejects_unknown_builds_before_reading_rows(tmp_path, too
     result = run_py(f'{tool}.py', *args, '--output', output)
     assert result.returncode != 0
     assert 'all inputs must have a known genome_build' in result.stderr
-    assert 'guess_build.py' in result.stderr
+    assert 'guess_build.py --write' in result.stderr
     assert f'{source}: genome_build={builds[0]}' in result.stderr
     assert f'{membership}: genome_build={builds[1]}' in result.stderr
     assert not output.exists()

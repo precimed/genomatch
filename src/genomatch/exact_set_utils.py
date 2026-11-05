@@ -74,7 +74,7 @@ def require_shared_target_metadata(infos: Sequence[TargetObjectInfo]) -> None:
     metadata_summary = format_metadata_summary(infos)
     if "unknown" in builds:
         raise ValueError(
-            f"all inputs must have a known genome_build; run guess_build.py before matching\n{metadata_summary}"
+            f"all inputs must have a known genome_build; run guess_build.py --write before matching\n{metadata_summary}"
         )
     contig_namings = set()
     for info in infos:
