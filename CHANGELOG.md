@@ -6,7 +6,7 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
-## [v0.5.0] - 2026-11-05
+## [0.5.0] - 2026-11-05
 
 ### Important: regenerate your outputs
 
@@ -45,22 +45,22 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 
 - Updated Tutorial 1 and its example data to match the corrected indel handling. The examples now include a deletion with a multi-base reference allele and a substitution where both alleles are multi-base, and the prepared variant counts and projected genotypes and effects were checked.
 
-## [v0.4.4] - 2026-06-08
+## [0.4.4] - 2026-06-08
 
 ### Fixed
 - Fixed a performance regression in `intersect_variants.py` and `restrict_vmap.py` introduced in `v0.4.0`, which made large inputs much slower and more memory-intensive than necessary.
 
-## [v0.4.3] - 2026-05-19
+## [0.4.3] - 2026-05-19
 
 ### Added
 - Added `assign_vmap_ids.py` for replacing IDs in an existing `.vmap` after preparation. IDs are copied from a prepared `.vmap` or `.vtable` lookup by exact `chrom:pos:a1:a2` match; row order and provenance are preserved. Rows without a non-missing assigned ID are dropped by default, with `--unmatched-id-policy` available to retain unmatched rows as generated variant-key IDs or `.` IDs. Duplicate retained non-missing output IDs fail by default; use `--duplicate-id-policy` to allow them or drop all duplicated-ID rows to QC.
 
-## [v0.4.2] - 2026-05-19
+## [0.4.2] - 2026-05-19
 
 ### Added
 - Added `prepare_variants.py` and `prepare_variants_sharded.py --src-build` to declare a known source genome build and skip build guessing during preparation.
 
-## [v0.4.1] - 2026-05-16
+## [0.4.1] - 2026-05-16
 
 ### Added
 - Added summary-statistics documentation covering metadata, SNP-only imports, projection, and clean mode.
@@ -69,7 +69,7 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 ### Fixed
 - Fixed summary-statistics parsing for files whose header contains tabs but whose data rows use whitespace-separated trailing fields, such as ILAE-style summary-statistics tables.
 
-## [v0.4.0] - 2026-05-14
+## [0.4.0] - 2026-05-14
 
 ### Added
 - Added expanded user documentation under `docs/`, including Tutorial 1, a worked reference-universe projection example with downloadable release fixtures; the top-level README is now a concise entry point.
@@ -91,7 +91,7 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 - Reduced peak memory use in `apply_vmap_to_sumstats.py` by reading payload columns in chunks, scattering retained rows into `.vmap` order, and writing output in row blocks. Sumstats projection now emits explicit canonical variant columns, writes tab-delimited output with empty missing fields, emits `<output>.meta.yaml`, and supports repeated source provenance.
 - Exact set operations can now choose smaller driver inputs using `variants_count` metadata while preserving documented output order and ID semantics.
 
-## [v0.3.2] - 2026-05-04
+## [0.3.2] - 2026-05-04
 
 ### Added
 - T2T-CHM13v2.0 is now supported as a declared genome build by `restrict_build_compatible.py` and `liftover_build.py`. See `docs/downloads.md` for the updated download requirements.
@@ -102,13 +102,13 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 ### Known limitations
 - `guess_build.py` does not infer T2T-CHM13v2.0. If your inputs are in this build, pass `--genome-build T2T-CHM13v2.0` explicitly to the `import_*` tools.
 
-## [v0.3.1] - 2026-05-04
+## [0.3.1] - 2026-05-04
 
 ### Added
 - `apply_vmap_to_bfile.py` and `apply_vmap_to_pfile.py` now support `--sample-axis native` to keep each emitted output shard on its native source sample axis when that shard has one unambiguous sample signature.
 - `apply_vmap_to_bfile.py`, `apply_vmap_to_pfile.py`, and `project_payload.py` now support `--skip-ploidy-check` for performance-sensitive genotype projection runs where secondary genotype-content ploidy validation is not needed.
 
-## [v0.3.0] - 2026-05-03
+## [0.3.0] - 2026-05-03
 
 ### Added
 - `restrict_build_compatible.py --drop-duplicates` (requires `--sort`) to drop duplicate target identities after sorting.
@@ -118,7 +118,7 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 - Declared coordinate order now sorts by declared contig order, numeric position, then `a1`/`a2` lexicographically. This affects tools that emit declared coordinate order (for example `sort_variants.py`, `union_variants.py`, and liftover output ordering).
 - Ploidy validation for sex-chromosome and mitochondrial variants in projected PLINK payloads is substantially faster for large cohorts, particularly on chrX.
 
-## [v0.2.2] - 2026-04-29
+## [0.2.2] - 2026-04-29
 
 ### Added
 - `prepare_variants_sharded.py` for memory-bounded preparation of sharded BIM/PVAR/VCF inputs.
@@ -129,12 +129,12 @@ This release fixes a major bug in indel handling: earlier versions could choose 
 - Projected payloads now write corrected output variant IDs as `chrom:pos:a1:a2` by default.
 - Reduced peak memory use in `intersect_variants.py`; the effect is largest when the first input is small.
 
-## [v0.2.1] - 2026-04-24
+## [0.2.1] - 2026-04-24
 
 ### Added
 - `--max-allele-length` flag (default 150) across all importers and `prepare_variants.py` wrapper. Rows where either allele exceeds the cap are dropped with QC reason `allele_too_long`.
 
-## [v0.2.0] - 2026-04-21
+## [0.2.0] - 2026-04-21
 
 ### Added
 - Sumstats tools can now read `path_sumStats` from metadata when `--input` is omitted.
