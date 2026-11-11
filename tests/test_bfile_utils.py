@@ -7,7 +7,18 @@ from genomatch.bfile_utils import (
     count_target_ploidy_genotype_issues_packed,
     decode_bed_chunk,
     encode_bed_row,
+    swap_bed_chunk,
 )
+
+
+def test_swap_bed_chunk_clears_padding_and_preserves_real_genotypes():
+    assert swap_bed_chunk(b"\x01", 1) == b"\x01"
+    for n_samples in range(1, 9):
+        genotypes = [idx % 4 for idx in range(n_samples)]
+        swapped = swap_bed_chunk(encode_bed_row(genotypes, n_samples), n_samples)
+        assert decode_bed_chunk(swapped, n_samples) == bytes(3 - g if g in (0, 3) else g for g in genotypes)
+        if n_samples % 4:
+            assert swapped[-1] >> (2 * (n_samples % 4)) == 0
 
 
 def test_packed_validation_parity_randomized():

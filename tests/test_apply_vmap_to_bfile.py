@@ -41,6 +41,7 @@ def test_apply_vmap_to_bfile_preserves_target_order_for_single_file_provenance(t
     assert out_prefix.with_suffix(".fam").stat().st_mtime > source_prefix.with_suffix(".fam").stat().st_mtime
     matrix = read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 2)
     assert matrix == [[3, 2], [0, 3]]
+    assert all(byte & 0xF0 == 0 for byte in out_prefix.with_suffix(".bed").read_bytes()[3:])
 
 
 def test_apply_vmap_to_bfile_retain_snp_id_uses_vmap_id(tmp_path):
@@ -82,6 +83,7 @@ def test_apply_vmap_to_bfile_treats_flip_swap_as_genotype_swap(tmp_path):
     result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source_prefix, "--vmap", vmap, "--output-prefix", out_prefix)
     assert result.returncode == 0, result.stderr
     assert read_bed_matrix(out_prefix.with_suffix(".bed"), 2, 1) == [[3, 0]]
+    assert out_prefix.with_suffix(".bed").read_bytes()[-1] & 0xF0 == 0
 
 
 def test_apply_vmap_to_bfile_reports_chunk_progress(tmp_path):
@@ -532,6 +534,23 @@ def test_apply_vmap_to_bfile_target_fam_reorders_and_fills_missing_for_inconsist
     assert out_prefix.with_suffix(".fam").read_text(encoding="utf-8") == target_fam.read_text(encoding="utf-8")
     assert read_bed_matrix(out_prefix.with_suffix(".bed"), 3, 2) == [[1, 0, 3], [0, 1, 2]]
     assert "Sample-axis reconciliation summary" in result.stderr
+
+
+def test_swap_before_sample_remap_uses_source_sample_count(tmp_path):
+    source = tmp_path / "source"
+    output = tmp_path / "out"
+    vmap = tmp_path / "map.vmap"
+    target = tmp_path / "target.fam"
+    fam = [f"S{i} S{i} 0 0 0 -9" for i in range(7)]
+    write_bfile(source, ["1\trs1\t0\t100\tA\tG"], fam, [[0] * 7])
+    write_lines(target, [fam[6], fam[5], fam[0], fam[1], fam[2]])
+    write_lines(vmap, ["1\t100\tt1\tA\tG\t.\t0\tswap"])
+    write_object_metadata(vmap.with_name(vmap.name + ".meta.json"), {"object_type": "variant_map", "target": {"genome_build": "GRCh37", "contig_naming": "ncbi"}})
+
+    result = run_py("apply_vmap_to_bfile.py", "--source-prefix", source, "--vmap", vmap, "--output-prefix", output, "--target-fam", target)
+    assert result.returncode == 0, result.stderr
+    assert read_bed_matrix(output.with_suffix(".bed"), 5, 1) == [[3, 3, 3, 3, 3]]
+    assert output.with_suffix(".bed").read_bytes()[-1] & 0xFC == 0
 
 
 def test_apply_vmap_to_bfile_iid_mode_ignores_fid_for_target_fam(tmp_path):

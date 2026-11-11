@@ -275,8 +275,12 @@ def _swap_packed_bed_byte(value: int) -> int:
 SWAP_BED_CHUNK_TABLE = bytes(_swap_packed_bed_byte(value) for value in range(256))
 
 
-def swap_bed_chunk(chunk: bytes) -> bytes:
-    return chunk.translate(SWAP_BED_CHUNK_TABLE)
+def swap_bed_chunk(chunk: bytes, n_samples: int) -> bytes:
+    out = bytearray(chunk).translate(SWAP_BED_CHUNK_TABLE)
+    remainder = n_samples % 4
+    if remainder and out:
+        out[-1] &= (1 << (2 * remainder)) - 1
+    return bytes(out)
 
 
 def encode_bed_row(genos: Sequence[int], n_samples: int) -> bytes:

@@ -70,6 +70,13 @@ def test_apply_vmap_to_bfile_vcf_roundtrip_order_and_swaps(tmp_path: Path, n_sam
     result = apply_vmap_to_bfile(source_prefix, vmap_path, out_prefix, retain_snp_id=True)
     assert result.returncode == 0, result.stderr
 
+    remainder = n_samples % 4
+    if remainder:
+        row_bytes = (n_samples + 3) // 4
+        bed = out_prefix.with_suffix(".bed").read_bytes()
+        padding_mask = 0xFF ^ ((1 << (2 * remainder)) - 1)
+        assert all(bed[3 + (idx + 1) * row_bytes - 1] & padding_mask == 0 for idx in range(len(target_rows)))
+
     recode_bfile_to_vcf(plink_cmd, out_prefix)
     in_samples, in_variants = parse_vcf(input_vcf)
     out_samples, out_variants = parse_vcf(out_prefix.with_suffix(".vcf"))

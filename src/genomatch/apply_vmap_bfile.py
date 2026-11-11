@@ -385,7 +385,7 @@ def main() -> int:
                     f"source_shard={row.source_shard!r}, source_index={row.source_index}"
                 )
             if needs_swap:
-                packed_chunk = swap_bed_chunk(packed_chunk)
+                packed_chunk = swap_bed_chunk(packed_chunk, prepared_sources[row.source_shard].n_samples)
             if not identity_sample_axis and not identity_remap_by_shard[row.source_shard]:
                 packed_chunk = remap_bed_chunk(packed_chunk, packed_sample_axis_plans[row.source_shard])
             if not needs_ploidy_validation:
