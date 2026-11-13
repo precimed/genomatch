@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project is intended to follow 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-13
+
 ### Fixed
 
 - `apply_vmap_to_bfile.py` and `project_payload.py --input-format bfile` now write valid `.bed` files when they swap alleles and the sample count is not a multiple of 4. Earlier versions could make plink2 report wrong allele counts for these variants. Regenerate affected outputs if needed (#35).
